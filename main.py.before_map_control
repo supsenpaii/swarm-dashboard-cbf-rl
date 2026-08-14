@@ -1,0 +1,412 @@
+#!/usr/bin/env python3
+
+from __future__ import annotations
+
+import asyncio
+import json
+import math
+import threading
+import time
+from contextlib import asynccontextmanager
+from pathlib import Path
+from typing import Any
+
+import paho.mqtt.client as mqtt
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse
+
+
+MQTT_HOST = "127.0.0.1"
+MQTT_PORT = 1883
+
+TELEMETRY_TOPIC = "swarm/+/telemetry/state"
+CONTROL_TOPIC_TEMPLATE = "swarm/{drone_id}/control/command"
+
+ALLOWED_DRONES = {
+    "UAV-01",
+    "UAV-02",
+}
+
+MAX_HORIZONTAL_SPEED_M_S = 3.0
+MAX_VERTICAL_SPEED_M_S = 2.0
+MAX_YAW_RATE_RAD_S = math.radians(120.0)
+
+BASE_DIR = Path(__file__).resolve().parent
+INDEX_FILE = BASE_DIR / "static" / "index.html"
+
+latest_drones: dict[str, dict[str, Any]] = {}
+state_lock = threading.Lock()
+
+
+def clamp_number(
+    value: Any,
+    minimum: float,
+    maximum: float,
+) -> float:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+    if not math.isfinite(number):
+        return 0.0
+
+    return max(minimum, min(maximum, number))
+
+
+def on_connect(
+    client: mqtt.Client,
+    userdata: Any,
+    flags: Any,
+    reason_code: Any,
+    properties: Any = None,
+) -> None:
+    print(f"MQTT connected: {reason_code}")
+
+    client.subscribe(
+        TELEMETRY_TOPIC,
+        qos=0,
+    )
+
+
+def on_disconnect(
+    client: mqtt.Client,
+    userdata: Any,
+    disconnect_flags: Any = None,
+    reason_code: Any = None,
+    properties: Any = None,
+) -> None:
+    print(
+        "MQTT disconnected: "
+        f"{reason_code}"
+    )
+
+
+def on_message(
+    client: mqtt.Client,
+    userdata: Any,
+    message: mqtt.MQTTMessage,
+) -> None:
+    try:
+        payload = json.loads(
+            message.payload.decode("utf-8")
+        )
+    except (
+        UnicodeDecodeError,
+        json.JSONDecodeError,
+    ) as error:
+        print(f"Invalid MQTT payload: {error}")
+        return
+
+    drone_id = str(
+        payload.get("drone_id", "UNKNOWN")
+    )
+
+    if drone_id not in ALLOWED_DRONES:
+        return
+
+    payload["dashboard_received_ms"] = int(
+        time.time() * 1000
+    )
+
+    with state_lock:
+        latest_drones[drone_id] = payload
+
+
+try:
+    mqtt_client = mqtt.Client(
+        mqtt.CallbackAPIVersion.VERSION2,
+        client_id="swarm-dashboard-backend",
+    )
+except AttributeError:
+    mqtt_client = mqtt.Client(
+        client_id="swarm-dashboard-backend",
+    )
+
+mqtt_client.on_connect = on_connect
+mqtt_client.on_disconnect = on_disconnect
+mqtt_client.on_message = on_message
+
+mqtt_client.reconnect_delay_set(
+    min_delay=1,
+    max_delay=10,
+)
+
+
+def publish_control_message(
+    payload: dict[str, Any],
+) -> bool:
+    drone_id = str(
+        payload.get("drone_id", "")
+    )
+
+    if drone_id not in ALLOWED_DRONES:
+        return False
+
+    payload["server_timestamp_ms"] = int(
+        time.time() * 1000
+    )
+
+    topic = CONTROL_TOPIC_TEMPLATE.format(
+        drone_id=drone_id
+    )
+
+    result = mqtt_client.publish(
+        topic=topic,
+        payload=json.dumps(
+            payload,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ),
+        qos=0,
+        retain=False,
+    )
+
+    return result.rc == mqtt.MQTT_ERR_SUCCESS
+
+
+def publish_stop(
+    drone_id: str,
+) -> None:
+    publish_control_message(
+        {
+            "type": "velocity",
+            "drone_id": drone_id,
+            "forward_m_s": 0.0,
+            "right_m_s": 0.0,
+            "up_m_s": 0.0,
+            "yaw_rate_rad_s": 0.0,
+        }
+    )
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    mqtt_client.connect(
+        MQTT_HOST,
+        MQTT_PORT,
+        keepalive=30,
+    )
+
+    mqtt_client.loop_start()
+
+    try:
+        yield
+    finally:
+        for drone_id in ALLOWED_DRONES:
+            publish_stop(drone_id)
+
+        mqtt_client.loop_stop()
+        mqtt_client.disconnect()
+
+
+app = FastAPI(
+    title="Swarm UAV Dashboard",
+    lifespan=lifespan,
+)
+
+
+@app.get("/")
+async def index() -> FileResponse:
+    return FileResponse(INDEX_FILE)
+
+
+@app.get("/api/drones")
+async def get_drones() -> dict[str, Any]:
+    with state_lock:
+        snapshot = json.loads(
+            json.dumps(latest_drones)
+        )
+
+    return {
+        "drones": snapshot,
+        "count": len(snapshot),
+    }
+
+
+async def send_telemetry_snapshots(
+    websocket: WebSocket,
+) -> None:
+    while True:
+        with state_lock:
+            snapshot = json.loads(
+                json.dumps(latest_drones)
+            )
+
+        await websocket.send_json(
+            {
+                "type": "telemetry_snapshot",
+                "drones": snapshot,
+                "server_timestamp_ms": int(
+                    time.time() * 1000
+                ),
+            }
+        )
+
+        await asyncio.sleep(0.2)
+
+
+async def receive_web_commands(
+    websocket: WebSocket,
+) -> None:
+    while True:
+        message = await websocket.receive_json()
+
+        message_type = str(
+            message.get("type", "")
+        )
+
+        drone_id = str(
+            message.get("drone_id", "")
+        )
+
+        if drone_id not in ALLOWED_DRONES:
+            await websocket.send_json(
+                {
+                    "type": "control_result",
+                    "ok": False,
+                    "error": "Invalid drone ID",
+                }
+            )
+            continue
+
+        if message_type == "control_velocity":
+            payload = {
+                "type": "velocity",
+                "drone_id": drone_id,
+                "forward_m_s": clamp_number(
+                    message.get("forward_m_s", 0.0),
+                    -MAX_HORIZONTAL_SPEED_M_S,
+                    MAX_HORIZONTAL_SPEED_M_S,
+                ),
+                "right_m_s": clamp_number(
+                    message.get("right_m_s", 0.0),
+                    -MAX_HORIZONTAL_SPEED_M_S,
+                    MAX_HORIZONTAL_SPEED_M_S,
+                ),
+                "up_m_s": clamp_number(
+                    message.get("up_m_s", 0.0),
+                    -MAX_VERTICAL_SPEED_M_S,
+                    MAX_VERTICAL_SPEED_M_S,
+                ),
+                "yaw_rate_rad_s": clamp_number(
+                    message.get(
+                        "yaw_rate_rad_s",
+                        0.0,
+                    ),
+                    -MAX_YAW_RATE_RAD_S,
+                    MAX_YAW_RATE_RAD_S,
+                ),
+            }
+
+            ok = publish_control_message(payload)
+
+        elif message_type == "control_action":
+            action = str(
+                message.get("action", "")
+            )
+
+            allowed_actions = {
+                "enable_offboard",
+                "keyboard_off",
+                "stop",
+                "arm",
+                "disarm",
+                "land",
+            }
+
+            if action not in allowed_actions:
+                await websocket.send_json(
+                    {
+                        "type": "control_result",
+                        "ok": False,
+                        "error": "Invalid action",
+                    }
+                )
+                continue
+
+            if action in {
+                "keyboard_off",
+                "stop",
+            }:
+                publish_stop(drone_id)
+
+            ok = publish_control_message(
+                {
+                    "type": "action",
+                    "drone_id": drone_id,
+                    "action": action,
+                }
+            )
+
+        else:
+            await websocket.send_json(
+                {
+                    "type": "control_result",
+                    "ok": False,
+                    "error": "Invalid message type",
+                }
+            )
+            continue
+
+        await websocket.send_json(
+            {
+                "type": "control_result",
+                "ok": ok,
+                "drone_id": drone_id,
+                "server_timestamp_ms": int(
+                    time.time() * 1000
+                ),
+            }
+        )
+
+
+@app.websocket("/ws")
+async def telemetry_websocket(
+    websocket: WebSocket,
+) -> None:
+    await websocket.accept()
+
+    sender_task = asyncio.create_task(
+        send_telemetry_snapshots(websocket)
+    )
+
+    receiver_task = asyncio.create_task(
+        receive_web_commands(websocket)
+    )
+
+    try:
+        done, pending = await asyncio.wait(
+            {
+                sender_task,
+                receiver_task,
+            },
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+
+        for task in pending:
+            task.cancel()
+
+        await asyncio.gather(
+            *pending,
+            return_exceptions=True,
+        )
+
+        for task in done:
+            exception = task.exception()
+
+            if exception is not None:
+                raise exception
+
+    except WebSocketDisconnect:
+        pass
+
+    except RuntimeError:
+        pass
+
+    finally:
+        sender_task.cancel()
+        receiver_task.cancel()
+
+        for drone_id in ALLOWED_DRONES:
+            publish_stop(drone_id)

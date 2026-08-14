@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(nvidia-smi*)",
+      "Bash(claude mcp list*)",
+      "Bash(claude plugin list*)"
+    ]
+  }
+}

@@ -1,0 +1,149 @@
+#!/usr/bin/env python3
+
+import asyncio
+import json
+import threading
+import time
+from contextlib import asynccontextmanager
+from pathlib import Path
+from typing import Any
+
+import paho.mqtt.client as mqtt
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse
+
+
+MQTT_HOST = "127.0.0.1"
+MQTT_PORT = 1883
+MQTT_TOPIC = "swarm/+/telemetry/state"
+
+BASE_DIR = Path(__file__).resolve().parent
+INDEX_FILE = BASE_DIR / "static" / "index.html"
+
+latest_drones: dict[str, dict[str, Any]] = {}
+state_lock = threading.Lock()
+
+
+def on_connect(
+    client: mqtt.Client,
+    userdata: Any,
+    flags: Any,
+    reason_code: Any,
+    properties: Any = None,
+) -> None:
+    print(f"MQTT connected: {reason_code}")
+
+    client.subscribe(
+        MQTT_TOPIC,
+        qos=0,
+    )
+
+
+def on_message(
+    client: mqtt.Client,
+    userdata: Any,
+    message: mqtt.MQTTMessage,
+) -> None:
+    try:
+        payload = json.loads(
+            message.payload.decode("utf-8")
+        )
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        print(f"Invalid MQTT payload: {error}")
+        return
+
+    drone_id = str(
+        payload.get("drone_id", "UNKNOWN")
+    )
+
+    payload["dashboard_received_ms"] = int(
+        time.time() * 1000
+    )
+
+    with state_lock:
+        latest_drones[drone_id] = payload
+
+
+try:
+    mqtt_client = mqtt.Client(
+        mqtt.CallbackAPIVersion.VERSION2,
+        client_id="swarm-dashboard-backend",
+    )
+except AttributeError:
+    # Compatibility with Paho MQTT 1.x.
+    mqtt_client = mqtt.Client(
+        client_id="swarm-dashboard-backend",
+    )
+
+mqtt_client.on_connect = on_connect
+mqtt_client.on_message = on_message
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    mqtt_client.connect(
+        MQTT_HOST,
+        MQTT_PORT,
+        keepalive=30,
+    )
+    mqtt_client.loop_start()
+
+    try:
+        yield
+    finally:
+        mqtt_client.loop_stop()
+        mqtt_client.disconnect()
+
+
+app = FastAPI(
+    title="Swarm UAV Dashboard",
+    lifespan=lifespan,
+)
+
+
+@app.get("/")
+async def index() -> FileResponse:
+    return FileResponse(INDEX_FILE)
+
+
+@app.get("/api/drones")
+async def get_drones() -> dict[str, Any]:
+    with state_lock:
+        snapshot = json.loads(
+            json.dumps(latest_drones)
+        )
+
+    return {
+        "drones": snapshot,
+        "count": len(snapshot),
+    }
+
+
+@app.websocket("/ws")
+async def telemetry_websocket(
+    websocket: WebSocket,
+) -> None:
+    await websocket.accept()
+
+    try:
+        while True:
+            with state_lock:
+                snapshot = json.loads(
+                    json.dumps(latest_drones)
+                )
+
+            await websocket.send_json(
+                {
+                    "type": "telemetry_snapshot",
+                    "drones": snapshot,
+                    "server_timestamp_ms": int(
+                        time.time() * 1000
+                    ),
+                }
+            )
+
+            await asyncio.sleep(0.2)
+
+    except WebSocketDisconnect:
+        pass
+

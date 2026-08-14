@@ -1,0 +1,1582 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>Swarm UAV Dashboard</title>
+
+    <link
+        rel="stylesheet"
+        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    >
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #0f172a;
+            color: #e2e8f0;
+        }
+
+        header {
+            height: 64px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 24px;
+            background: #111827;
+            border-bottom: 1px solid #334155;
+        }
+
+        header h1 {
+            margin: 0;
+            font-size: 21px;
+        }
+
+        #connection-status {
+            padding: 8px 14px;
+            border-radius: 18px;
+            background: #7f1d1d;
+        }
+
+        #connection-status.connected {
+            background: #166534;
+        }
+
+        main {
+            display: grid;
+            grid-template-columns: 400px 1fr;
+            height: calc(100vh - 64px);
+        }
+
+        #sidebar {
+            overflow-y: auto;
+            padding: 16px;
+            border-right: 1px solid #334155;
+        }
+
+        #map {
+            width: 100%;
+            height: 100%;
+        }
+
+        .summary,
+        .uav-tabs {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 14px;
+        }
+
+        .summary-box,
+        .drone-card,
+        .control-panel {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 10px;
+        }
+
+        .summary-box {
+            padding: 12px;
+        }
+
+        .summary-label,
+        .telemetry-label,
+        .control-help {
+            color: #94a3b8;
+            font-size: 12px;
+        }
+
+        .summary-value {
+            margin-top: 4px;
+            font-size: 22px;
+            font-weight: bold;
+        }
+
+        .uav-tab {
+            min-height: 46px;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            background: #1e293b;
+            color: #94a3b8;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .uav-tab.active {
+            background: #2563eb;
+            border-color: #60a5fa;
+            color: white;
+        }
+
+        .tab-dot {
+            display: inline-block;
+            width: 9px;
+            height: 9px;
+            margin-left: 7px;
+            border-radius: 50%;
+            background: #ef4444;
+        }
+
+        .tab-dot.online {
+            background: #22c55e;
+        }
+
+        .drone-card,
+        .control-panel {
+            padding: 14px;
+            margin-bottom: 14px;
+        }
+
+        .drone-header,
+        .control-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+        }
+
+        .drone-name,
+        .control-title {
+            font-size: 18px;
+            font-weight: bold;
+        }
+
+        .badge {
+            padding: 5px 9px;
+            border-radius: 12px;
+            font-size: 12px;
+        }
+
+        .badge.online {
+            background: #166534;
+        }
+
+        .badge.offline {
+            background: #7f1d1d;
+        }
+
+        .telemetry-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px 12px;
+        }
+
+        .telemetry-item {
+            padding: 7px 0;
+            border-bottom: 1px solid #334155;
+        }
+
+        .telemetry-value {
+            margin-top: 3px;
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        .alerts {
+            margin-top: 12px;
+            padding: 10px;
+            border-radius: 7px;
+            background: #422006;
+            color: #fde68a;
+            font-size: 13px;
+        }
+
+        .control-status {
+            padding: 5px 9px;
+            border-radius: 12px;
+            background: #7f1d1d;
+            font-size: 12px;
+        }
+
+        .control-status.enabled {
+            background: #166534;
+        }
+
+        .action-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-bottom: 14px;
+        }
+
+        .action-button {
+            min-height: 39px;
+            border: 0;
+            border-radius: 7px;
+            background: #334155;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .action-button.primary {
+            background: #2563eb;
+        }
+
+        .action-button.warning {
+            background: #b45309;
+        }
+
+        .action-button.danger {
+            background: #b91c1c;
+        }
+
+        .keyboard-layout {
+            display: grid;
+            grid-template-columns:
+                repeat(5, 44px);
+            justify-content: center;
+            gap: 7px;
+            margin: 14px 0;
+        }
+
+        .key {
+            height: 42px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid #475569;
+            border-radius: 6px;
+            background: #0f172a;
+            font-weight: bold;
+        }
+
+        .key.active {
+            background: #2563eb;
+            border-color: #60a5fa;
+        }
+
+        .empty {
+            visibility: hidden;
+        }
+
+        .speed-row {
+            margin-top: 12px;
+        }
+
+        .speed-row label {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 6px;
+            font-size: 13px;
+        }
+
+        .speed-row input {
+            width: 100%;
+        }
+
+        @media (max-width: 900px) {
+            main {
+                grid-template-columns: 1fr;
+                grid-template-rows: 55% 45%;
+            }
+
+            #map {
+                order: 1;
+            }
+
+            #sidebar {
+                order: 2;
+                border-right: 0;
+                border-top: 1px solid #334155;
+            }
+        }
+    </style>
+</head>
+
+<body>
+<header>
+    <h1>Swarm UAV Dashboard</h1>
+
+    <div id="connection-status">
+        WebSocket disconnected
+    </div>
+</header>
+
+<main>
+    <section id="sidebar">
+        <div class="summary">
+            <div class="summary-box">
+                <div class="summary-label">
+                    Total UAV
+                </div>
+
+                <div
+                    class="summary-value"
+                    id="total-count"
+                >
+                    0
+                </div>
+            </div>
+
+            <div class="summary-box">
+                <div class="summary-label">
+                    Online
+                </div>
+
+                <div
+                    class="summary-value"
+                    id="online-count"
+                >
+                    0
+                </div>
+            </div>
+        </div>
+
+        <div class="uav-tabs">
+            <button
+                class="uav-tab active"
+                data-drone-id="UAV-01"
+            >
+                UAV-01
+                <span
+                    id="tab-dot-UAV-01"
+                    class="tab-dot"
+                ></span>
+            </button>
+
+            <button
+                class="uav-tab"
+                data-drone-id="UAV-02"
+            >
+                UAV-02
+                <span
+                    id="tab-dot-UAV-02"
+                    class="tab-dot"
+                ></span>
+            </button>
+        </div>
+
+        <div id="drone-list">
+            Waiting for telemetry...
+        </div>
+
+        <div class="control-panel">
+            <div class="control-header">
+                <div class="control-title">
+                    Keyboard Control:
+                    <span id="control-target">
+                        UAV-01
+                    </span>
+                </div>
+
+                <div
+                    id="control-status"
+                    class="control-status"
+                >
+                    OFF
+                </div>
+            </div>
+
+            <div class="action-grid">
+                <button
+                    id="toggle-control"
+                    class="action-button primary"
+                >
+                    Enable keyboard
+                </button>
+
+                <button
+                    id="stop-button"
+                    class="action-button warning"
+                >
+                    STOP
+                </button>
+
+                <button
+                    id="arm-button"
+                    class="action-button"
+                >
+                    ARM
+                </button>
+
+                <button
+                    id="disarm-button"
+                    class="action-button danger"
+                >
+                    DISARM
+                </button>
+
+                <button
+                    id="land-button"
+                    class="action-button warning"
+                >
+                    LAND
+                </button>
+            </div>
+
+            <div class="keyboard-layout">
+                <div class="key" data-key="q">Q</div>
+                <div class="empty"></div>
+                <div class="key" data-key="w">W</div>
+                <div class="empty"></div>
+                <div class="key" data-key="e">E</div>
+
+                <div class="empty"></div>
+                <div class="key" data-key="a">A</div>
+                <div class="key" data-key="s">S</div>
+                <div class="key" data-key="d">D</div>
+                <div class="empty"></div>
+
+                <div class="empty"></div>
+                <div class="key" data-key="r">R</div>
+                <div class="key" data-key="f">F</div>
+                <div class="empty"></div>
+                <div class="empty"></div>
+            </div>
+
+            <div class="control-help">
+                W/S: tiến/lùi · A/D: trái/phải<br>
+                Q/E: quay trái/phải · R/F: lên/xuống<br>
+                Space: dừng ngay
+            </div>
+
+            <div class="speed-row">
+                <label>
+                    <span>Horizontal speed</span>
+                    <span id="speed-value">1.0 m/s</span>
+                </label>
+
+                <input
+                    id="speed-slider"
+                    type="range"
+                    min="0.2"
+                    max="3.0"
+                    step="0.1"
+                    value="1.0"
+                >
+            </div>
+
+            <div class="speed-row">
+                <label>
+                    <span>Vertical speed</span>
+                    <span id="vertical-value">0.7 m/s</span>
+                </label>
+
+                <input
+                    id="vertical-slider"
+                    type="range"
+                    min="0.2"
+                    max="2.0"
+                    step="0.1"
+                    value="0.7"
+                >
+            </div>
+
+            <div class="speed-row">
+                <label>
+                    <span>Yaw rate</span>
+                    <span id="yaw-value">45 °/s</span>
+                </label>
+
+                <input
+                    id="yaw-slider"
+                    type="range"
+                    min="10"
+                    max="120"
+                    step="5"
+                    value="45"
+                >
+            </div>
+        </div>
+    </section>
+
+    <section id="map"></section>
+</main>
+
+<script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+></script>
+
+<script>
+    const ALLOWED_DRONES = [
+        "UAV-01",
+        "UAV-02"
+    ];
+
+    const NAV_STATE_NAMES = {
+        0: "Manual mode",
+        1: "Altitude mode",
+        2: "Position mode",
+        3: "Mission mode",
+        4: "Hold / Loiter mode",
+        5: "Return to Launch",
+        6: "Position Slow mode",
+        10: "Acro mode",
+        12: "Descend mode",
+        13: "Termination",
+        14: "Offboard mode",
+        15: "Stabilized mode",
+        17: "Takeoff mode",
+        18: "Land mode",
+        19: "Follow Target",
+        20: "Precision Land",
+        21: "Orbit mode",
+        22: "VTOL Takeoff"
+    };
+
+    const map = L.map("map").setView(
+        [47.3979712, 8.5461637],
+        18
+    );
+
+    L.tileLayer(
+        "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+        {
+            maxZoom: 20,
+            attribution:
+                "© OpenStreetMap contributors"
+        }
+    ).addTo(map);
+
+    const markers = {};
+    const trails = {};
+
+    let socket = null;
+    let selectedDroneId = "UAV-01";
+    let latestDrones = {};
+    let firstPositionReceived = false;
+
+    const pressedKeys = new Set();
+
+    const keyboardEnabled = {
+        "UAV-01": false,
+        "UAV-02": false
+    };
+
+    const connectionStatus =
+        document.getElementById(
+            "connection-status"
+        );
+
+    const droneList =
+        document.getElementById(
+            "drone-list"
+        );
+
+    const totalCount =
+        document.getElementById(
+            "total-count"
+        );
+
+    const onlineCount =
+        document.getElementById(
+            "online-count"
+        );
+
+    const controlTarget =
+        document.getElementById(
+            "control-target"
+        );
+
+    const controlStatus =
+        document.getElementById(
+            "control-status"
+        );
+
+    const toggleControlButton =
+        document.getElementById(
+            "toggle-control"
+        );
+
+    const speedSlider =
+        document.getElementById(
+            "speed-slider"
+        );
+
+    const verticalSlider =
+        document.getElementById(
+            "vertical-slider"
+        );
+
+    const yawSlider =
+        document.getElementById(
+            "yaw-slider"
+        );
+
+    function valueOrNA(
+        value,
+        digits = null
+    ) {
+        if (
+            value === null ||
+            value === undefined ||
+            Number.isNaN(Number(value))
+        ) {
+            return "N/A";
+        }
+
+        if (digits !== null) {
+            return Number(value).toFixed(
+                digits
+            );
+        }
+
+        return value;
+    }
+
+    function navStateName(navState) {
+        if (
+            navState === null ||
+            navState === undefined
+        ) {
+            return "N/A";
+        }
+
+        return (
+            NAV_STATE_NAMES[
+                Number(navState)
+            ]
+            ?? `Unknown (${navState})`
+        );
+    }
+
+    function collectWarnings(drone) {
+        const warnings = [];
+        const flags =
+            drone.failsafe_flags || {};
+        const status =
+            drone.status || {};
+
+        if (status.failsafe) {
+            warnings.push(
+                "PX4 failsafe active"
+            );
+        }
+
+        if (
+            flags.manual_control_signal_lost
+        ) {
+            warnings.push(
+                "Manual control signal lost"
+            );
+        }
+
+        if (flags.gcs_connection_lost) {
+            warnings.push(
+                "GCS connection lost"
+            );
+        }
+
+        if (
+            flags.offboard_control_signal_lost
+        ) {
+            warnings.push(
+                "Offboard signal unavailable"
+            );
+        }
+
+        return warnings;
+    }
+
+    function renderDroneCard(
+        droneId,
+        drone
+    ) {
+        const status =
+            drone.status || {};
+        const battery =
+            drone.battery || {};
+        const gps =
+            drone.gps || {};
+        const position =
+            drone.global_position || {};
+        const local =
+            drone.local_position || {};
+        const attitude =
+            drone.attitude || {};
+
+        const warnings =
+            collectWarnings(drone);
+
+        return `
+            <div class="drone-card">
+                <div class="drone-header">
+                    <div class="drone-name">
+                        ${droneId}
+                    </div>
+
+                    <div class="badge ${
+                        drone.online
+                        ? "online"
+                        : "offline"
+                    }">
+                        ${
+                            drone.online
+                            ? "ONLINE"
+                            : "OFFLINE"
+                        }
+                    </div>
+                </div>
+
+                <div class="telemetry-grid">
+                    <div class="telemetry-item">
+                        <div class="telemetry-label">
+                            System ID
+                        </div>
+                        <div class="telemetry-value">
+                            ${valueOrNA(
+                                drone.system_id
+                            )}
+                        </div>
+                    </div>
+
+                    <div class="telemetry-item">
+                        <div class="telemetry-label">
+                            Armed
+                        </div>
+                        <div class="telemetry-value">
+                            ${
+                                status.armed
+                                ? "YES"
+                                : "NO"
+                            }
+                        </div>
+                    </div>
+
+                    <div class="telemetry-item">
+                        <div class="telemetry-label">
+                            Nav state
+                        </div>
+                        <div class="telemetry-value">
+                            ${navStateName(
+                                status.nav_state
+                            )}
+                        </div>
+                    </div>
+
+                    <div class="telemetry-item">
+                        <div class="telemetry-label">
+                            Failsafe
+                        </div>
+                        <div class="telemetry-value">
+                            ${
+                                status.failsafe
+                                ? "ACTIVE"
+                                : "NORMAL"
+                            }
+                        </div>
+                    </div>
+
+                    <div class="telemetry-item">
+                        <div class="telemetry-label">
+                            Battery
+                        </div>
+                        <div class="telemetry-value">
+                            ${valueOrNA(
+                                battery.remaining_percent,
+                                1
+                            )} %
+                        </div>
+                    </div>
+
+                    <div class="telemetry-item">
+                        <div class="telemetry-label">
+                            Voltage
+                        </div>
+                        <div class="telemetry-value">
+                            ${valueOrNA(
+                                battery.voltage_v,
+                                2
+                            )} V
+                        </div>
+                    </div>
+
+                    <div class="telemetry-item">
+                        <div class="telemetry-label">
+                            GPS
+                        </div>
+                        <div class="telemetry-value">
+                            Fix ${valueOrNA(
+                                gps.fix_type
+                            )}
+                            · ${valueOrNA(
+                                gps.satellites_used
+                            )} sats
+                        </div>
+                    </div>
+
+                    <div class="telemetry-item">
+                        <div class="telemetry-label">
+                            Altitude
+                        </div>
+                        <div class="telemetry-value">
+                            ${valueOrNA(
+                                position.altitude_msl_m,
+                                2
+                            )} m
+                        </div>
+                    </div>
+
+                    <div class="telemetry-item">
+                        <div class="telemetry-label">
+                            Local XYZ
+                        </div>
+                        <div class="telemetry-value">
+                            ${valueOrNA(
+                                local.x_north_m,
+                                1
+                            )},
+                            ${valueOrNA(
+                                local.y_east_m,
+                                1
+                            )},
+                            ${valueOrNA(
+                                local.z_down_m,
+                                1
+                            )}
+                        </div>
+                    </div>
+
+                    <div class="telemetry-item">
+                        <div class="telemetry-label">
+                            Roll/Pitch/Yaw
+                        </div>
+                        <div class="telemetry-value">
+                            ${valueOrNA(
+                                attitude.roll_deg,
+                                1
+                            )}° /
+                            ${valueOrNA(
+                                attitude.pitch_deg,
+                                1
+                            )}° /
+                            ${valueOrNA(
+                                attitude.yaw_deg,
+                                1
+                            )}°
+                        </div>
+                    </div>
+                </div>
+
+                ${
+                    warnings.length > 0
+                    ? `
+                        <div class="alerts">
+                            ${warnings.join("<br>")}
+                        </div>
+                    `
+                    : ""
+                }
+            </div>
+        `;
+    }
+
+    function renderSelectedDrone() {
+        const drone =
+            latestDrones[selectedDroneId];
+
+        if (!drone) {
+            droneList.textContent =
+                `Waiting for ${selectedDroneId} telemetry...`;
+            return;
+        }
+
+        droneList.innerHTML =
+            renderDroneCard(
+                selectedDroneId,
+                drone
+            );
+    }
+
+    function updateMap(
+        droneId,
+        drone
+    ) {
+        const position =
+            drone.global_position || {};
+
+        const lat =
+            position.latitude_deg;
+        const lon =
+            position.longitude_deg;
+
+        if (
+            typeof lat !== "number" ||
+            typeof lon !== "number"
+        ) {
+            return;
+        }
+
+        const point = [lat, lon];
+
+        if (!markers[droneId]) {
+            markers[droneId] =
+                L.circleMarker(
+                    point,
+                    {
+                        radius: 9,
+                        weight: 3,
+                        fillOpacity: 0.85
+                    }
+                ).addTo(map);
+
+            markers[droneId].on(
+                "click",
+                () => selectDroneTab(
+                    droneId
+                )
+            );
+
+            trails[droneId] =
+                L.polyline(
+                    [],
+                    {
+                        weight: 3
+                    }
+                ).addTo(map);
+        }
+
+        markers[droneId].setLatLng(
+            point
+        );
+
+        markers[droneId].setPopupContent(
+            `<strong>${droneId}</strong><br>` +
+            `Mode: ${navStateName(
+                drone.status?.nav_state
+            )}<br>` +
+            `Altitude: ${valueOrNA(
+                position.altitude_msl_m,
+                2
+            )} m`
+        );
+
+        const points =
+            trails[droneId]
+            .getLatLngs();
+
+        if (
+            points.length === 0 ||
+            map.distance(
+                points[points.length - 1],
+                L.latLng(lat, lon)
+            ) > 0.15
+        ) {
+            trails[droneId].addLatLng(
+                point
+            );
+        }
+
+        if (!firstPositionReceived) {
+            map.setView(point, 18);
+            firstPositionReceived = true;
+        }
+    }
+
+    function renderDrones(drones) {
+        latestDrones =
+            drones || {};
+
+        const entries =
+            Object.entries(latestDrones)
+            .filter(
+                ([droneId]) =>
+                    ALLOWED_DRONES.includes(
+                        droneId
+                    )
+            );
+
+        totalCount.textContent =
+            entries.length;
+
+        onlineCount.textContent =
+            entries.filter(
+                ([, drone]) =>
+                    Boolean(drone.online)
+            ).length;
+
+        entries.forEach(
+            ([droneId, drone]) => {
+                updateMap(
+                    droneId,
+                    drone
+                );
+
+                document
+                    .getElementById(
+                        `tab-dot-${droneId}`
+                    )
+                    ?.classList.toggle(
+                        "online",
+                        Boolean(drone.online)
+                    );
+            }
+        );
+
+        renderSelectedDrone();
+    }
+
+    function sendJson(payload) {
+        if (
+            !socket ||
+            socket.readyState
+            !== WebSocket.OPEN
+        ) {
+            return false;
+        }
+
+        socket.send(
+            JSON.stringify(payload)
+        );
+
+        return true;
+    }
+
+    function sendAction(
+        action,
+        droneId = selectedDroneId
+    ) {
+        sendJson(
+            {
+                type: "control_action",
+                drone_id: droneId,
+                action
+            }
+        );
+    }
+
+    function sendZero(
+        droneId
+    ) {
+        sendJson(
+            {
+                type: "control_velocity",
+                drone_id: droneId,
+                forward_m_s: 0,
+                right_m_s: 0,
+                up_m_s: 0,
+                yaw_rate_rad_s: 0
+            }
+        );
+    }
+
+    function currentCommand() {
+        let forward =
+            (
+                pressedKeys.has("w")
+                ? 1
+                : 0
+            )
+            -
+            (
+                pressedKeys.has("s")
+                ? 1
+                : 0
+            );
+
+        let right =
+            (
+                pressedKeys.has("d")
+                ? 1
+                : 0
+            )
+            -
+            (
+                pressedKeys.has("a")
+                ? 1
+                : 0
+            );
+
+        const magnitude =
+            Math.hypot(
+                forward,
+                right
+            );
+
+        if (magnitude > 1) {
+            forward /= magnitude;
+            right /= magnitude;
+        }
+
+        const up =
+            (
+                pressedKeys.has("r")
+                ? 1
+                : 0
+            )
+            -
+            (
+                pressedKeys.has("f")
+                ? 1
+                : 0
+            );
+
+        const yaw =
+            (
+                pressedKeys.has("e")
+                ? 1
+                : 0
+            )
+            -
+            (
+                pressedKeys.has("q")
+                ? 1
+                : 0
+            );
+
+        const speed =
+            Number(speedSlider.value);
+
+        const verticalSpeed =
+            Number(
+                verticalSlider.value
+            );
+
+        const yawRate =
+            Number(yawSlider.value)
+            * Math.PI
+            / 180;
+
+        return {
+            forward_m_s:
+                forward * speed,
+            right_m_s:
+                right * speed,
+            up_m_s:
+                up * verticalSpeed,
+            yaw_rate_rad_s:
+                yaw * yawRate
+        };
+    }
+
+    function sendCurrentCommand() {
+        if (
+            !keyboardEnabled[
+                selectedDroneId
+            ]
+        ) {
+            return;
+        }
+
+        sendJson(
+            {
+                type: "control_velocity",
+                drone_id:
+                    selectedDroneId,
+                ...currentCommand()
+            }
+        );
+    }
+
+    function updateControlUi() {
+        const enabled =
+            keyboardEnabled[
+                selectedDroneId
+            ];
+
+        controlTarget.textContent =
+            selectedDroneId;
+
+        controlStatus.textContent =
+            enabled
+            ? "ON"
+            : "OFF";
+
+        controlStatus.classList.toggle(
+            "enabled",
+            enabled
+        );
+
+        toggleControlButton.textContent =
+            enabled
+            ? "Disable keyboard"
+            : "Enable keyboard";
+    }
+
+    function clearKeysAndStop(
+        droneId
+    ) {
+        pressedKeys.clear();
+
+        document
+            .querySelectorAll(".key")
+            .forEach(element => {
+                element.classList.remove(
+                    "active"
+                );
+            });
+
+        sendZero(droneId);
+    }
+
+    function selectDroneTab(
+        droneId
+    ) {
+        if (
+            droneId === selectedDroneId
+        ) {
+            return;
+        }
+
+        const previousDrone =
+            selectedDroneId;
+
+        clearKeysAndStop(
+            previousDrone
+        );
+
+        selectedDroneId =
+            droneId;
+
+        document
+            .querySelectorAll(
+                ".uav-tab"
+            )
+            .forEach(button => {
+                button.classList.toggle(
+                    "active",
+                    button.dataset.droneId
+                    === droneId
+                );
+            });
+
+        updateControlUi();
+        renderSelectedDrone();
+    }
+
+    document
+        .querySelectorAll(".uav-tab")
+        .forEach(button => {
+            button.addEventListener(
+                "click",
+                () => {
+                    selectDroneTab(
+                        button.dataset.droneId
+                    );
+                }
+            );
+        });
+
+    toggleControlButton.addEventListener(
+        "click",
+        () => {
+            const enabled =
+                !keyboardEnabled[
+                    selectedDroneId
+                ];
+
+            keyboardEnabled[
+                selectedDroneId
+            ] = enabled;
+
+            if (enabled) {
+                sendAction(
+                    "enable_offboard"
+                );
+            } else {
+                clearKeysAndStop(
+                    selectedDroneId
+                );
+
+                sendAction(
+                    "keyboard_off"
+                );
+            }
+
+            updateControlUi();
+        }
+    );
+
+    document
+        .getElementById(
+            "stop-button"
+        )
+        .addEventListener(
+            "click",
+            () => {
+                clearKeysAndStop(
+                    selectedDroneId
+                );
+
+                sendAction("stop");
+            }
+        );
+
+    document
+        .getElementById(
+            "arm-button"
+        )
+        .addEventListener(
+            "click",
+            () => {
+                sendAction("arm");
+            }
+        );
+
+    document
+        .getElementById(
+            "disarm-button"
+        )
+        .addEventListener(
+            "click",
+            () => {
+                if (
+                    window.confirm(
+                        `Disarm ${selectedDroneId}?`
+                    )
+                ) {
+                    sendAction(
+                        "disarm"
+                    );
+                }
+            }
+        );
+
+    document
+        .getElementById(
+            "land-button"
+        )
+        .addEventListener(
+            "click",
+            () => {
+                clearKeysAndStop(
+                    selectedDroneId
+                );
+
+                sendAction("land");
+            }
+        );
+
+    const controlledKeys =
+        new Set([
+            "w",
+            "a",
+            "s",
+            "d",
+            "q",
+            "e",
+            "r",
+            "f",
+            " "
+        ]);
+
+    window.addEventListener(
+        "keydown",
+        event => {
+            const key =
+                event.key.toLowerCase();
+
+            if (
+                !controlledKeys.has(key)
+            ) {
+                return;
+            }
+
+            if (
+                event.target instanceof
+                HTMLInputElement
+            ) {
+                return;
+            }
+
+            event.preventDefault();
+
+            if (
+                !keyboardEnabled[
+                    selectedDroneId
+                ]
+            ) {
+                return;
+            }
+
+            if (key === " ") {
+                clearKeysAndStop(
+                    selectedDroneId
+                );
+                return;
+            }
+
+            pressedKeys.add(key);
+
+            document
+                .querySelector(
+                    `.key[data-key="${key}"]`
+                )
+                ?.classList.add(
+                    "active"
+                );
+
+            sendCurrentCommand();
+        }
+    );
+
+    window.addEventListener(
+        "keyup",
+        event => {
+            const key =
+                event.key.toLowerCase();
+
+            if (
+                !controlledKeys.has(key)
+            ) {
+                return;
+            }
+
+            event.preventDefault();
+            pressedKeys.delete(key);
+
+            document
+                .querySelector(
+                    `.key[data-key="${key}"]`
+                )
+                ?.classList.remove(
+                    "active"
+                );
+
+            sendCurrentCommand();
+        }
+    );
+
+    window.addEventListener(
+        "blur",
+        () => {
+            clearKeysAndStop(
+                selectedDroneId
+            );
+        }
+    );
+
+    document.addEventListener(
+        "visibilitychange",
+        () => {
+            if (document.hidden) {
+                clearKeysAndStop(
+                    selectedDroneId
+                );
+            }
+        }
+    );
+
+    speedSlider.addEventListener(
+        "input",
+        () => {
+            document
+                .getElementById(
+                    "speed-value"
+                )
+                .textContent =
+                `${speedSlider.value} m/s`;
+        }
+    );
+
+    verticalSlider.addEventListener(
+        "input",
+        () => {
+            document
+                .getElementById(
+                    "vertical-value"
+                )
+                .textContent =
+                `${verticalSlider.value} m/s`;
+        }
+    );
+
+    yawSlider.addEventListener(
+        "input",
+        () => {
+            document
+                .getElementById(
+                    "yaw-value"
+                )
+                .textContent =
+                `${yawSlider.value} °/s`;
+        }
+    );
+
+    setInterval(
+        sendCurrentCommand,
+        100
+    );
+
+    function connectWebSocket() {
+        const protocol =
+            window.location.protocol
+            === "https:"
+            ? "wss"
+            : "ws";
+
+        socket = new WebSocket(
+            `${protocol}://${window.location.host}/ws`
+        );
+
+        socket.onopen = () => {
+            connectionStatus.textContent =
+                "WebSocket connected";
+
+            connectionStatus
+                .classList.add(
+                    "connected"
+                );
+        };
+
+        socket.onmessage = event => {
+            try {
+                const message =
+                    JSON.parse(
+                        event.data
+                    );
+
+                if (
+                    message.type
+                    ===
+                    "telemetry_snapshot"
+                ) {
+                    renderDrones(
+                        message.drones
+                    );
+                }
+            } catch (error) {
+                console.error(error);
+            }
+        };
+
+        socket.onclose = () => {
+            connectionStatus.textContent =
+                "WebSocket disconnected";
+
+            connectionStatus
+                .classList.remove(
+                    "connected"
+                );
+
+            ALLOWED_DRONES.forEach(
+                droneId => {
+                    keyboardEnabled[
+                        droneId
+                    ] = false;
+                }
+            );
+
+            clearKeysAndStop(
+                selectedDroneId
+            );
+
+            updateControlUi();
+
+            setTimeout(
+                connectWebSocket,
+                2000
+            );
+        };
+
+        socket.onerror = () => {
+            socket.close();
+        };
+    }
+
+    updateControlUi();
+    connectWebSocket();
+</script>
+</body>
+</html>

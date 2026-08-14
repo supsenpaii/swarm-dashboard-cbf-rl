@@ -1,0 +1,29 @@
+{
+	"folders": [
+		{
+			"path": "../../../mnt/px4ssd/PX4-Autopilot/Tools/simulation/gz/models/x500_custom"
+		},
+		{
+			"path": "../../../mnt/px4ssd/PX4-Autopilot/ROMFS/px4fmu_common/init.d-posix/airframes"
+		},
+		{
+			"path": "../ws_px4/src/px4_ros_com/src/examples/offboard"
+		},
+		{
+			"path": "../ws_px4/src/swarm_telemetry/swarm_telemetry"
+		},
+		{
+			"path": "../ws_px4/src/swarm_telemetry"
+		},
+		{
+			"path": "."
+		},
+		{
+			"path": "../Downloads/gimbal_lfc_De"
+		},
+		{
+			"path": "../ws_px4/src/lfc_gimbal_gazebo"
+		}
+	],
+	"settings": {}
+}

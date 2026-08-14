@@ -1,0 +1,32 @@
+# Local environment — contains machine-specific paths and the resolved ENU
+# origin. Use .env.example as the tracked template.
+.env
+
+# Virtualenv and caches
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Run outputs: capture corpora, model training runs, SITL/CBF gate JSON.
+# Large (tens of GB) and regenerable from the harnesses.
+artifacts/
+build/
+logs/
+*.log
+
+# Trained model binaries
+models/
+
+# Distribution snapshots taken by hand
+handoff/
+*.tar.gz
+*.zip
+
+# Editor / tooling state
+.codegraph/
+.idea/
+.vscode/
+*.swp

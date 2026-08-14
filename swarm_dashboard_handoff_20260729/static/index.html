@@ -1,0 +1,1403 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Swarm UAV Control</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <style>
+    :root {
+      --bg:#0f172a; --header:#111827; --panel:#1e293b; --panel2:#172033;
+      --border:#334155; --text:#e2e8f0; --muted:#94a3b8; --blue:#2563eb;
+      --green:#15803d; --red:#b91c1c; --orange:#c2410c; --yellow:#a16207;
+    }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--bg); color:var(--text); font-family:Arial,sans-serif; }
+    button,input { font:inherit; }
+    header {
+      height:64px; display:flex; align-items:center; justify-content:space-between;
+      padding:0 22px; background:var(--header); border-bottom:1px solid var(--border);
+    }
+    header h1 { margin:0; font-size:20px; }
+    .subtitle { margin-top:4px; color:var(--muted); font-size:11px; }
+    #connection-status {
+      padding:8px 13px; border-radius:18px; background:#7f1d1d; font-size:12px;
+    }
+    #connection-status.connected { background:#166534; }
+
+    main { height:calc(100vh - 64px); display:grid; grid-template-columns:430px 1fr; }
+    #sidebar { overflow-y:auto; padding:14px; border-right:1px solid var(--border); }
+    #map-shell { position:relative; min-width:0; }
+    #map { width:100%; height:100%; }
+    #map-hint {
+      position:absolute; z-index:700; top:14px; left:50%; transform:translateX(-50%);
+      max-width:calc(100% - 100px); padding:9px 15px; border-radius:18px;
+      border:1px solid rgba(255,255,255,.2); background:rgba(15,23,42,.92);
+      color:white; font-size:12px; text-align:center; pointer-events:none;
+    }
+
+    .summary,.tabs,.mode-grid,.action-grid,.target-buttons {
+      display:grid; gap:9px;
+    }
+    .summary,.tabs,.mode-grid { grid-template-columns:1fr 1fr; }
+    .summary,.tabs { margin-bottom:12px; }
+    .summary-box,.panel {
+      border:1px solid var(--border); border-radius:11px; background:var(--panel);
+    }
+    .summary-box { padding:12px; }
+    .summary-label,.field-label,.section-title { color:var(--muted); font-size:11px; }
+    .summary-value { margin-top:4px; font-size:21px; font-weight:bold; }
+
+    .tab-button {
+      min-height:44px; border:1px solid var(--border); border-radius:9px;
+      background:var(--panel); color:var(--muted); font-weight:bold; cursor:pointer;
+    }
+    .tab-button.active { border-color:#60a5fa; background:var(--blue); color:white; }
+    .online-dot {
+      display:inline-block; width:8px; height:8px; margin-left:7px;
+      border-radius:50%; background:#ef4444;
+    }
+    .online-dot.online { background:#22c55e; box-shadow:0 0 6px #22c55e; }
+
+    .panel { padding:14px; margin-bottom:12px; }
+    .panel-title { margin-bottom:12px; font-size:17px; font-weight:bold; }
+    .panel-subtitle { margin-top:-7px; margin-bottom:12px; color:var(--muted); font-size:11px; }
+    .telemetry-grid { display:grid; grid-template-columns:1fr 1fr; gap:7px 12px; }
+    .telemetry-item { min-width:0; padding:6px 0; border-bottom:1px solid var(--border); }
+    .field-value { margin-top:3px; font-size:13px; font-weight:bold; overflow-wrap:anywhere; }
+
+    .tracking-launcher { margin-bottom:12px; }
+    #tracking-toggle-button {
+      width:100%; min-height:46px; border:1px solid #38bdf8; border-radius:9px;
+      background:#0c4a6e; color:white; font-weight:bold; cursor:pointer;
+    }
+    #tracking-toggle-button.active { border-color:#f87171; background:var(--red); }
+    #tracking-toggle-button:disabled { opacity:.45; cursor:not-allowed; }
+    .tracking-distance-row {
+      display:flex; align-items:center; justify-content:space-between; gap:10px;
+      margin-top:7px; padding:7px 9px; border:1px solid var(--border);
+      border-radius:8px; background:var(--panel2); color:var(--muted); font-size:11px;
+    }
+    #tracking-distance-input {
+      width:78px; padding:6px 8px; border:1px solid #475569; border-radius:7px;
+      background:#0f172a; color:white; font-weight:bold; text-align:right;
+    }
+    #tracking-distance-input:disabled { opacity:.55; cursor:not-allowed; }
+    #tracking-panel { display:none; }
+    #tracking-panel.active { display:block; }
+    .tracking-shell {
+      position:relative; width:100%; min-height:180px; overflow:hidden;
+      border:1px solid #475569; border-radius:9px; background:#020617;
+    }
+    #tracking-feed { width:100%; height:auto; min-height:180px; display:block; object-fit:contain; }
+    #tracking-selection {
+      position:absolute; inset:0; width:100%; height:100%; cursor:crosshair;
+      touch-action:none;
+    }
+    #tracking-overlay {
+      position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+      padding:18px; background:rgba(2,6,23,.76); color:var(--muted);
+      font-size:12px; text-align:center; pointer-events:none;
+    }
+    #tracking-status {
+      margin-top:9px; min-height:36px; padding:8px 10px; border:1px solid var(--border);
+      border-radius:8px; background:var(--panel2); color:var(--muted); font-size:11px;
+    }
+    #tracking-status.success { border-color:#15803d; color:#bbf7d0; }
+    #tracking-status.warning { border-color:#a16207; color:#fde68a; }
+    #tracking-status.error { border-color:#b91c1c; color:#fecaca; }
+    #tracking-log-panel { display:none; }
+    #tracking-log-panel.active { display:block; }
+    #tracking-log {
+      max-height:260px; margin:0; padding:11px 12px; overflow:auto;
+      border:1px solid #334155; border-radius:8px; background:#020617;
+      color:#cbd5e1; font:11px/1.65 ui-monospace,SFMono-Regular,Consolas,monospace;
+      white-space:pre-wrap; overflow-wrap:anywhere;
+    }
+    #metric-depth-distance {
+      margin-top:7px; padding:8px 10px; border:1px solid #b91c1c;
+      border-radius:8px; background:rgba(127,29,29,.24); color:#fecaca;
+      font-size:12px; font-weight:bold;
+    }
+    #metric-depth-distance strong { color:#f87171; font-size:18px; }
+    .gimbal-controls { display:grid; gap:8px; margin-top:11px; }
+    .gimbal-axis-row {
+      display:grid; grid-template-columns:58px 42px 1fr 42px; align-items:center;
+      gap:7px; padding:7px; border:1px solid var(--border); border-radius:8px;
+      background:var(--panel2);
+    }
+    .gimbal-axis-name { color:var(--muted); font-size:11px; font-weight:bold; letter-spacing:.06em; }
+    .gimbal-angle-value { text-align:center; font-weight:bold; font-variant-numeric:tabular-nums; }
+    .gimbal-step-button,.gimbal-home-button {
+      border:1px solid #475569; border-radius:7px; color:white; font-weight:bold;
+      background:#334155; cursor:pointer; touch-action:manipulation;
+    }
+    .gimbal-step-button { height:34px; font-size:20px; line-height:1; }
+    .gimbal-step-button:hover,.gimbal-home-button:hover { border-color:#60a5fa; background:var(--blue); }
+    .gimbal-step-button:active,.gimbal-home-button:active { transform:translateY(1px); }
+    .gimbal-step-button:disabled,.gimbal-home-button:disabled { opacity:.4; cursor:not-allowed; }
+    .gimbal-home-button { width:100%; min-height:38px; margin-top:9px; }
+    #gimbal-status {
+      margin-top:9px; min-height:34px; padding:8px 10px; border:1px solid var(--border);
+      border-radius:8px; background:var(--panel2); color:var(--muted); font-size:11px;
+    }
+    #gimbal-status.success { border-color:#15803d; color:#bbf7d0; }
+    #gimbal-status.error { border-color:#b91c1c; color:#fecaca; }
+
+    .mode-button,.action-button,.manual-enable-button,.manual-key {
+      border:0; border-radius:8px; color:white; font-weight:bold; cursor:pointer;
+    }
+    .mode-button {
+      min-height:44px; border:1px solid #475569; background:#334155;
+    }
+    .mode-button.active { border-color:#60a5fa; background:var(--blue); }
+    .mode-information,.target-information,.command-result,.manual-status {
+      margin-top:10px; padding:10px; border:1px solid var(--border);
+      border-radius:8px; background:var(--panel2); font-size:12px;
+    }
+    .mode-information,.target-information { display:grid; gap:7px; }
+    .information-row { display:flex; justify-content:space-between; gap:10px; }
+    .information-row span { color:var(--muted); }
+    .information-row strong { text-align:right; }
+
+    .section { padding-top:13px; margin-top:13px; border-top:1px solid var(--border); }
+    .section-title { margin-bottom:10px; font-weight:bold; letter-spacing:.06em; text-transform:uppercase; }
+
+    #manual-control-section { display:block; }
+    #offboard-control-section { display:none; }
+    #takeoff-control-section { display:none; }
+
+    .manual-status {
+      display:flex; justify-content:space-between; gap:10px; margin-bottom:9px;
+    }
+    .manual-status span { color:var(--muted); }
+    #manual-status-value { color:#fecaca; }
+    #manual-status-value.active { color:#bbf7d0; }
+
+    .manual-enable-button {
+      width:100%; min-height:43px; margin-bottom:11px;
+      border:1px solid #60a5fa; background:#334155;
+    }
+    .manual-enable-button.active { border-color:#22c55e; background:var(--green); }
+
+    .manual-keyboard-grid {
+      display:grid; grid-template-columns:repeat(5,1fr); grid-template-rows:repeat(3,48px);
+      gap:7px;
+    }
+    .manual-key {
+      border:1px solid #475569; background:#334155; user-select:none; touch-action:none;
+    }
+    .manual-key:disabled { opacity:.4; cursor:not-allowed; }
+    .manual-key.pressed { border-color:#93c5fd; background:var(--blue); transform:translateY(2px); }
+    .manual-key[data-code="KeyW"] { grid-column:3; grid-row:1; }
+    .manual-key[data-code="KeyQ"] { grid-column:1; grid-row:2; }
+    .manual-key[data-code="KeyA"] { grid-column:2; grid-row:2; }
+    .manual-key[data-code="KeyS"] { grid-column:3; grid-row:2; }
+    .manual-key[data-code="KeyD"] { grid-column:4; grid-row:2; }
+    .manual-key[data-code="KeyE"] { grid-column:5; grid-row:2; }
+    .manual-key[data-code="KeyR"] { grid-column:1 / 3; grid-row:3; }
+    .manual-key[data-code="Space"] { grid-column:3; grid-row:3; }
+    .manual-key[data-code="KeyF"] { grid-column:4 / 6; grid-row:3; }
+    .manual-help { margin-top:10px; color:var(--muted); font-size:11px; line-height:1.6; }
+
+    .altitude-row { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+    #target-altitude {
+      width:85px; padding:8px; border:1px solid #475569; border-radius:7px;
+      outline:none; background:var(--bg); color:white;
+    }
+    .target-buttons { grid-template-columns:1.3fr .7fr; margin-top:9px; }
+    .action-grid { grid-template-columns:repeat(3,1fr); }
+    .action-button { min-height:40px; padding:7px; font-size:12px; }
+    .action-button:disabled { opacity:.4; cursor:not-allowed; }
+
+    .green{background:var(--green)} .gray{background:#475569}
+    .orange{background:var(--orange)} .yellow{background:var(--yellow)} .red{background:var(--red)}
+    .command-result { min-height:38px; color:var(--muted); }
+    .command-result.success { border-color:#15803d; color:#bbf7d0; }
+    .command-result.warning { border-color:#a16207; color:#fde68a; }
+    .command-result.error { border-color:#b91c1c; color:#fecaca; }
+
+    @media (max-width:950px) {
+      main { grid-template-columns:1fr; grid-template-rows:52% 48%; }
+      #map-shell { order:1; }
+      #sidebar { order:2; border-top:1px solid var(--border); border-right:0; }
+    }
+  </style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Swarm UAV Control</h1>
+    <div class="subtitle">Position Keyboard + Offboard Map</div>
+  </div>
+  <div id="connection-status">WebSocket disconnected</div>
+</header>
+
+<main>
+  <aside id="sidebar">
+    <div class="summary">
+      <div class="summary-box"><div class="summary-label">Total UAV</div><div id="total-uav" class="summary-value">0</div></div>
+      <div class="summary-box"><div class="summary-label">Online</div><div id="online-uav" class="summary-value">0</div></div>
+    </div>
+
+    <div class="tracking-launcher">
+      <button id="tracking-toggle-button" type="button">FOLLOW TARGET</button>
+      <label class="tracking-distance-row" for="tracking-distance-input">
+        <span>Khoảng cách bám mục tiêu</span>
+        <span><input id="tracking-distance-input" type="number" min="1" max="20" step="0.5" value="10"> m</span>
+      </label>
+    </div>
+
+    <div id="tracking-panel" class="panel">
+      <div class="panel-title">Follow Target · <span id="tracking-drone-label">UAV</span></div>
+      <div class="panel-subtitle">Chọn mục tiêu; PX4 Follow sẽ tự bật khi VISUAL READY và drone đủ điều kiện an toàn. Manual luôn ưu tiên.</div>
+      <div class="tracking-shell">
+        <img id="tracking-feed" alt="Tracking stream">
+        <canvas id="tracking-selection"></canvas>
+        <div id="tracking-overlay">Nhấn TRACKING để bắt đầu.</div>
+      </div>
+      <div id="tracking-status">Tracking chưa chạy.</div>
+      <div id="metric-depth-distance">UniDepth V2: <strong>N/A</strong></div>
+    </div>
+
+    <div id="tracking-log-panel" class="panel">
+      <div class="panel-title">Tracking Log · <span id="tracking-log-drone">UAV</span></div>
+      <pre id="tracking-log">Tracking chưa chạy.</pre>
+    </div>
+
+    <div class="tabs">
+      <button type="button" class="tab-button active" data-drone-id="UAV-01">UAV-01 <span id="dot-UAV-01" class="online-dot"></span></button>
+      <button type="button" class="tab-button" data-drone-id="UAV-02">UAV-02 <span id="dot-UAV-02" class="online-dot"></span></button>
+    </div>
+
+    <div class="panel">
+      <div id="telemetry-title" class="panel-title">UAV-01</div>
+      <div id="telemetry-content" class="telemetry-grid">Waiting for telemetry...</div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Gimbal Control · <span id="gimbal-drone-label">UAV-01</span></div>
+      <div class="panel-subtitle">Mỗi lần nhấn +/− thay đổi 5°. Giá trị hiển thị là target Gazebo.</div>
+
+      <div class="gimbal-controls">
+        <div class="gimbal-axis-row">
+          <div class="gimbal-axis-name">ROLL</div>
+          <button type="button" class="gimbal-step-button" data-axis="roll" data-direction="-1" aria-label="Giảm roll">−</button>
+          <div id="gimbal-roll-value" class="gimbal-angle-value">0.0°</div>
+          <button type="button" class="gimbal-step-button" data-axis="roll" data-direction="1" aria-label="Tăng roll">+</button>
+        </div>
+        <div class="gimbal-axis-row">
+          <div class="gimbal-axis-name">PITCH</div>
+          <button type="button" class="gimbal-step-button" data-axis="pitch" data-direction="-1" aria-label="Giảm pitch">−</button>
+          <div id="gimbal-pitch-value" class="gimbal-angle-value">0.0°</div>
+          <button type="button" class="gimbal-step-button" data-axis="pitch" data-direction="1" aria-label="Tăng pitch">+</button>
+        </div>
+        <div class="gimbal-axis-row">
+          <div class="gimbal-axis-name">YAW</div>
+          <button type="button" class="gimbal-step-button" data-axis="yaw" data-direction="-1" aria-label="Giảm yaw">−</button>
+          <div id="gimbal-yaw-value" class="gimbal-angle-value">0.0°</div>
+          <button type="button" class="gimbal-step-button" data-axis="yaw" data-direction="1" aria-label="Tăng yaw">+</button>
+        </div>
+      </div>
+
+      <button id="gimbal-home-button" type="button" class="gimbal-home-button">GIMBAL HOME · 0° / 0° / 0°</button>
+      <div id="gimbal-status">Chưa gửi lệnh gimbal.</div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Flight Controller</div>
+      <div class="panel-subtitle">Active vehicle: <strong id="active-drone-label">UAV-01</strong></div>
+
+      <div class="mode-grid">
+        <button id="position-mode-button" type="button" class="mode-button active">POSITION</button>
+        <button id="offboard-mode-button" type="button" class="mode-button">OFFBOARD MAP</button>
+        <button id="takeoff-mode-button" type="button" class="mode-button">TAKE OFF</button>
+        <button id="rtl-mode-button" type="button" class="mode-button">RETURN HOME</button>
+      </div>
+
+      <div class="mode-information">
+        <div class="information-row"><span>Actual PX4 mode</span><strong id="actual-mode">Unknown</strong></div>
+        <div class="information-row"><span>Control source</span><strong id="control-source">Web keyboard</strong></div>
+      </div>
+
+      <div id="manual-control-section" class="section">
+        <div class="section-title">Position Keyboard Control</div>
+        <div class="manual-status"><span>Manual output</span><strong id="manual-status-value">DISABLED</strong></div>
+        <button id="manual-enable-button" type="button" class="manual-enable-button">ENABLE KEYBOARD CONTROL</button>
+
+        <div class="manual-keyboard-grid">
+          <button type="button" class="manual-key" data-code="KeyW">W</button>
+          <button type="button" class="manual-key" data-code="KeyQ">Q</button>
+          <button type="button" class="manual-key" data-code="KeyA">A</button>
+          <button type="button" class="manual-key" data-code="KeyS">S</button>
+          <button type="button" class="manual-key" data-code="KeyD">D</button>
+          <button type="button" class="manual-key" data-code="KeyE">E</button>
+          <button type="button" class="manual-key" data-code="KeyR">R · UP</button>
+          <button type="button" class="manual-key" data-code="Space">STOP</button>
+          <button type="button" class="manual-key" data-code="KeyF">F · DOWN</button>
+        </div>
+        <div class="manual-help">W/S: tiến/lùi · A/D: trái/phải<br>Q/E: quay · R/F: lên/xuống · Space: dừng</div>
+      </div>
+
+      <div id="offboard-control-section" class="section">
+        <div class="section-title">Offboard Map Target</div>
+        <div class="altitude-row">
+          <label for="target-altitude">Altitude above Home</label>
+          <div><input id="target-altitude" type="number" min="1" max="30" step="0.5" value="5"> m</div>
+        </div>
+        <div class="target-information">
+          <div class="information-row"><span>Latitude</span><strong id="target-latitude">Not selected</strong></div>
+          <div class="information-row"><span>Longitude</span><strong id="target-longitude">Not selected</strong></div>
+          <div class="information-row"><span>Distance</span><strong id="target-distance">N/A</strong></div>
+        </div>
+        <div class="target-buttons">
+          <button id="fly-button" type="button" class="action-button green" disabled>FLY TO POINT</button>
+          <button id="cancel-target-button" type="button" class="action-button gray">CANCEL</button>
+        </div>
+        <button id="hold-current-button" type="button" class="action-button gray" style="width:100%;margin-top:8px;">HOLD CURRENT POSITION</button>
+      </div>
+
+      <div id="takeoff-control-section" class="section">
+        <div class="section-title">Takeoff Control</div>
+
+        <div class="altitude-row">
+          <label for="takeoff-altitude">Takeoff altitude above Home</label>
+          <div>
+            <input
+              id="takeoff-altitude"
+              type="number"
+              min="2.5"
+              max="10"
+              step="0.5"
+              value="5"
+            >
+            m
+          </div>
+        </div>
+
+        <div class="target-information">
+          <div class="information-row">
+            <span>Allowed range</span>
+            <strong>2.5 – 10.0 m</strong>
+          </div>
+          <div class="information-row">
+            <span>Command</span>
+            <strong>PX4 NAV_TAKEOFF</strong>
+          </div>
+        </div>
+
+        <button
+          id="start-takeoff-button"
+          type="button"
+          class="action-button green"
+          style="width:100%; margin-top:9px;"
+        >
+          START TAKEOFF
+        </button>
+      </div>
+
+      <div class="section">
+        <div class="section-title">Flight Actions</div>
+        <div class="action-grid">
+          <button id="arm-button" type="button" class="action-button green">ARM</button>
+          <button id="hold-button" type="button" class="action-button gray">HOLD</button>
+          <button id="land-button" type="button" class="action-button orange">LAND</button>
+          <button id="disarm-button" type="button" class="action-button red">DISARM</button>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">Command Result</div>
+        <div id="command-result" class="command-result">Chưa có lệnh điều khiển.</div>
+      </div>
+    </div>
+  </aside>
+
+  <section id="map-shell">
+    <div id="map"></div>
+    <div id="map-hint">Position: bật keyboard rồi dùng W/A/S/D</div>
+  </section>
+</main>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+  const DRONE_IDS=["UAV-01","UAV-02"];
+  const NAV_STATE_NAMES={0:"Manual",1:"Altitude",2:"Position",3:"Mission",4:"Hold",5:"RTL",14:"Offboard",17:"Takeoff",18:"Land"};
+  const selectedModes={"UAV-01":"position","UAV-02":"position"};
+  const manualEnabled={"UAV-01":false,"UAV-02":false};
+  const targets={"UAV-01":null,"UAV-02":null};
+  const targetAltitudes={"UAV-01":5,"UAV-02":5};
+  const takeoffAltitudes={"UAV-01":5,"UAV-02":5};
+  const trackingDistances={"UAV-01":10,"UAV-02":10};
+  const pendingModes={"UAV-01":null,"UAV-02":null};
+  const lastControlResultTimestamp={"UAV-01":0,"UAV-02":0};
+  const gimbalAngles={
+    "UAV-01":{roll:0,pitch:0,yaw:0},
+    "UAV-02":{roll:0,pitch:0,yaw:0}
+  };
+  const pressedKeys=new Set();
+  const manualCodes=new Set(["KeyW","KeyS","KeyA","KeyD","KeyQ","KeyE","KeyR","KeyF","Space"]);
+  const MANUAL_SEND_PERIOD_MS=50;
+  const HORIZONTAL_VALUE=.75, VERTICAL_VALUE=.65, YAW_VALUE=.50;
+  const GIMBAL_STEP_DEG=5;
+
+  let selectedDroneId="UAV-01", socket=null, drones={}, firstMapPosition=false;
+  let gazeboStatus=null, trackingStatus=null, trackingStreamStarted=false;
+  let trackingRetryTimer=null, trackingSelectionStart=null;
+  const droneMarkers={}, droneTrails={}, targetMarkers={};
+
+  const map=L.map("map").setView([47.3979712,8.5461637],18);
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:20,attribution:"© OpenStreetMap contributors"}).addTo(map);
+
+  function getValue(object,paths,fallback=null){
+    for(const path of paths){
+      let value=object;
+      for(const key of path.split(".")) value=value?.[key];
+      if(value!==undefined&&value!==null) return value;
+    }
+    return fallback;
+  }
+  function formatNumber(value,digits=2){const n=Number(value);return Number.isFinite(n)?n.toFixed(digits):"N/A";}
+  function navStateName(value){const n=Number(value);return Number.isFinite(n)?(NAV_STATE_NAMES[n]??`State ${n}`):"Unknown";}
+  function modeFromNavState(value){
+    const n=Number(value);
+    if(n===2)return "position";
+    if(n===14)return "offboard_map";
+    if(n===17)return "takeoff";
+    if(n===5)return "rtl";
+    return null;
+  }
+  function selectedDrone(){return drones[selectedDroneId]||null;}
+  function droneNavState(drone){return getValue(drone||{},["status.nav_state","nav_state"],null);}
+  function droneArmed(drone){return Boolean(getValue(drone||{},["status.armed","armed"],false));}
+  function dronePreflightPass(drone){return Boolean(getValue(drone||{},["status.preflight_checks_pass","preflight_checks_pass"],false));}
+  function droneManualSignalOk(drone){
+    return getValue(drone||{},["failsafe_flags.manual_control_signal_lost"],false)!==true;
+  }
+  function manualControlBlockReason(drone){
+    const nav=Number(droneNavState(drone));
+
+    if(!drone){
+      return "chưa có telemetry";
+    }
+
+    if(!droneArmed(drone)){
+      return "UAV chưa ARM";
+    }
+
+    if(!Number.isFinite(nav)||nav!==2){
+      return "PX4 chưa ở Position mode";
+    }
+
+    if(!droneManualSignalOk(drone)){
+      return "manual bridge chưa chạy hoặc PX4 chưa nhận manual input";
+    }
+
+    return "";
+  }
+  function needsArmRecovery(drone){
+    const nav=Number(droneNavState(drone));
+    const preflightOk=dronePreflightPass(drone);
+    return !preflightOk||[5,14,17,18].includes(nav);
+  }
+  function dronePosition(drone){
+    const latitude=Number(getValue(drone||{},["global_position.latitude_deg","latitude_deg","lat"]));
+    const longitude=Number(getValue(drone||{},["global_position.longitude_deg","longitude_deg","lon"]));
+    return Number.isFinite(latitude)&&Number.isFinite(longitude)?{latitude,longitude}:null;
+  }
+  function websocketReady(){return socket&&socket.readyState===WebSocket.OPEN;}
+  function setCommandResult(text,type=""){
+    const e=document.getElementById("command-result");
+    e.textContent=text; e.className="command-result"; if(type)e.classList.add(type);
+  }
+  function sendJson(message){
+    if(!websocketReady()){setCommandResult("WebSocket chưa kết nối.","error");return false;}
+    socket.send(JSON.stringify(message)); return true;
+  }
+  function sendAction(action,extra={}){return sendJson({type:"control_action",drone_id:selectedDroneId,action,...extra});}
+
+  function setGimbalStatus(text,type=""){
+    const e=document.getElementById("gimbal-status");
+    e.textContent=text;e.className="";if(type)e.classList.add(type);
+  }
+  function mergeGimbalAngles(snapshot){
+    if(!snapshot||typeof snapshot!=="object")return;
+    for(const id of DRONE_IDS){
+      const incoming=snapshot[id];if(!incoming)continue;
+      for(const axis of ["roll","pitch","yaw"]){
+        const value=Number(incoming[axis]);
+        if(Number.isFinite(value))gimbalAngles[id][axis]=value;
+      }
+    }
+  }
+  function updateGimbalUi(){
+    const angles=gimbalAngles[selectedDroneId];
+    document.getElementById("gimbal-drone-label").textContent=selectedDroneId;
+    document.getElementById("gimbal-roll-value").textContent=`${angles.roll.toFixed(1)}°`;
+    document.getElementById("gimbal-pitch-value").textContent=`${angles.pitch.toFixed(1)}°`;
+    document.getElementById("gimbal-yaw-value").textContent=`${angles.yaw.toFixed(1)}°`;
+    const autoTracking=Boolean(
+      trackingStatus?.gimbal_active&&trackingStatus?.drone_id===selectedDroneId
+    );
+    const controlsReady=websocketReady()&&gazeboStatus?.started!==false&&!autoTracking;
+    document.querySelectorAll(".gimbal-step-button").forEach(button=>button.disabled=!controlsReady);
+    document.getElementById("gimbal-home-button").disabled=!controlsReady;
+    const status=document.getElementById("gimbal-status");
+    if(autoTracking){
+      status.dataset.autoTracking="true";
+      const rates=trackingStatus.gimbal_rates_deg_s||{};
+      const pitchRate=Number(rates.pitch);
+      const yawRate=Number(rates.yaw);
+      const rateText=(Number.isFinite(pitchRate)&&Number.isFinite(yawRate))
+        ?` · rate P ${pitchRate.toFixed(1)}°/s · Y ${yawRate.toFixed(1)}°/s`:"";
+      const yawLimit=Number(trackingStatus.gimbal_yaw_limit_deg);
+      const yawRequestedRate=Number(trackingStatus.gimbal_yaw_requested_rate_deg_s);
+      const yawLimitText=Number.isFinite(yawLimit)
+        ?` · YAW ±${yawLimit.toFixed(0)}°${trackingStatus.gimbal_yaw_saturated_outward?` EDGE${Number.isFinite(yawRequestedRate)?` ${yawRequestedRate.toFixed(0)}°/s`:""}`:""}`:"";
+      const bodyYawActive=Boolean(trackingStatus.body_yaw_active);
+      const bodyYawCommand=Number(trackingStatus.body_yaw_command);
+      const bodyYawTargetError=Number(trackingStatus.body_yaw_target_error_deg);
+      const trackingGimbalYaw=Number(trackingStatus.gimbal_angles_deg?.yaw);
+      const bodyYawText=trackingStatus.body_yaw_enabled
+        ?` · BODY YAW ${bodyYawActive?"ON":"READY"}${Number.isFinite(bodyYawTargetError)?` LOS ${bodyYawTargetError>=0?"+":""}${bodyYawTargetError.toFixed(1)}°`:""}${Number.isFinite(trackingGimbalYaw)?` GIMBAL ${trackingGimbalYaw>=0?"+":""}${trackingGimbalYaw.toFixed(1)}°`:""}${Number.isFinite(bodyYawCommand)?` CMD ${bodyYawCommand>=0?"+":""}${bodyYawCommand.toFixed(2)}`:""}`
+        :" · BODY YAW OFF";
+      const bodyYawError=String(trackingStatus.body_yaw_error||"");
+      const statusType=trackingStatus.gimbal_error?"error":bodyYawError?"warning":"success";
+      setGimbalStatus(`${selectedDroneId}: AUTO TRACKING${rateText}${yawLimitText}${bodyYawText}${bodyYawError?` · ${bodyYawError}`:""}.`,statusType);
+    }else if(status.dataset.autoTracking){
+      delete status.dataset.autoTracking;
+      setGimbalStatus(`${selectedDroneId}: điều khiển gimbal bằng tay.`);
+    }
+  }
+  function setTrackingStatus(text,type=""){
+    const element=document.getElementById("tracking-status");
+    element.textContent=text;element.className="";if(type)element.classList.add(type);
+  }
+  function updateMetricDepthDistance(){
+    const value=document.querySelector("#metric-depth-distance strong");
+    if(!value)return;
+    const distance=trackingStatus?.metric_depth_distance_m===null
+      ?NaN:Number(trackingStatus?.metric_depth_distance_m);
+    if(Number.isFinite(distance)){
+      value.textContent=`${distance.toFixed(2)} m`;
+      return;
+    }
+    const state=String(trackingStatus?.metric_depth_state||"waiting");
+    const error=String(trackingStatus?.metric_depth_error||"");
+    value.textContent=error||state;
+  }
+  async function trackingApi(path,payload=null){
+    const options={method:"POST",headers:{"Content-Type":"application/json"}};
+    if(payload!==null)options.body=JSON.stringify(payload);
+    const response=await fetch(path,options);
+    let data={};
+    try{data=await response.json();}catch(error){data={};}
+    if(!response.ok)throw new Error(data.detail||`HTTP ${response.status}`);
+    if(data.tracking)trackingStatus=data.tracking;
+    updateTrackingUi();
+    return data;
+  }
+  async function toggleTracking(){
+    const button=document.getElementById("tracking-toggle-button");
+    button.disabled=true;
+    try{
+      if(trackingStatus?.active){
+        await trackingApi("/api/tracking/stop");
+      }else{
+        const input=document.getElementById("tracking-distance-input");
+        const desiredDistance=Number(input.value);
+        if(!Number.isFinite(desiredDistance)||desiredDistance<1||desiredDistance>20){
+          throw new Error("Khoảng cách tracking phải từ 1 đến 20 m.");
+        }
+        trackingDistances[selectedDroneId]=desiredDistance;
+        await trackingApi("/api/tracking/start",{
+          drone_id:selectedDroneId,
+          desired_distance_m:desiredDistance
+        });
+      }
+    }catch(error){
+      setTrackingStatus(error.message||"Không khởi động được tracking.","error");
+    }finally{
+      updateTrackingUi();
+    }
+  }
+  function openTrackingStream(force=false){
+    if(!trackingStatus?.active)return;
+    if(!force&&trackingStreamStarted)return;
+    if(trackingRetryTimer!==null){clearTimeout(trackingRetryTimer);trackingRetryTimer=null;}
+    trackingStreamStarted=true;
+    const image=document.getElementById("tracking-feed");
+    const overlay=document.getElementById("tracking-overlay");
+    image.alt=`Tracking ${trackingStatus.drone_id}`;
+    overlay.style.display="flex";
+    overlay.textContent=`Đang mở tracking ${trackingStatus.drone_id}...`;
+    image.src=`/api/tracking/stream?ts=${Date.now()}`;
+  }
+  function scheduleTrackingReconnect(){
+    if(trackingRetryTimer!==null||!trackingStatus?.active)return;
+    trackingRetryTimer=setTimeout(()=>{
+      trackingRetryTimer=null;
+      if(trackingStatus?.active)openTrackingStream(true);
+    },2000);
+  }
+  function trackingLogNumber(value,digits=1,suffix=""){
+    if(value===null||value===undefined||value==="")return "N/A";
+    const number=Number(value);
+    return Number.isFinite(number)?`${number.toFixed(digits)}${suffix}`:"N/A";
+  }
+  function updateTrackingLog(active){
+    const panel=document.getElementById("tracking-log-panel");
+    const output=document.getElementById("tracking-log");
+    panel.classList.toggle("active",active);
+    if(!active){
+      output.textContent="Tracking chưa chạy.";
+      return;
+    }
+
+    const status=trackingStatus||{};
+    document.getElementById("tracking-log-drone").textContent=status.drone_id||"UAV";
+    const angles=status.gimbal_angles_deg||{};
+    const gimbalRates=status.gimbal_rates_deg_s||{};
+    const bodyRates=status.body_attitude_rates_deg_s||{};
+    const acceleration=status.body_recenter_acceleration_m_s2||{};
+    const velocity=status.body_recenter_velocity_m_s||{};
+    const tilt=status.body_desired_tilt_deg||{};
+    const advanced=status.advanced||{};
+    const bbox=Array.isArray(status.bbox)
+      ?status.bbox.map(value=>trackingLogNumber(value,1)).join(", ")
+      :"N/A";
+    const lines=[
+      `STATE     ${String(status.state||"inactive").toUpperCase()} | ${status.tracker||status.backend||"N/A"}`,
+      `FRAME     ${trackingLogNumber(status.fps,1," FPS")} | SOURCE ${trackingLogNumber(status.source_fps,1," FPS")} | AGE ${trackingLogNumber(status.last_frame_age_ms,0," ms")}`,
+      `TARGET    SCORE ${trackingLogNumber(status.score,3)} | BBOX [${bbox}] | RE-DETECT ${status.redetecting?"YES":"NO"}`,
+      `GIMBAL    ${status.gimbal_active?"AUTO":"IDLE"} | R ${trackingLogNumber(angles.roll,1,"°")} P ${trackingLogNumber(angles.pitch,1,"°")} Y ${trackingLogNumber(angles.yaw,1,"°")} | RATE P ${trackingLogNumber(gimbalRates.pitch,1,"°/s")} Y ${trackingLogNumber(gimbalRates.yaw,1,"°/s")}`,
+      `BODY YAW  ${status.body_yaw_active?"ON":"READY"} | LOS ${trackingLogNumber(status.body_yaw_target_error_deg,1,"°")} | CMD ${trackingLogNumber(status.body_yaw_command,2)}`,
+      `FOLLOW    ${String(status.follow_state||"idle").toUpperCase()} | DIST ${trackingLogNumber(status.follow_distance_m,1," m")} / ${trackingLogNumber(status.follow_target_distance_m,1," m")} | ${String(status.follow_distance_source||"none").toUpperCase()} | F ${trackingLogNumber(status.follow_forward_command,2)}`,
+      `VISUAL    ${String(status.visual_follow_state||"idle").toUpperCase()} | RANGE ${trackingLogNumber(status.visual_range_filtered_m,1," m")} | SCALE ${trackingLogNumber(status.visual_bbox_scale_px,1," px")} | Q ${trackingLogNumber(status.visual_range_quality,2)} | TTC ${trackingLogNumber(status.visual_ttc_s,1," s")}`,
+      `MOTION    ${String(status.motion_state||"idle").toUpperCase()} | ${String(status.motion_control_mode||"none").toUpperCase()} | F ${trackingLogNumber(status.motion_forward_velocity_m_s,2," m/s")} D ${trackingLogNumber(status.motion_down_velocity_m_s,2," m/s")} YR ${trackingLogNumber(status.motion_yaw_rate_deg_s,1,"°/s")}`,
+      `RECENTER  ${String(status.body_attitude_state||"idle").toUpperCase()} | AX ${trackingLogNumber(acceleration.forward,2)} AY ${trackingLogNumber(acceleration.right,2)} | V ${trackingLogNumber(velocity.forward,2)}/${trackingLogNumber(velocity.right,2)}/${trackingLogNumber(velocity.down,2)} m/s`,
+      `TILT      R ${trackingLogNumber(tilt.roll,1,"°")} P ${trackingLogNumber(tilt.pitch,1,"°")} | BODY RATE R ${trackingLogNumber(bodyRates.roll,1)} P ${trackingLogNumber(bodyRates.pitch,1)} Y ${trackingLogNumber(bodyRates.yaw,1)} °/s | ALT ERR ${trackingLogNumber(status.body_altitude_error_m,2," m")}`,
+      `DEPTH     ${String(status.metric_depth_state||"disabled").toUpperCase()} | ${trackingLogNumber(status.metric_depth_distance_m,2," m")} | VALID ${trackingLogNumber(status.metric_depth_valid_fraction,2)}`,
+      `REID      SIM ${trackingLogNumber(advanced.reid_score,2)} | MATCH ${trackingLogNumber(advanced.match_score,2)} | MEMORY ${trackingLogNumber(advanced.memory_entries,0)} | LOST ${trackingLogNumber(advanced.lost_count,0)}`
+    ];
+    [
+      status.error,
+      status.gimbal_error,
+      status.body_yaw_error,
+      status.follow_error,
+      status.visual_follow_error,
+      status.motion_error,
+      status.body_attitude_error
+    ].filter(Boolean).forEach(error=>lines.push(`ERROR     ${error}`));
+    output.textContent=lines.join("\n");
+  }
+  function updateTrackingUi(){
+    const button=document.getElementById("tracking-toggle-button");
+    const panel=document.getElementById("tracking-panel");
+    const overlay=document.getElementById("tracking-overlay");
+    const active=Boolean(trackingStatus?.active);
+    updateTrackingLog(active);
+    const canStart=websocketReady()&&trackingStatus?.available&&gazeboStatus?.started!==false;
+    const distanceInput=document.getElementById("tracking-distance-input");
+    updateMetricDepthDistance();
+
+    if(active&&Number.isFinite(Number(trackingStatus.follow_target_distance_m))){
+      trackingDistances[trackingStatus.drone_id]=Number(trackingStatus.follow_target_distance_m);
+    }
+    const distanceOwner=active?trackingStatus.drone_id:selectedDroneId;
+    distanceInput.value=String(trackingDistances[distanceOwner]??5);
+    distanceInput.disabled=active;
+
+    button.classList.toggle("active",active);
+    button.textContent=active?`DỪNG FOLLOW TARGET · ${trackingStatus.drone_id}`:"FOLLOW TARGET";
+    button.disabled=!active&&!canStart;
+    panel.classList.toggle("active",active);
+    if(!active){
+      trackingStreamStarted=false;
+      if(trackingRetryTimer!==null){clearTimeout(trackingRetryTimer);trackingRetryTimer=null;}
+      document.getElementById("tracking-feed").removeAttribute("src");
+      clearTrackingSelection();
+      if(trackingStatus&&!trackingStatus.available){
+        setTrackingStatus(trackingStatus.error||"Package tracking không khả dụng.","error");
+      }else setTrackingStatus("Tracking chưa chạy.");
+      return;
+    }
+
+    document.getElementById("tracking-drone-label").textContent=trackingStatus.drone_id;
+    openTrackingStream();
+
+    const age=Number(trackingStatus.last_frame_age_ms);
+    if(!trackingStatus.has_frame||Number.isFinite(age)&&age>3000){
+      overlay.style.display="flex";
+      overlay.textContent=`Đang chờ camera ${trackingStatus.drone_id}...`;
+      scheduleTrackingReconnect();
+    }else{
+      overlay.style.display="none";
+      if(trackingRetryTimer!==null){clearTimeout(trackingRetryTimer);trackingRetryTimer=null;}
+    }
+
+    const score=trackingStatus.score===null?NaN:Number(trackingStatus.score);
+    const scoreText=Number.isFinite(score)?` · score ${score.toFixed(3)}`:"";
+    const fps=Number(trackingStatus.fps);
+    const fpsText=Number.isFinite(fps)?` · ${fps.toFixed(1)} FPS`:"";
+    const sourceFps=Number(trackingStatus.source_fps);
+    const sourceFpsText=Number.isFinite(sourceFps)?` / nguồn ${sourceFps.toFixed(1)}`:"";
+    const trackerText=trackingStatus.tracker?` · ${trackingStatus.tracker}`:"";
+    const autoGimbalText=trackingStatus.gimbal_active?" · gimbal AUTO":"";
+    const bodyYawCommand=Number(trackingStatus.body_yaw_command);
+    const bodyYawTargetError=Number(trackingStatus.body_yaw_target_error_deg);
+    const trackingGimbalYaw=Number(trackingStatus.gimbal_angles_deg?.yaw);
+    const bodyYawText=trackingStatus.body_yaw_enabled
+      ?` · body yaw ${trackingStatus.body_yaw_active?"ON":"READY"}${Number.isFinite(bodyYawTargetError)?` LOS ${bodyYawTargetError>=0?"+":""}${bodyYawTargetError.toFixed(1)}°`:""}${Number.isFinite(trackingGimbalYaw)?` gimbal ${trackingGimbalYaw>=0?"+":""}${trackingGimbalYaw.toFixed(1)}°`:""}${Number.isFinite(bodyYawCommand)?` cmd ${bodyYawCommand>=0?"+":""}${bodyYawCommand.toFixed(2)}`:""}`
+      :"";
+    const followDistance=trackingStatus.follow_distance_m===null
+      ?NaN:Number(trackingStatus.follow_distance_m);
+    const followTarget=Number(trackingStatus.follow_target_distance_m);
+    const followForward=Number(trackingStatus.follow_forward_command);
+    const followSource=String(trackingStatus.follow_distance_source||"none");
+    const followState=String(trackingStatus.follow_state||"idle").toUpperCase();
+    const followReferenceScale=trackingStatus.follow_reference_scale_px===null?NaN:Number(trackingStatus.follow_reference_scale_px);
+    const followFilteredScale=trackingStatus.follow_filtered_scale_px===null?NaN:Number(trackingStatus.follow_filtered_scale_px);
+    const followScaleRatio=trackingStatus.follow_scale_ratio===null?NaN:Number(trackingStatus.follow_scale_ratio);
+    const followBboxScaleRatio=trackingStatus.follow_bbox_scale_ratio===null?NaN:Number(trackingStatus.follow_bbox_scale_ratio);
+    const followScaleRate=Number(trackingStatus.follow_scale_error_rate);
+    const followObjectScaleSource=String(trackingStatus.follow_object_scale_source||"");
+    const followReferenceScaleSource=String(trackingStatus.follow_reference_scale_source||"");
+    const followWarmupMs=Number(trackingStatus.follow_reference_warmup_ms);
+    const followBboxGuard=Boolean(trackingStatus.follow_forward_blocked_by_bbox_guard);
+    const followScaleText=followSource==="apparent_size"
+      ?`${Number.isFinite(followFilteredScale)&&Number.isFinite(followReferenceScale)?` S ${followFilteredScale.toFixed(1)}/${followReferenceScale.toFixed(1)}px`:""}${Number.isFinite(followScaleRatio)?` R ${followScaleRatio.toFixed(2)}`:""}${Number.isFinite(followBboxScaleRatio)?` BR ${followBboxScaleRatio.toFixed(2)}`:""}${followBboxGuard?" BBOX-HOLD":""}${Number.isFinite(followScaleRate)?` dE ${followScaleRate>=0?"+":""}${followScaleRate.toFixed(2)}/s`:""}${followObjectScaleSource?` ${followObjectScaleSource}`:""}${followReferenceScaleSource&&followReferenceScaleSource!==followObjectScaleSource?` ref:${followReferenceScaleSource}`:""}${Number.isFinite(followWarmupMs)&&followWarmupMs>0?` CAL ${(followWarmupMs/1000).toFixed(1)}s`:""}`
+      :"";
+    const followText=trackingStatus.follow_enabled
+      ?` · follow ${followState}${Number.isFinite(followDistance)&&Number.isFinite(followTarget)?` ${followDistance.toFixed(1)}/${followTarget.toFixed(1)} m`:""}${followSource!=="none"?` ${followSource}`:""}${followScaleText}${Number.isFinite(followForward)?` F ${followForward>=0?"+":""}${followForward.toFixed(2)}`:""}`
+      :"";
+    const followError=String(trackingStatus.follow_error||"");
+    const visualState=String(trackingStatus.visual_follow_state||"idle").toUpperCase();
+    const visualRange=trackingStatus.visual_range_filtered_m===null?NaN:Number(trackingStatus.visual_range_filtered_m);
+    const visualScale=trackingStatus.visual_bbox_scale_px===null?NaN:Number(trackingStatus.visual_bbox_scale_px);
+    const visualQuality=Number(trackingStatus.visual_range_quality);
+    const visualTtc=trackingStatus.visual_ttc_s===null?NaN:Number(trackingStatus.visual_ttc_s);
+    const visualText=trackingStatus.visual_follow_feature_enabled
+      ?` · VISUAL ${visualState}${Number.isFinite(visualRange)?` D ${visualRange.toFixed(1)}m`:""}${Number.isFinite(visualScale)?` S ${visualScale.toFixed(1)}px`:""}${Number.isFinite(visualQuality)?` Q ${visualQuality.toFixed(2)}`:""}${Number.isFinite(visualTtc)?` TTC ${visualTtc.toFixed(1)}s`:""}`:"";
+    const visualError=String(trackingStatus.visual_follow_error||"");
+    const motionState=String(trackingStatus.motion_state||"idle").toUpperCase();
+    const motionForward=Number(trackingStatus.motion_forward_velocity_m_s);
+    const motionDown=Number(trackingStatus.motion_down_velocity_m_s);
+    const motionPitchError=Number(trackingStatus.motion_vertical_pitch_error_deg);
+    const motionYawRate=Number(trackingStatus.motion_yaw_rate_deg_s);
+    const bodyRates=trackingStatus.body_attitude_rates_deg_s||{};
+    const bodyRollRate=Number(bodyRates.roll),bodyPitchRate=Number(bodyRates.pitch),bodyAttitudeYawRate=Number(bodyRates.yaw);
+    const bodyThrust=Number(trackingStatus.body_attitude_thrust);
+    const recenterVelocity=trackingStatus.body_recenter_velocity_m_s||{};
+    const recenterForward=Number(recenterVelocity.forward),recenterRight=Number(recenterVelocity.right);
+    const holdZ=Number(trackingStatus.body_hold_z_down_m);
+    const recenterAcceleration=trackingStatus.body_recenter_acceleration_m_s2||{};
+    const accelForward=Number(recenterAcceleration.forward),accelRight=Number(recenterAcceleration.right);
+    const desiredTilt=trackingStatus.body_desired_tilt_deg||{};
+    const tiltRoll=Number(desiredTilt.roll),tiltPitch=Number(desiredTilt.pitch);
+    const altitudeError=Number(trackingStatus.body_altitude_error_m);
+    const homeError=trackingStatus.gimbal_home_error_deg||{};
+    const homeRoll=Number(homeError.roll),homePitch=Number(homeError.pitch),homeYaw=Number(homeError.yaw);
+    const motionText=trackingStatus.motion_control_mode==="offboard_acceleration_recenter"
+      ?` · RECENTER ${String(trackingStatus.body_attitude_state||"disabled").toUpperCase()}${Number.isFinite(accelForward)?` AX ${accelForward>=0?"+":""}${accelForward.toFixed(2)}`:""}${Number.isFinite(accelRight)?` AY ${accelRight>=0?"+":""}${accelRight.toFixed(2)}`:""}${Number.isFinite(tiltRoll)&&Number.isFinite(tiltPitch)?` TILT ${tiltRoll.toFixed(1)}/${tiltPitch.toFixed(1)}°`:""}${Number.isFinite(bodyAttitudeYawRate)?` YR ${bodyAttitudeYawRate>=0?"+":""}${bodyAttitudeYawRate.toFixed(1)}°/s`:""}${Number.isFinite(holdZ)?` Z ${holdZ.toFixed(2)}m`:""}${Number.isFinite(altitudeError)?` ΔZ ${altitudeError.toFixed(2)}m`:""}${Number.isFinite(homeRoll)&&Number.isFinite(homePitch)&&Number.isFinite(homeYaw)?` · HOME Δ ${homeRoll.toFixed(1)}/${homePitch.toFixed(1)}/${homeYaw.toFixed(1)}°`:""}`
+      :trackingStatus.motion_control_mode==="apparent_size_offboard"
+        ?` · SIZE FOLLOW ${motionState}${Number.isFinite(motionForward)?` V ${motionForward>=0?"+":""}${motionForward.toFixed(2)}m/s`:""}${Number.isFinite(motionDown)?` DZ ${motionDown>=0?"+":""}${motionDown.toFixed(2)}m/s`:""}${Number.isFinite(motionPitchError)?` PE ${motionPitchError>=0?"+":""}${motionPitchError.toFixed(1)}°`:""}${Number.isFinite(motionYawRate)?` YR ${motionYawRate>=0?"+":""}${motionYawRate.toFixed(1)}°/s`:""}`
+      :trackingStatus.motion_control_mode==="offboard_velocity"
+        ?` · OFFBOARD ${motionState}${Number.isFinite(motionForward)?` V ${motionForward>=0?"+":""}${motionForward.toFixed(2)}m/s`:""}${Number.isFinite(motionYawRate)?` YR ${motionYawRate>=0?"+":""}${motionYawRate.toFixed(1)}°/s`:""}`
+        :"";
+    const motionError=String(trackingStatus.motion_error||"");
+    const advanced=trackingStatus.advanced||{};
+    const aiText=advanced.kalman&&advanced.memory&&advanced.reid
+      ?` · Kalman/Memory/ReID${Number.isFinite(Number(advanced.reid_score))?` ${Number(advanced.reid_score).toFixed(2)}`:""}`
+      :"";
+    if(trackingStatus.state==="selecting"){
+      setTrackingStatus(`${trackingStatus.drone_id}: kéo chuột để chọn mục tiêu.`,"warning");
+    }else if(trackingStatus.state==="tracking"){
+      setTrackingStatus(`${trackingStatus.drone_id}: đang bám mục tiêu.`,trackingStatus.body_yaw_error||followError||visualError||motionError?"warning":"success");
+    }else if(["occluded","lost"].includes(trackingStatus.state)){
+      setTrackingStatus(`${trackingStatus.drone_id}: ${trackingStatus.state.toUpperCase()}.`,"warning");
+    }else if(trackingStatus.state==="error"){
+      setTrackingStatus(trackingStatus.error||"Tracking gặp lỗi.","error");
+    }
+  }
+  function resizeTrackingCanvas(){
+    const canvas=document.getElementById("tracking-selection");
+    const rect=canvas.getBoundingClientRect();
+    const width=Math.max(1,Math.round(rect.width));
+    const height=Math.max(1,Math.round(rect.height));
+    if(canvas.width!==width||canvas.height!==height){canvas.width=width;canvas.height=height;}
+  }
+  function clearTrackingSelection(){
+    const canvas=document.getElementById("tracking-selection");
+    canvas.getContext("2d").clearRect(0,0,canvas.width,canvas.height);
+  }
+  function trackingPointer(event){
+    const canvas=document.getElementById("tracking-selection");
+    const rect=canvas.getBoundingClientRect();
+    return {
+      x:Math.max(0,Math.min(canvas.width,(event.clientX-rect.left)*canvas.width/rect.width)),
+      y:Math.max(0,Math.min(canvas.height,(event.clientY-rect.top)*canvas.height/rect.height))
+    };
+  }
+  function drawTrackingSelection(current){
+    if(!trackingSelectionStart)return;
+    const canvas=document.getElementById("tracking-selection");
+    const context=canvas.getContext("2d");
+    const x=Math.min(trackingSelectionStart.x,current.x);
+    const y=Math.min(trackingSelectionStart.y,current.y);
+    const width=Math.abs(current.x-trackingSelectionStart.x);
+    const height=Math.abs(current.y-trackingSelectionStart.y);
+    context.clearRect(0,0,canvas.width,canvas.height);
+    context.strokeStyle="#38bdf8";context.lineWidth=2;context.setLineDash([7,5]);
+    context.fillStyle="rgba(56,189,248,.16)";
+    context.fillRect(x,y,width,height);context.strokeRect(x,y,width,height);
+  }
+  async function finishTrackingSelection(event){
+    if(!trackingSelectionStart)return;
+    const canvas=document.getElementById("tracking-selection");
+    const end=trackingPointer(event);
+    const x=Math.min(trackingSelectionStart.x,end.x);
+    const y=Math.min(trackingSelectionStart.y,end.y);
+    const width=Math.abs(end.x-trackingSelectionStart.x);
+    const height=Math.abs(end.y-trackingSelectionStart.y);
+    trackingSelectionStart=null;
+    clearTrackingSelection();
+    if(width<6||height<6)return;
+    try{
+      await trackingApi("/api/tracking/bbox",{
+        x:x/canvas.width,y:y/canvas.height,width:width/canvas.width,height:height/canvas.height
+      });
+    }catch(error){setTrackingStatus(error.message||"Không chọn được mục tiêu.","error");}
+  }
+  function sendGimbalStep(axis,direction){
+    const delta=direction*GIMBAL_STEP_DEG;
+    if(sendJson({type:"gimbal_control",drone_id:selectedDroneId,axis,delta_deg:delta})){
+      setGimbalStatus(`${selectedDroneId}: đang ${delta>0?"tăng":"giảm"} ${axis} ${Math.abs(delta)}°...`);
+    }
+  }
+  function sendGimbalHome(){
+    if(sendJson({type:"gimbal_home",drone_id:selectedDroneId})){
+      setGimbalStatus(`${selectedDroneId}: đang đưa gimbal về home...`);
+    }
+  }
+  function sendManualFrame(droneId,enabled,axes={forward:0,right:0,up:0,yaw:0}){
+    if(!websocketReady())return false;
+    socket.send(JSON.stringify({type:"manual_control",drone_id:droneId,enabled,...axes})); return true;
+  }
+  function currentAxes(){
+    let forward=0,right=0,up=0,yaw=0;
+    if(pressedKeys.has("KeyW"))forward+=HORIZONTAL_VALUE;
+    if(pressedKeys.has("KeyS"))forward-=HORIZONTAL_VALUE;
+    if(pressedKeys.has("KeyD"))right+=HORIZONTAL_VALUE;
+    if(pressedKeys.has("KeyA"))right-=HORIZONTAL_VALUE;
+    if(pressedKeys.has("KeyR"))up+=VERTICAL_VALUE;
+    if(pressedKeys.has("KeyF"))up-=VERTICAL_VALUE;
+    if(pressedKeys.has("KeyE"))yaw+=YAW_VALUE;
+    if(pressedKeys.has("KeyQ"))yaw-=YAW_VALUE;
+    if(pressedKeys.has("Space"))forward=right=up=yaw=0;
+    return {forward,right,up,yaw};
+  }
+  function disableManual(droneId,sendNeutral=true){
+    manualEnabled[droneId]=false;
+    if(droneId===selectedDroneId)pressedKeys.clear();
+    if(sendNeutral)sendManualFrame(droneId,false);
+    updateManualUi();
+  }
+  function disableAllManual(sendNeutral=true){
+    for(const id of DRONE_IDS){manualEnabled[id]=false;if(sendNeutral)sendManualFrame(id,false);}
+    pressedKeys.clear(); updateManualUi();
+  }
+  function updateManualUi(){
+    const enabled=manualEnabled[selectedDroneId];
+    const isPosition=selectedModes[selectedDroneId]==="position";
+    const blockReason=manualControlBlockReason(selectedDrone());
+    const b=document.getElementById("manual-enable-button");
+    const s=document.getElementById("manual-status-value");
+    b.disabled=!isPosition;
+    b.textContent=enabled?"DISABLE KEYBOARD CONTROL":blockReason?"KEYBOARD NOT READY":"ENABLE KEYBOARD CONTROL";
+    b.title=blockReason||"";
+    b.classList.toggle("active",enabled);
+    s.textContent=enabled?"ACTIVE · 20 Hz":blockReason.toUpperCase()||"DISABLED";
+    s.classList.toggle("active",enabled);
+    document.querySelectorAll(".manual-key").forEach(k=>{
+      k.disabled=!enabled;
+      k.classList.toggle("pressed",enabled&&pressedKeys.has(k.dataset.code));
+    });
+  }
+  function updateModeUi(){
+    const mode=selectedModes[selectedDroneId];
+    const position=mode==="position";
+    const offboard=mode==="offboard_map";
+    const takeoff=mode==="takeoff";
+    const rtl=mode==="rtl";
+
+    document.getElementById("position-mode-button").classList.toggle("active",position);
+    document.getElementById("offboard-mode-button").classList.toggle("active",offboard);
+    document.getElementById("takeoff-mode-button").classList.toggle("active",takeoff);
+    document.getElementById("rtl-mode-button").classList.toggle("active",rtl);
+
+    document.getElementById("manual-control-section").style.display=position?"block":"none";
+    document.getElementById("offboard-control-section").style.display=offboard?"block":"none";
+    document.getElementById("takeoff-control-section").style.display=takeoff?"block":"none";
+
+    const sourceText={
+      position:"Web keyboard / ROS 2",
+      offboard_map:"ROS 2 map controller",
+      takeoff:"PX4 automatic takeoff",
+      rtl:"PX4 Return to Home"
+    };
+    document.getElementById("control-source").textContent=sourceText[mode]??"PX4";
+
+    const hintText={
+      position:"Position: bật keyboard rồi dùng W/A/S/D",
+      offboard_map:`${selectedDroneId}: click bản đồ để chọn điểm`,
+      takeoff:`${selectedDroneId}: chọn độ cao 2.5–10 m rồi nhấn START TAKEOFF`,
+      rtl:`${selectedDroneId}: đang Return to Home`
+    };
+    document.getElementById("map-hint").textContent=hintText[mode]??"PX4 control";
+
+    document.getElementById("takeoff-altitude").value=takeoffAltitudes[selectedDroneId];
+    updateManualUi();
+    updateTargetUi();
+  }
+
+  function markPendingMode(mode){
+    selectedModes[selectedDroneId]=mode;
+    pendingModes[selectedDroneId]={mode,startedAt:Date.now()};
+    updateModeUi();
+  }
+
+  function requestMode(mode){
+    if(mode!=="position")disableManual(selectedDroneId,true);
+
+    if(mode==="position"){
+      if(!sendAction("position"))return;
+      markPendingMode("position");
+      setCommandResult(`${selectedDroneId}: đang yêu cầu Position mode...`,"warning");
+      return;
+    }
+
+    if(mode==="offboard_map"){
+      if(!sendAction("offboard_map"))return;
+      markPendingMode("offboard_map");
+      setCommandResult(`${selectedDroneId}: đang yêu cầu Offboard mode...`,"warning");
+    }
+  }
+
+  function requestTakeoff(){
+    const armed=Boolean(getValue(selectedDrone()||{},["status.armed","armed"],false));
+    if(!armed){
+      setCommandResult(`${selectedDroneId}: hãy nhấn ARM và chờ Armed = YES trước khi Takeoff.`,"error");
+      return;
+    }
+
+    let altitude=Number(document.getElementById("takeoff-altitude").value);
+
+    if(!Number.isFinite(altitude)||altitude<2.5||altitude>10){
+      setCommandResult("Độ cao Takeoff phải từ 2.5 đến 10 m.","error");
+      return;
+    }
+
+    altitude=Math.round(altitude*2)/2;
+    takeoffAltitudes[selectedDroneId]=altitude;
+    document.getElementById("takeoff-altitude").value=altitude;
+
+    disableManual(selectedDroneId,true);
+
+    if(!sendAction("takeoff",{altitude_m:altitude}))return;
+
+    markPendingMode("takeoff");
+    setCommandResult(`${selectedDroneId}: đang cất cánh tới ${altitude.toFixed(1)} m...`,"warning");
+  }
+
+  function requestRtl(){
+    disableManual(selectedDroneId,true);
+
+    if(!window.confirm(`Return ${selectedDroneId} to Home?`))return;
+    if(!sendAction("rtl"))return;
+
+    markPendingMode("rtl");
+    setCommandResult(`${selectedDroneId}: đã gửi RETURN HOME. Sau khi hạ cánh, chuyển POSITION trước khi ARM lại.`,"warning");
+  }
+  function requestLand(){
+    disableManual(selectedDroneId,true);
+
+    if(!sendAction("land"))return;
+
+    pendingModes[selectedDroneId]=null;
+    selectedModes[selectedDroneId]="position";
+    updateModeUi();
+    setCommandResult(`${selectedDroneId}: đã gửi LAND. Chờ Armed = NO, sau đó dùng POSITION để phục hồi trước khi ARM lại.`,"warning");
+  }
+  function requestArm(){
+    const drone=selectedDrone();
+    if(!drone){
+      setCommandResult(`${selectedDroneId}: chưa có telemetry, chưa ARM được.`,"error");
+      return;
+    }
+
+    if(needsArmRecovery(drone)){
+      disableManual(selectedDroneId,true);
+
+      if(!sendAction("position"))return;
+
+      markPendingMode("position");
+      setCommandResult(
+        `${selectedDroneId}: chưa ARM. Đang yêu cầu POSITION để thoát RTL/LAND/OFFBOARD hoặc chờ Preflight OK, rồi bấm ARM lại.`,
+        "warning"
+      );
+      return;
+    }
+
+    sendAction("arm");
+  }
+  function toggleManual(){
+    if(selectedModes[selectedDroneId]!=="position")return;
+    if(manualEnabled[selectedDroneId]){
+      disableManual(selectedDroneId,true);
+      setCommandResult(`${selectedDroneId}: keyboard đã tắt.`);
+      return;
+    }
+
+    const blockReason=manualControlBlockReason(selectedDrone());
+    if(blockReason){
+      setCommandResult(`${selectedDroneId}: chưa bật keyboard được - ${blockReason}.`,"warning");
+      return;
+    }
+
+    pressedKeys.clear();
+    manualEnabled[selectedDroneId]=true;
+    sendManualFrame(selectedDroneId,true);
+    updateManualUi();
+    setCommandResult(`${selectedDroneId}: keyboard ACTIVE.`,"success");
+  }
+  function renderTelemetry(){
+    const d=selectedDrone();
+    document.getElementById("telemetry-title").textContent=selectedDroneId;
+    document.getElementById("active-drone-label").textContent=selectedDroneId;
+    if(!d){
+      document.getElementById("telemetry-content").innerHTML="Waiting for telemetry...";
+      document.getElementById("actual-mode").textContent="Unknown";
+      return;
+    }
+    const nav=droneNavState(d);
+    const armed=Boolean(getValue(d,["status.armed","armed"],false));
+    const preflightOk=dronePreflightPass(d);
+    const manualSignalOk=droneManualSignalOk(d);
+    const failsafe=Boolean(getValue(d,["status.failsafe","failsafe"],false));
+    const battery=getValue(d,["battery.remaining_percent","battery_percent"]);
+    const voltage=getValue(d,["battery.voltage_v","voltage_v"]);
+    const sats=getValue(d,["gps.satellites_used","satellites_used"]);
+    const x=getValue(d,["local_position.x_north_m","local_position.x","x"]);
+    const y=getValue(d,["local_position.y_east_m","local_position.y","y"]);
+    const z=getValue(d,["local_position.z_down_m","local_position.z","z"]);
+    const pos=dronePosition(d);
+    document.getElementById("actual-mode").textContent=navStateName(nav);
+
+    const actualMode=modeFromNavState(nav);
+    const pending=pendingModes[selectedDroneId];
+
+    if(pending){
+      if(actualMode===pending.mode){
+        selectedModes[selectedDroneId]=actualMode;
+        pendingModes[selectedDroneId]=null;
+      }else if(Date.now()-pending.startedAt>8000){
+        const expiredMode=pending.mode;
+        pendingModes[selectedDroneId]=null;
+        if(actualMode)selectedModes[selectedDroneId]=actualMode;
+        setCommandResult(
+          `${selectedDroneId}: PX4 không chuyển sang ${expiredMode} trong 8 giây. Kiểm tra command ACK.`,
+          "error"
+        );
+      }
+    }else if(
+      actualMode &&
+      selectedModes[selectedDroneId] !== "takeoff"
+    ){
+      selectedModes[selectedDroneId]=actualMode;
+    }
+
+    if(manualEnabled[selectedDroneId]&&manualControlBlockReason(d)){
+      disableManual(selectedDroneId,true);
+      setCommandResult(`${selectedDroneId}: keyboard đã tắt vì UAV không còn sẵn sàng nhận manual input.`,"warning");
+    }
+
+    document.getElementById("telemetry-content").innerHTML=`
+      <div class="telemetry-item"><div class="field-label">Mode</div><div class="field-value">${navStateName(nav)}</div></div>
+      <div class="telemetry-item"><div class="field-label">Armed</div><div class="field-value">${armed?"YES":"NO"}</div></div>
+      <div class="telemetry-item"><div class="field-label">Preflight</div><div class="field-value">${preflightOk?"OK":"NOT READY"}</div></div>
+      <div class="telemetry-item"><div class="field-label">Manual link</div><div class="field-value">${manualSignalOk?"OK":"LOST"}</div></div>
+      <div class="telemetry-item"><div class="field-label">Failsafe</div><div class="field-value">${failsafe?"ACTIVE":"NORMAL"}</div></div>
+      <div class="telemetry-item"><div class="field-label">Battery</div><div class="field-value">${formatNumber(battery,1)} %</div></div>
+      <div class="telemetry-item"><div class="field-label">Voltage</div><div class="field-value">${formatNumber(voltage,2)} V</div></div>
+      <div class="telemetry-item"><div class="field-label">GPS satellites</div><div class="field-value">${sats??"N/A"}</div></div>
+      <div class="telemetry-item"><div class="field-label">Local XYZ</div><div class="field-value">${formatNumber(x,1)}, ${formatNumber(y,1)}, ${formatNumber(z,1)}</div></div>
+      <div class="telemetry-item"><div class="field-label">Global position</div><div class="field-value">${pos?`${pos.latitude.toFixed(6)}, ${pos.longitude.toFixed(6)}`:"N/A"}</div></div>`;
+
+    updateModeUi();
+  }
+  function updateCounters(){
+    const entries=Object.entries(drones);
+    document.getElementById("total-uav").textContent=entries.length;
+    document.getElementById("online-uav").textContent=entries.filter(([,d])=>getValue(d,["online"],true)!==false).length;
+    for(const id of DRONE_IDS){
+      const d=drones[id];
+      document.getElementById(`dot-${id}`).classList.toggle("online",Boolean(d&&getValue(d,["online"],true)!==false));
+    }
+  }
+  function updateMap(){
+    for(const [id,d] of Object.entries(drones)){
+      const p=dronePosition(d); if(!p)continue;
+      const point=[p.latitude,p.longitude], color=id==="UAV-01"?"#38bdf8":"#f97316";
+      if(!droneMarkers[id]){
+        droneMarkers[id]=L.circleMarker(point,{radius:9,weight:3,color,fillColor:color,fillOpacity:.85}).addTo(map);
+        droneTrails[id]=L.polyline([],{color,weight:3}).addTo(map);
+        droneMarkers[id].on("click",()=>selectDrone(id));
+      }
+      droneMarkers[id].setLatLng(point).bindPopup(`<strong>${id}</strong><br>Mode: ${navStateName(droneNavState(d))}`);
+      const trail=droneTrails[id], pts=trail.getLatLngs();
+      if(!pts.length||map.distance(pts[pts.length-1],L.latLng(p.latitude,p.longitude))>.2)trail.addLatLng(point);
+      if(!firstMapPosition){map.setView(point,18);firstMapPosition=true;}
+    }
+  }
+  function updateTargetUi(){
+    const t=targets[selectedDroneId];
+    document.getElementById("target-altitude").value=targetAltitudes[selectedDroneId];
+    if(!t){
+      document.getElementById("target-latitude").textContent="Not selected";
+      document.getElementById("target-longitude").textContent="Not selected";
+      document.getElementById("target-distance").textContent="N/A";
+      document.getElementById("fly-button").disabled=true;
+      return;
+    }
+    document.getElementById("target-latitude").textContent=t.latitude.toFixed(7);
+    document.getElementById("target-longitude").textContent=t.longitude.toFixed(7);
+    const p=dronePosition(selectedDrone());
+    document.getElementById("target-distance").textContent=p?`${map.distance(L.latLng(p.latitude,p.longitude),L.latLng(t.latitude,t.longitude)).toFixed(1)} m`:"N/A";
+    document.getElementById("fly-button").disabled=selectedModes[selectedDroneId]!=="offboard_map";
+  }
+  function selectDrone(id){
+    if(!DRONE_IDS.includes(id))return;
+    if(id!==selectedDroneId)disableManual(selectedDroneId,true);
+    selectedDroneId=id;
+    document.querySelectorAll(".tab-button").forEach(b=>b.classList.toggle("active",b.dataset.droneId===id));
+    renderTelemetry(); updateModeUi(); updateGimbalUi(); updateTrackingUi();
+  }
+
+  document.querySelectorAll(".tab-button").forEach(b=>b.addEventListener("click",()=>selectDrone(b.dataset.droneId)));
+  document.getElementById("tracking-toggle-button").addEventListener("click",toggleTracking);
+  document.getElementById("tracking-distance-input").addEventListener("change",event=>{
+    const value=Math.max(1,Math.min(20,Number(event.target.value)||5));
+    trackingDistances[selectedDroneId]=value;
+    event.target.value=String(value);
+  });
+  document.getElementById("position-mode-button").addEventListener("click",()=>requestMode("position"));
+  document.getElementById("offboard-mode-button").addEventListener("click",()=>requestMode("offboard_map"));
+  document.getElementById("takeoff-mode-button").addEventListener("click",()=>{
+    disableManual(selectedDroneId,true);
+    selectedModes[selectedDroneId]="takeoff";
+    updateModeUi();
+  });
+  document.getElementById("rtl-mode-button").addEventListener("click",requestRtl);
+  document.getElementById("start-takeoff-button").addEventListener("click",requestTakeoff);
+  document.getElementById("manual-enable-button").addEventListener("click",toggleManual);
+  document.querySelectorAll(".gimbal-step-button").forEach(button=>{
+    button.addEventListener("click",()=>sendGimbalStep(button.dataset.axis,Number(button.dataset.direction)));
+  });
+  document.getElementById("gimbal-home-button").addEventListener("click",sendGimbalHome);
+  document.getElementById("tracking-feed").addEventListener("load",()=>{
+    if(trackingRetryTimer!==null){clearTimeout(trackingRetryTimer);trackingRetryTimer=null;}
+    trackingStreamStarted=true;
+    document.getElementById("tracking-overlay").style.display="none";
+    resizeTrackingCanvas();
+  });
+  document.getElementById("tracking-feed").addEventListener("error",()=>{
+    if(!trackingStatus?.active)return;
+    trackingStreamStarted=false;
+    const overlay=document.getElementById("tracking-overlay");
+    overlay.style.display="flex";
+    overlay.textContent=`Không mở được tracking ${trackingStatus.drone_id}.`;
+    scheduleTrackingReconnect();
+  });
+  const trackingCanvas=document.getElementById("tracking-selection");
+  trackingCanvas.addEventListener("pointerdown",event=>{
+    if(!trackingStatus?.active||!trackingStatus?.has_frame)return;
+    event.preventDefault();resizeTrackingCanvas();
+    trackingSelectionStart=trackingPointer(event);
+    trackingCanvas.setPointerCapture(event.pointerId);
+    drawTrackingSelection(trackingSelectionStart);
+  });
+  trackingCanvas.addEventListener("pointermove",event=>{
+    if(!trackingSelectionStart)return;
+    event.preventDefault();drawTrackingSelection(trackingPointer(event));
+  });
+  trackingCanvas.addEventListener("pointerup",event=>{
+    event.preventDefault();finishTrackingSelection(event);
+  });
+  trackingCanvas.addEventListener("pointercancel",()=>{
+    trackingSelectionStart=null;clearTrackingSelection();
+  });
+  if(window.ResizeObserver)new ResizeObserver(resizeTrackingCanvas).observe(document.querySelector(".tracking-shell"));
+
+  document.addEventListener("keydown",e=>{
+    if(!manualCodes.has(e.code))return;
+    if(["INPUT","TEXTAREA","SELECT"].includes(document.activeElement?.tagName))return;
+    if(!manualEnabled[selectedDroneId])return;
+    e.preventDefault(); pressedKeys.add(e.code); updateManualUi();
+  });
+  document.addEventListener("keyup",e=>{
+    if(!manualCodes.has(e.code))return;
+    pressedKeys.delete(e.code); updateManualUi();
+  });
+  document.querySelectorAll(".manual-key").forEach(b=>{
+    const code=b.dataset.code;
+    const press=e=>{e.preventDefault();if(!manualEnabled[selectedDroneId])return;pressedKeys.add(code);updateManualUi();};
+    const release=e=>{e.preventDefault();pressedKeys.delete(code);updateManualUi();};
+    b.addEventListener("pointerdown",press);
+    b.addEventListener("pointerup",release);
+    b.addEventListener("pointercancel",release);
+    b.addEventListener("pointerleave",release);
+  });
+
+  setInterval(()=>{
+    const id=selectedDroneId;
+    if(selectedModes[id]!=="position"||!manualEnabled[id])return;
+    sendManualFrame(id,true,currentAxes());
+  },MANUAL_SEND_PERIOD_MS);
+
+  window.addEventListener("blur",()=>disableManual(selectedDroneId,true));
+  document.addEventListener("visibilitychange",()=>{if(document.hidden)disableManual(selectedDroneId,true);});
+
+  map.on("click",e=>{
+    if(selectedModes[selectedDroneId]!=="offboard_map"){
+      setCommandResult("Chuyển sang OFFBOARD MAP trước khi chọn điểm.","warning"); return;
+    }
+    targets[selectedDroneId]={latitude:e.latlng.lat,longitude:e.latlng.lng};
+    if(targetMarkers[selectedDroneId])targetMarkers[selectedDroneId].setLatLng(e.latlng);
+    else targetMarkers[selectedDroneId]=L.circleMarker(e.latlng,{radius:8,weight:3,color:"#fde047",fillColor:"#fde047",fillOpacity:.75}).addTo(map);
+    updateTargetUi();
+    setCommandResult(`${selectedDroneId}: đã chọn điểm, nhấn FLY TO POINT.`,"warning");
+  });
+
+  document.getElementById("target-altitude").addEventListener("change",e=>{
+    let a=Number(e.target.value); if(!Number.isFinite(a))a=5; a=Math.max(1,Math.min(30,a));
+    targetAltitudes[selectedDroneId]=a; e.target.value=a;
+  });
+  document.getElementById("takeoff-altitude").addEventListener("change",e=>{
+    let a=Number(e.target.value);
+    if(!Number.isFinite(a))a=5;
+    a=Math.max(2.5,Math.min(10,a));
+    a=Math.round(a*2)/2;
+    takeoffAltitudes[selectedDroneId]=a;
+    e.target.value=a;
+  });
+  document.getElementById("fly-button").addEventListener("click",()=>{
+    const t=targets[selectedDroneId]; if(!t)return;
+    if(sendJson({type:"goto_global",drone_id:selectedDroneId,latitude_deg:t.latitude,longitude_deg:t.longitude,altitude_m:targetAltitudes[selectedDroneId]}))
+      setCommandResult(`${selectedDroneId}: đã gửi điểm đích.`,"warning");
+  });
+  document.getElementById("cancel-target-button").addEventListener("click",()=>{
+    targets[selectedDroneId]=null;
+    if(targetMarkers[selectedDroneId]){map.removeLayer(targetMarkers[selectedDroneId]);delete targetMarkers[selectedDroneId];}
+    updateTargetUi();
+  });
+  document.getElementById("hold-current-button").addEventListener("click",()=>sendAction("hold_current"));
+  document.getElementById("arm-button").addEventListener("click",requestArm);
+  document.getElementById("hold-button").addEventListener("click",()=>sendAction("hold"));
+  document.getElementById("land-button").addEventListener("click",requestLand);
+  document.getElementById("disarm-button").addEventListener("click",()=>sendAction("disarm"));
+
+  function processControlResults(results){
+    if(!results||typeof results!=="object")return;
+
+    for(const [droneId,result] of Object.entries(results)){
+      if(!DRONE_IDS.includes(droneId)||!result)continue;
+
+      const timestamp=Number(result.timestamp_ms||result.dashboard_received_ms||0);
+      if(timestamp<=lastControlResultTimestamp[droneId])continue;
+      lastControlResultTimestamp[droneId]=timestamp;
+
+      if(result.type==="local_error"){
+        if(droneId===selectedDroneId){
+          pendingModes[droneId]=null;
+          setCommandResult(`${droneId}: ${result.error||"Lỗi điều khiển"}`,"error");
+        }
+        continue;
+      }
+
+      if(result.type==="command_ack"){
+        const command=Number(result.command);
+        const accepted=[0,5].includes(Number(result.result));
+        const commandName={
+          20:"RETURN HOME",
+          21:"LAND",
+          22:"TAKEOFF",
+          176:"SET MODE",
+          400:"ARM/DISARM"
+        }[command]||`COMMAND ${command}`;
+
+        if(droneId===selectedDroneId){
+          if(accepted){
+            setCommandResult(`${droneId}: ${commandName} ${result.result_text||"ACCEPTED"}.`,"success");
+          }else{
+            pendingModes[droneId]=null;
+            const actual=modeFromNavState(droneNavState(drones[droneId]));
+            if(actual)selectedModes[droneId]=actual;
+            updateModeUi();
+            setCommandResult(`${droneId}: ${commandName} bị PX4 từ chối — ${result.result_text||result.result}.`,"error");
+          }
+        }
+      }
+    }
+  }
+
+  function connectWebSocket(){
+    const protocol=window.location.protocol==="https:"?"wss":"ws";
+    socket=new WebSocket(`${protocol}://${window.location.host}/ws`);
+    socket.onopen=()=>{
+      const e=document.getElementById("connection-status");
+      e.textContent="WebSocket connected";e.classList.add("connected");
+    };
+    socket.onmessage=event=>{
+      try{
+        const m=JSON.parse(event.data);
+        if(m.type==="telemetry_snapshot"){
+          drones=m.drones||{};
+          gazeboStatus=m.gazebo||null;
+          trackingStatus=m.tracking||null;
+          mergeGimbalAngles(m.gimbal_angles_deg||{});
+          processControlResults(m.control_results||{});
+          updateCounters();renderTelemetry();updateMap();updateTargetUi();updateGimbalUi();updateTrackingUi();
+        }
+        if(m.type==="gimbal_control_result"){
+          if(m.angles_deg)mergeGimbalAngles({[m.drone_id]:m.angles_deg});
+          if(m.drone_id===selectedDroneId){
+            updateGimbalUi();
+            if(m.ok){
+              const label=m.axis==="home"?"HOME":String(m.axis||"").toUpperCase();
+              setGimbalStatus(`${m.drone_id}: ${label} đã cập nhật trên Gazebo.`,"success");
+            }else setGimbalStatus(m.error||"Không gửi được lệnh gimbal.","error");
+          }
+        }
+        if(m.type==="control_publish_result"){
+          if(m.ok){
+            if(m.action!=="manual_control")setCommandResult(`${m.drone_id}: ${m.action} đã chuyển tới ROS backend.`,"warning");
+          }else setCommandResult(m.error||"Không gửi được lệnh.","error");
+        }
+      }catch(error){console.error(error);}
+    };
+    socket.onclose=()=>{
+      disableAllManual(false);
+      const e=document.getElementById("connection-status");
+      e.textContent="WebSocket disconnected";e.classList.remove("connected");
+      updateGimbalUi();
+      updateTrackingUi();
+      setTimeout(connectWebSocket,2000);
+    };
+    socket.onerror=()=>socket.close();
+  }
+
+  updateModeUi();renderTelemetry();updateGimbalUi();updateTrackingUi();connectWebSocket();
+</script>
+</body>
+</html>

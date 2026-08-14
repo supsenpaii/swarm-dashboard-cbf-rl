@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Swarm UAV Control</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <style>
+    :root {
+      --bg:#0f172a; --header:#111827; --panel:#1e293b; --panel2:#172033;
+      --border:#334155; --text:#e2e8f0; --muted:#94a3b8; --blue:#2563eb;
+      --green:#15803d; --red:#b91c1c; --orange:#c2410c; --yellow:#a16207;
+    }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--bg); color:var(--text); font-family:Arial,sans-serif; }
+    button,input { font:inherit; }
+    header {
+      height:64px; display:flex; align-items:center; justify-content:space-between;
+      padding:0 22px; background:var(--header); border-bottom:1px solid var(--border);
+    }
+    header h1 { margin:0; font-size:20px; }
+    .subtitle { margin-top:4px; color:var(--muted); font-size:11px; }
+    #connection-status {
+      padding:8px 13px; border-radius:18px; background:#7f1d1d; font-size:12px;
+    }
+    #connection-status.connected { background:#166534; }
+
+    main { height:calc(100vh - 64px); display:grid; grid-template-columns:430px 1fr; }
+    #sidebar { overflow-y:auto; padding:14px; border-right:1px solid var(--border); }
+    #map-shell { position:relative; min-width:0; }
+    #map { width:100%; height:100%; }
+    #map-hint {
+      position:absolute; z-index:700; top:14px; left:50%; transform:translateX(-50%);
+      max-width:calc(100% - 100px); padding:9px 15px; border-radius:18px;
+      border:1px solid rgba(255,255,255,.2); background:rgba(15,23,42,.92);
+      color:white; font-size:12px; text-align:center; pointer-events:none;
+    }
+
+    .summary,.tabs,.mode-grid,.action-grid,.target-buttons {
+      display:grid; gap:9px;
+    }
+    .summary,.tabs,.mode-grid { grid-template-columns:1fr 1fr; }
+    .summary,.tabs { margin-bottom:12px; }
+    .summary-box,.panel {
+      border:1px solid var(--border); border-radius:11px; background:var(--panel);
+    }
+    .summary-box { padding:12px; }
+    .summary-label,.field-label,.section-title { color:var(--muted); font-size:11px; }
+    .summary-value { margin-top:4px; font-size:21px; font-weight:bold; }
+
+    .tab-button {
+      min-height:44px; border:1px solid var(--border); border-radius:9px;
+      background:var(--panel); color:var(--muted); font-weight:bold; cursor:pointer;
+    }
+    .tab-button.active { border-color:#60a5fa; background:var(--blue); color:white; }
+    .online-dot {
+      display:inline-block; width:8px; height:8px; margin-left:7px;
+      border-radius:50%; background:#ef4444;
+    }
+    .online-dot.online { background:#22c55e; box-shadow:0 0 6px #22c55e; }
+
+    .panel { padding:14px; margin-bottom:12px; }
+    .panel-title { margin-bottom:12px; font-size:17px; font-weight:bold; }
+    .panel-subtitle { margin-top:-7px; margin-bottom:12px; color:var(--muted); font-size:11px; }
+    .telemetry-grid { display:grid; grid-template-columns:1fr 1fr; gap:7px 12px; }
+    .telemetry-item { min-width:0; padding:6px 0; border-bottom:1px solid var(--border); }
+    .field-value { margin-top:3px; font-size:13px; font-weight:bold; overflow-wrap:anywhere; }
+
+    .mode-button,.action-button,.manual-enable-button,.manual-key {
+      border:0; border-radius:8px; color:white; font-weight:bold; cursor:pointer;
+    }
+    .mode-button {
+      min-height:44px; border:1px solid #475569; background:#334155;
+    }
+    .mode-button.active { border-color:#60a5fa; background:var(--blue); }
+    .mode-information,.target-information,.command-result,.manual-status {
+      margin-top:10px; padding:10px; border:1px solid var(--border);
+      border-radius:8px; background:var(--panel2); font-size:12px;
+    }
+    .mode-information,.target-information { display:grid; gap:7px; }
+    .information-row { display:flex; justify-content:space-between; gap:10px; }
+    .information-row span { color:var(--muted); }
+    .information-row strong { text-align:right; }
+
+    .section { padding-top:13px; margin-top:13px; border-top:1px solid var(--border); }
+    .section-title { margin-bottom:10px; font-weight:bold; letter-spacing:.06em; text-transform:uppercase; }
+
+    #manual-control-section { display:block; }
+    #offboard-control-section { display:none; }
+    #takeoff-control-section { display:none; }
+
+    .manual-status {
+      display:flex; justify-content:space-between; gap:10px; margin-bottom:9px;
+    }
+    .manual-status span { color:var(--muted); }
+    #manual-status-value { color:#fecaca; }
+    #manual-status-value.active { color:#bbf7d0; }
+
+    .manual-enable-button {
+      width:100%; min-height:43px; margin-bottom:11px;
+      border:1px solid #60a5fa; background:#334155;
+    }
+    .manual-enable-button.active { border-color:#22c55e; background:var(--green); }
+
+    .manual-keyboard-grid {
+      display:grid; grid-template-columns:repeat(5,1fr); grid-template-rows:repeat(3,48px);
+      gap:7px;
+    }
+    .manual-key {
+      border:1px solid #475569; background:#334155; user-select:none; touch-action:none;
+    }
+    .manual-key:disabled { opacity:.4; cursor:not-allowed; }
+    .manual-key.pressed { border-color:#93c5fd; background:var(--blue); transform:translateY(2px); }
+    .manual-key[data-code="KeyW"] { grid-column:3; grid-row:1; }
+    .manual-key[data-code="KeyQ"] { grid-column:1; grid-row:2; }
+    .manual-key[data-code="KeyA"] { grid-column:2; grid-row:2; }
+    .manual-key[data-code="KeyS"] { grid-column:3; grid-row:2; }
+    .manual-key[data-code="KeyD"] { grid-column:4; grid-row:2; }
+    .manual-key[data-code="KeyE"] { grid-column:5; grid-row:2; }
+    .manual-key[data-code="KeyR"] { grid-column:1 / 3; grid-row:3; }
+    .manual-key[data-code="Space"] { grid-column:3; grid-row:3; }
+    .manual-key[data-code="KeyF"] { grid-column:4 / 6; grid-row:3; }
+    .manual-help { margin-top:10px; color:var(--muted); font-size:11px; line-height:1.6; }
+
+    .altitude-row { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+    #target-altitude {
+      width:85px; padding:8px; border:1px solid #475569; border-radius:7px;
+      outline:none; background:var(--bg); color:white;
+    }
+    .target-buttons { grid-template-columns:1.3fr .7fr; margin-top:9px; }
+    .action-grid { grid-template-columns:repeat(3,1fr); }
+    .action-button { min-height:40px; padding:7px; font-size:12px; }
+    .action-button:disabled { opacity:.4; cursor:not-allowed; }
+
+    .green{background:var(--green)} .gray{background:#475569}
+    .orange{background:var(--orange)} .yellow{background:var(--yellow)} .red{background:var(--red)}
+    .command-result { min-height:38px; color:var(--muted); }
+    .command-result.success { border-color:#15803d; color:#bbf7d0; }
+    .command-result.warning { border-color:#a16207; color:#fde68a; }
+    .command-result.error { border-color:#b91c1c; color:#fecaca; }
+
+    @media (max-width:950px) {
+      main { grid-template-columns:1fr; grid-template-rows:52% 48%; }
+      #map-shell { order:1; }
+      #sidebar { order:2; border-top:1px solid var(--border); border-right:0; }
+    }
+  </style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Swarm UAV Control</h1>
+    <div class="subtitle">Position Keyboard + Offboard Map</div>
+  </div>
+  <div id="connection-status">WebSocket disconnected</div>
+</header>
+
+<main>
+  <aside id="sidebar">
+    <div class="summary">
+      <div class="summary-box"><div class="summary-label">Total UAV</div><div id="total-uav" class="summary-value">0</div></div>
+      <div class="summary-box"><div class="summary-label">Online</div><div id="online-uav" class="summary-value">0</div></div>
+    </div>
+
+    <div class="tabs">
+      <button type="button" class="tab-button active" data-drone-id="UAV-01">UAV-01 <span id="dot-UAV-01" class="online-dot"></span></button>
+      <button type="button" class="tab-button" data-drone-id="UAV-02">UAV-02 <span id="dot-UAV-02" class="online-dot"></span></button>
+    </div>
+
+    <div class="panel">
+      <div id="telemetry-title" class="panel-title">UAV-01</div>
+      <div id="telemetry-content" class="telemetry-grid">Waiting for telemetry...</div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Flight Controller</div>
+      <div class="panel-subtitle">Active vehicle: <strong id="active-drone-label">UAV-01</strong></div>
+
+      <div class="mode-grid">
+        <button id="position-mode-button" type="button" class="mode-button active">POSITION</button>
+        <button id="offboard-mode-button" type="button" class="mode-button">OFFBOARD MAP</button>
+        <button id="takeoff-mode-button" type="button" class="mode-button">TAKE OFF</button>
+        <button id="rtl-mode-button" type="button" class="mode-button">RETURN HOME</button>
+      </div>
+
+      <div class="mode-information">
+        <div class="information-row"><span>Actual PX4 mode</span><strong id="actual-mode">Unknown</strong></div>
+        <div class="information-row"><span>Control source</span><strong id="control-source">Web keyboard</strong></div>
+      </div>
+
+      <div id="manual-control-section" class="section">
+        <div class="section-title">Position Keyboard Control</div>
+        <div class="manual-status"><span>Manual output</span><strong id="manual-status-value">DISABLED</strong></div>
+        <button id="manual-enable-button" type="button" class="manual-enable-button">ENABLE KEYBOARD CONTROL</button>
+
+        <div class="manual-keyboard-grid">
+          <button type="button" class="manual-key" data-code="KeyW">W</button>
+          <button type="button" class="manual-key" data-code="KeyQ">Q</button>
+          <button type="button" class="manual-key" data-code="KeyA">A</button>
+          <button type="button" class="manual-key" data-code="KeyS">S</button>
+          <button type="button" class="manual-key" data-code="KeyD">D</button>
+          <button type="button" class="manual-key" data-code="KeyE">E</button>
+          <button type="button" class="manual-key" data-code="KeyR">R · UP</button>
+          <button type="button" class="manual-key" data-code="Space">STOP</button>
+          <button type="button" class="manual-key" data-code="KeyF">F · DOWN</button>
+        </div>
+        <div class="manual-help">W/S: tiến/lùi · A/D: trái/phải<br>Q/E: quay · R/F: lên/xuống · Space: dừng</div>
+      </div>
+
+      <div id="offboard-control-section" class="section">
+        <div class="section-title">Offboard Map Target</div>
+        <div class="altitude-row">
+          <label for="target-altitude">Altitude above Home</label>
+          <div><input id="target-altitude" type="number" min="1" max="30" step="0.5" value="5"> m</div>
+        </div>
+        <div class="target-information">
+          <div class="information-row"><span>Latitude</span><strong id="target-latitude">Not selected</strong></div>
+          <div class="information-row"><span>Longitude</span><strong id="target-longitude">Not selected</strong></div>
+          <div class="information-row"><span>Distance</span><strong id="target-distance">N/A</strong></div>
+        </div>
+        <div class="target-buttons">
+          <button id="fly-button" type="button" class="action-button green" disabled>FLY TO POINT</button>
+          <button id="cancel-target-button" type="button" class="action-button gray">CANCEL</button>
+        </div>
+        <button id="hold-current-button" type="button" class="action-button gray" style="width:100%;margin-top:8px;">HOLD CURRENT POSITION</button>
+      </div>
+
+      <div id="takeoff-control-section" class="section">
+        <div class="section-title">Takeoff Control</div>
+
+        <div class="altitude-row">
+          <label for="takeoff-altitude">Takeoff altitude above Home</label>
+          <div>
+            <input
+              id="takeoff-altitude"
+              type="number"
+              min="2.5"
+              max="10"
+              step="0.5"
+              value="5"
+            >
+            m
+          </div>
+        </div>
+
+        <div class="target-information">
+          <div class="information-row">
+            <span>Allowed range</span>
+            <strong>2.5 – 10.0 m</strong>
+          </div>
+          <div class="information-row">
+            <span>Command</span>
+            <strong>PX4 NAV_TAKEOFF</strong>
+          </div>
+        </div>
+
+        <button
+          id="start-takeoff-button"
+          type="button"
+          class="action-button green"
+          style="width:100%; margin-top:9px;"
+        >
+          START TAKEOFF
+        </button>
+      </div>
+
+      <div class="section">
+        <div class="section-title">Flight Actions</div>
+        <div class="action-grid">
+          <button id="arm-button" type="button" class="action-button green">ARM</button>
+          <button id="hold-button" type="button" class="action-button gray">HOLD</button>
+          <button id="land-button" type="button" class="action-button orange">LAND</button>
+          <button id="disarm-button" type="button" class="action-button red">DISARM</button>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">Command Result</div>
+        <div id="command-result" class="command-result">Chưa có lệnh điều khiển.</div>
+      </div>
+    </div>
+  </aside>
+
+  <section id="map-shell">
+    <div id="map"></div>
+    <div id="map-hint">Position: bật keyboard rồi dùng W/A/S/D</div>
+  </section>
+</main>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+  const DRONE_IDS=["UAV-01","UAV-02"];
+  const NAV_STATE_NAMES={0:"Manual",1:"Altitude",2:"Position",3:"Mission",4:"Hold",5:"RTL",14:"Offboard",17:"Takeoff",18:"Land"};
+  const selectedModes={"UAV-01":"position","UAV-02":"position"};
+  const manualEnabled={"UAV-01":false,"UAV-02":false};
+  const targets={"UAV-01":null,"UAV-02":null};
+  const targetAltitudes={"UAV-01":5,"UAV-02":5};
+  const takeoffAltitudes={"UAV-01":5,"UAV-02":5};
+  const pendingModes={"UAV-01":null,"UAV-02":null};
+  const pressedKeys=new Set();
+  const manualCodes=new Set(["KeyW","KeyS","KeyA","KeyD","KeyQ","KeyE","KeyR","KeyF","Space"]);
+  const MANUAL_SEND_PERIOD_MS=50;
+  const HORIZONTAL_VALUE=.45, VERTICAL_VALUE=.50, YAW_VALUE=.35;
+
+  let selectedDroneId="UAV-01", socket=null, drones={}, firstMapPosition=false;
+  const droneMarkers={}, droneTrails={}, targetMarkers={};
+
+  const map=L.map("map").setView([47.3979712,8.5461637],18);
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:20,attribution:"© OpenStreetMap contributors"}).addTo(map);
+
+  function getValue(object,paths,fallback=null){
+    for(const path of paths){
+      let value=object;
+      for(const key of path.split(".")) value=value?.[key];
+      if(value!==undefined&&value!==null) return value;
+    }
+    return fallback;
+  }
+  function formatNumber(value,digits=2){const n=Number(value);return Number.isFinite(n)?n.toFixed(digits):"N/A";}
+  function navStateName(value){const n=Number(value);return Number.isFinite(n)?(NAV_STATE_NAMES[n]??`State ${n}`):"Unknown";}
+  function modeFromNavState(value){
+    const n=Number(value);
+    if(n===2)return "position";
+    if(n===14)return "offboard_map";
+    if(n===17)return "takeoff";
+    if(n===5)return "rtl";
+    return null;
+  }
+  function selectedDrone(){return drones[selectedDroneId]||null;}
+  function droneNavState(drone){return getValue(drone||{},["status.nav_state","nav_state"],null);}
+  function dronePosition(drone){
+    const latitude=Number(getValue(drone||{},["global_position.latitude_deg","latitude_deg","lat"]));
+    const longitude=Number(getValue(drone||{},["global_position.longitude_deg","longitude_deg","lon"]));
+    return Number.isFinite(latitude)&&Number.isFinite(longitude)?{latitude,longitude}:null;
+  }
+  function websocketReady(){return socket&&socket.readyState===WebSocket.OPEN;}
+  function setCommandResult(text,type=""){
+    const e=document.getElementById("command-result");
+    e.textContent=text; e.className="command-result"; if(type)e.classList.add(type);
+  }
+  function sendJson(message){
+    if(!websocketReady()){setCommandResult("WebSocket chưa kết nối.","error");return false;}
+    socket.send(JSON.stringify(message)); return true;
+  }
+  function sendAction(action,extra={}){return sendJson({type:"control_action",drone_id:selectedDroneId,action,...extra});}
+  function sendManualFrame(droneId,enabled,axes={forward:0,right:0,up:0,yaw:0}){
+    if(!websocketReady())return false;
+    socket.send(JSON.stringify({type:"manual_control",drone_id:droneId,enabled,...axes})); return true;
+  }
+  function currentAxes(){
+    let forward=0,right=0,up=0,yaw=0;
+    if(pressedKeys.has("KeyW"))forward+=HORIZONTAL_VALUE;
+    if(pressedKeys.has("KeyS"))forward-=HORIZONTAL_VALUE;
+    if(pressedKeys.has("KeyD"))right+=HORIZONTAL_VALUE;
+    if(pressedKeys.has("KeyA"))right-=HORIZONTAL_VALUE;
+    if(pressedKeys.has("KeyR"))up+=VERTICAL_VALUE;
+    if(pressedKeys.has("KeyF"))up-=VERTICAL_VALUE;
+    if(pressedKeys.has("KeyE"))yaw+=YAW_VALUE;
+    if(pressedKeys.has("KeyQ"))yaw-=YAW_VALUE;
+    if(pressedKeys.has("Space"))forward=right=up=yaw=0;
+    return {forward,right,up,yaw};
+  }
+  function disableManual(droneId,sendNeutral=true){
+    manualEnabled[droneId]=false;
+    if(droneId===selectedDroneId)pressedKeys.clear();
+    if(sendNeutral)sendManualFrame(droneId,false);
+    updateManualUi();
+  }
+  function disableAllManual(sendNeutral=true){
+    for(const id of DRONE_IDS){manualEnabled[id]=false;if(sendNeutral)sendManualFrame(id,false);}
+    pressedKeys.clear(); updateManualUi();
+  }
+  function updateManualUi(){
+    const enabled=manualEnabled[selectedDroneId];
+    const isPosition=selectedModes[selectedDroneId]==="position";
+    const b=document.getElementById("manual-enable-button");
+    const s=document.getElementById("manual-status-value");
+    b.disabled=!isPosition;
+    b.textContent=enabled?"DISABLE KEYBOARD CONTROL":"ENABLE KEYBOARD CONTROL";
+    b.classList.toggle("active",enabled);
+    s.textContent=enabled?"ACTIVE · 20 Hz":"DISABLED";
+    s.classList.toggle("active",enabled);
+    document.querySelectorAll(".manual-key").forEach(k=>{
+      k.disabled=!enabled;
+      k.classList.toggle("pressed",enabled&&pressedKeys.has(k.dataset.code));
+    });
+  }
+  function updateModeUi(){
+    const mode=selectedModes[selectedDroneId];
+    const position=mode==="position";
+    const offboard=mode==="offboard_map";
+    const takeoff=mode==="takeoff";
+    const rtl=mode==="rtl";
+
+    document.getElementById("position-mode-button").classList.toggle("active",position);
+    document.getElementById("offboard-mode-button").classList.toggle("active",offboard);
+    document.getElementById("takeoff-mode-button").classList.toggle("active",takeoff);
+    document.getElementById("rtl-mode-button").classList.toggle("active",rtl);
+
+    document.getElementById("manual-control-section").style.display=position?"block":"none";
+    document.getElementById("offboard-control-section").style.display=offboard?"block":"none";
+    document.getElementById("takeoff-control-section").style.display=takeoff?"block":"none";
+
+    const sourceText={
+      position:"Web keyboard / MAVLink",
+      offboard_map:"ROS 2 map controller",
+      takeoff:"PX4 automatic takeoff",
+      rtl:"PX4 Return to Home"
+    };
+    document.getElementById("control-source").textContent=sourceText[mode]??"PX4";
+
+    const hintText={
+      position:"Position: bật keyboard rồi dùng W/A/S/D",
+      offboard_map:`${selectedDroneId}: click bản đồ để chọn điểm`,
+      takeoff:`${selectedDroneId}: chọn độ cao 2.5–10 m rồi nhấn START TAKEOFF`,
+      rtl:`${selectedDroneId}: đang Return to Home`
+    };
+    document.getElementById("map-hint").textContent=hintText[mode]??"PX4 control";
+
+    document.getElementById("takeoff-altitude").value=takeoffAltitudes[selectedDroneId];
+    updateManualUi();
+    updateTargetUi();
+  }
+
+  function markPendingMode(mode){
+    selectedModes[selectedDroneId]=mode;
+    pendingModes[selectedDroneId]={mode,startedAt:Date.now()};
+    updateModeUi();
+  }
+
+  function requestMode(mode){
+    if(mode!=="position")disableManual(selectedDroneId,true);
+
+    if(mode==="position"){
+      if(!sendAction("position"))return;
+      markPendingMode("position");
+      setCommandResult(`${selectedDroneId}: đang yêu cầu Position mode...`,"warning");
+      return;
+    }
+
+    if(mode==="offboard_map"){
+      if(!sendAction("offboard_map"))return;
+      markPendingMode("offboard_map");
+      setCommandResult(`${selectedDroneId}: đang yêu cầu Offboard mode...`,"warning");
+    }
+  }
+
+  function requestTakeoff(){
+    let altitude=Number(document.getElementById("takeoff-altitude").value);
+
+    if(!Number.isFinite(altitude)||altitude<2.5||altitude>10){
+      setCommandResult("Độ cao Takeoff phải từ 2.5 đến 10 m.","error");
+      return;
+    }
+
+    altitude=Math.round(altitude*2)/2;
+    takeoffAltitudes[selectedDroneId]=altitude;
+    document.getElementById("takeoff-altitude").value=altitude;
+
+    disableManual(selectedDroneId,true);
+
+    if(!sendAction("takeoff",{altitude_m:altitude}))return;
+
+    markPendingMode("takeoff");
+    setCommandResult(`${selectedDroneId}: đang cất cánh tới ${altitude.toFixed(1)} m...`,"warning");
+  }
+
+  function requestRtl(){
+    disableManual(selectedDroneId,true);
+
+    if(!window.confirm(`Return ${selectedDroneId} to Home?`))return;
+    if(!sendAction("rtl"))return;
+
+    markPendingMode("rtl");
+    setCommandResult(`${selectedDroneId}: đã gửi RETURN HOME.`,"warning");
+  }
+  function toggleManual(){
+    if(selectedModes[selectedDroneId]!=="position")return;
+    if(manualEnabled[selectedDroneId]){
+      disableManual(selectedDroneId,true);
+      setCommandResult(`${selectedDroneId}: keyboard đã tắt.`);
+      return;
+    }
+    const nav=Number(droneNavState(selectedDrone()));
+    if(Number.isFinite(nav)&&nav!==2){
+      setCommandResult(`${selectedDroneId} chưa ở Position mode.`,"warning");
+      return;
+    }
+    pressedKeys.clear();
+    manualEnabled[selectedDroneId]=true;
+    sendManualFrame(selectedDroneId,true);
+    updateManualUi();
+    setCommandResult(`${selectedDroneId}: keyboard ACTIVE.`,"success");
+  }
+  function renderTelemetry(){
+    const d=selectedDrone();
+    document.getElementById("telemetry-title").textContent=selectedDroneId;
+    document.getElementById("active-drone-label").textContent=selectedDroneId;
+    if(!d){
+      document.getElementById("telemetry-content").innerHTML="Waiting for telemetry...";
+      document.getElementById("actual-mode").textContent="Unknown";
+      return;
+    }
+    const nav=droneNavState(d);
+    const armed=Boolean(getValue(d,["status.armed","armed"],false));
+    const failsafe=Boolean(getValue(d,["status.failsafe","failsafe"],false));
+    const battery=getValue(d,["battery.remaining_percent","battery_percent"]);
+    const voltage=getValue(d,["battery.voltage_v","voltage_v"]);
+    const sats=getValue(d,["gps.satellites_used","satellites_used"]);
+    const x=getValue(d,["local_position.x_north_m","local_position.x","x"]);
+    const y=getValue(d,["local_position.y_east_m","local_position.y","y"]);
+    const z=getValue(d,["local_position.z_down_m","local_position.z","z"]);
+    const pos=dronePosition(d);
+    document.getElementById("actual-mode").textContent=navStateName(nav);
+
+    const actualMode=modeFromNavState(nav);
+    const pending=pendingModes[selectedDroneId];
+
+    if(pending){
+      if(actualMode===pending.mode){
+        selectedModes[selectedDroneId]=actualMode;
+        pendingModes[selectedDroneId]=null;
+      }else if(Date.now()-pending.startedAt>8000){
+        pendingModes[selectedDroneId]=null;
+        if(actualMode)selectedModes[selectedDroneId]=actualMode;
+      }
+    }else if(
+      actualMode &&
+      selectedModes[selectedDroneId] !== "takeoff"
+    ){
+      selectedModes[selectedDroneId]=actualMode;
+    }
+
+    document.getElementById("telemetry-content").innerHTML=`
+      <div class="telemetry-item"><div class="field-label">Mode</div><div class="field-value">${navStateName(nav)}</div></div>
+      <div class="telemetry-item"><div class="field-label">Armed</div><div class="field-value">${armed?"YES":"NO"}</div></div>
+      <div class="telemetry-item"><div class="field-label">Failsafe</div><div class="field-value">${failsafe?"ACTIVE":"NORMAL"}</div></div>
+      <div class="telemetry-item"><div class="field-label">Battery</div><div class="field-value">${formatNumber(battery,1)} %</div></div>
+      <div class="telemetry-item"><div class="field-label">Voltage</div><div class="field-value">${formatNumber(voltage,2)} V</div></div>
+      <div class="telemetry-item"><div class="field-label">GPS satellites</div><div class="field-value">${sats??"N/A"}</div></div>
+      <div class="telemetry-item"><div class="field-label">Local XYZ</div><div class="field-value">${formatNumber(x,1)}, ${formatNumber(y,1)}, ${formatNumber(z,1)}</div></div>
+      <div class="telemetry-item"><div class="field-label">Global position</div><div class="field-value">${pos?`${pos.latitude.toFixed(6)}, ${pos.longitude.toFixed(6)}`:"N/A"}</div></div>`;
+
+    updateModeUi();
+  }
+  function updateCounters(){
+    const entries=Object.entries(drones);
+    document.getElementById("total-uav").textContent=entries.length;
+    document.getElementById("online-uav").textContent=entries.filter(([,d])=>getValue(d,["online"],true)!==false).length;
+    for(const id of DRONE_IDS){
+      const d=drones[id];
+      document.getElementById(`dot-${id}`).classList.toggle("online",Boolean(d&&getValue(d,["online"],true)!==false));
+    }
+  }
+  function updateMap(){
+    for(const [id,d] of Object.entries(drones)){
+      const p=dronePosition(d); if(!p)continue;
+      const point=[p.latitude,p.longitude], color=id==="UAV-01"?"#38bdf8":"#f97316";
+      if(!droneMarkers[id]){
+        droneMarkers[id]=L.circleMarker(point,{radius:9,weight:3,color,fillColor:color,fillOpacity:.85}).addTo(map);
+        droneTrails[id]=L.polyline([],{color,weight:3}).addTo(map);
+        droneMarkers[id].on("click",()=>selectDrone(id));
+      }
+      droneMarkers[id].setLatLng(point).bindPopup(`<strong>${id}</strong><br>Mode: ${navStateName(droneNavState(d))}`);
+      const trail=droneTrails[id], pts=trail.getLatLngs();
+      if(!pts.length||map.distance(pts[pts.length-1],L.latLng(p.latitude,p.longitude))>.2)trail.addLatLng(point);
+      if(!firstMapPosition){map.setView(point,18);firstMapPosition=true;}
+    }
+  }
+  function updateTargetUi(){
+    const t=targets[selectedDroneId];
+    document.getElementById("target-altitude").value=targetAltitudes[selectedDroneId];
+    if(!t){
+      document.getElementById("target-latitude").textContent="Not selected";
+      document.getElementById("target-longitude").textContent="Not selected";
+      document.getElementById("target-distance").textContent="N/A";
+      document.getElementById("fly-button").disabled=true;
+      return;
+    }
+    document.getElementById("target-latitude").textContent=t.latitude.toFixed(7);
+    document.getElementById("target-longitude").textContent=t.longitude.toFixed(7);
+    const p=dronePosition(selectedDrone());
+    document.getElementById("target-distance").textContent=p?`${map.distance(L.latLng(p.latitude,p.longitude),L.latLng(t.latitude,t.longitude)).toFixed(1)} m`:"N/A";
+    document.getElementById("fly-button").disabled=selectedModes[selectedDroneId]!=="offboard_map";
+  }
+  function selectDrone(id){
+    if(!DRONE_IDS.includes(id))return;
+    if(id!==selectedDroneId)disableManual(selectedDroneId,true);
+    selectedDroneId=id;
+    document.querySelectorAll(".tab-button").forEach(b=>b.classList.toggle("active",b.dataset.droneId===id));
+    renderTelemetry(); updateModeUi();
+  }
+
+  document.querySelectorAll(".tab-button").forEach(b=>b.addEventListener("click",()=>selectDrone(b.dataset.droneId)));
+  document.getElementById("position-mode-button").addEventListener("click",()=>requestMode("position"));
+  document.getElementById("offboard-mode-button").addEventListener("click",()=>requestMode("offboard_map"));
+  document.getElementById("takeoff-mode-button").addEventListener("click",()=>{
+    disableManual(selectedDroneId,true);
+    selectedModes[selectedDroneId]="takeoff";
+    updateModeUi();
+  });
+  document.getElementById("rtl-mode-button").addEventListener("click",requestRtl);
+  document.getElementById("start-takeoff-button").addEventListener("click",requestTakeoff);
+  document.getElementById("manual-enable-button").addEventListener("click",toggleManual);
+
+  document.addEventListener("keydown",e=>{
+    if(!manualCodes.has(e.code))return;
+    if(["INPUT","TEXTAREA","SELECT"].includes(document.activeElement?.tagName))return;
+    if(!manualEnabled[selectedDroneId])return;
+    e.preventDefault(); pressedKeys.add(e.code); updateManualUi();
+  });
+  document.addEventListener("keyup",e=>{
+    if(!manualCodes.has(e.code))return;
+    pressedKeys.delete(e.code); updateManualUi();
+  });
+  document.querySelectorAll(".manual-key").forEach(b=>{
+    const code=b.dataset.code;
+    const press=e=>{e.preventDefault();if(!manualEnabled[selectedDroneId])return;pressedKeys.add(code);updateManualUi();};
+    const release=e=>{e.preventDefault();pressedKeys.delete(code);updateManualUi();};
+    b.addEventListener("pointerdown",press);
+    b.addEventListener("pointerup",release);
+    b.addEventListener("pointercancel",release);
+    b.addEventListener("pointerleave",release);
+  });
+
+  setInterval(()=>{
+    const id=selectedDroneId;
+    if(selectedModes[id]!=="position"||!manualEnabled[id])return;
+    sendManualFrame(id,true,currentAxes());
+  },MANUAL_SEND_PERIOD_MS);
+
+  window.addEventListener("blur",()=>disableManual(selectedDroneId,true));
+  document.addEventListener("visibilitychange",()=>{if(document.hidden)disableManual(selectedDroneId,true);});
+
+  map.on("click",e=>{
+    if(selectedModes[selectedDroneId]!=="offboard_map"){
+      setCommandResult("Chuyển sang OFFBOARD MAP trước khi chọn điểm.","warning"); return;
+    }
+    targets[selectedDroneId]={latitude:e.latlng.lat,longitude:e.latlng.lng};
+    if(targetMarkers[selectedDroneId])targetMarkers[selectedDroneId].setLatLng(e.latlng);
+    else targetMarkers[selectedDroneId]=L.circleMarker(e.latlng,{radius:8,weight:3,color:"#fde047",fillColor:"#fde047",fillOpacity:.75}).addTo(map);
+    updateTargetUi();
+    setCommandResult(`${selectedDroneId}: đã chọn điểm, nhấn FLY TO POINT.`,"warning");
+  });
+
+  document.getElementById("target-altitude").addEventListener("change",e=>{
+    let a=Number(e.target.value); if(!Number.isFinite(a))a=5; a=Math.max(1,Math.min(30,a));
+    targetAltitudes[selectedDroneId]=a; e.target.value=a;
+  });
+  document.getElementById("takeoff-altitude").addEventListener("change",e=>{
+    let a=Number(e.target.value);
+    if(!Number.isFinite(a))a=5;
+    a=Math.max(2.5,Math.min(10,a));
+    a=Math.round(a*2)/2;
+    takeoffAltitudes[selectedDroneId]=a;
+    e.target.value=a;
+  });
+  document.getElementById("fly-button").addEventListener("click",()=>{
+    const t=targets[selectedDroneId]; if(!t)return;
+    if(sendJson({type:"goto_global",drone_id:selectedDroneId,latitude_deg:t.latitude,longitude_deg:t.longitude,altitude_m:targetAltitudes[selectedDroneId]}))
+      setCommandResult(`${selectedDroneId}: đã gửi điểm đích.`,"warning");
+  });
+  document.getElementById("cancel-target-button").addEventListener("click",()=>{
+    targets[selectedDroneId]=null;
+    if(targetMarkers[selectedDroneId]){map.removeLayer(targetMarkers[selectedDroneId]);delete targetMarkers[selectedDroneId];}
+    updateTargetUi();
+  });
+  document.getElementById("hold-current-button").addEventListener("click",()=>sendAction("hold_current"));
+  document.getElementById("arm-button").addEventListener("click",()=>sendAction("arm"));
+  document.getElementById("hold-button").addEventListener("click",()=>sendAction("hold"));
+  document.getElementById("land-button").addEventListener("click",()=>sendAction("land"));
+  document.getElementById("disarm-button").addEventListener("click",()=>sendAction("disarm"));
+
+  function connectWebSocket(){
+    const protocol=window.location.protocol==="https:"?"wss":"ws";
+    socket=new WebSocket(`${protocol}://${window.location.host}/ws`);
+    socket.onopen=()=>{
+      const e=document.getElementById("connection-status");
+      e.textContent="WebSocket connected";e.classList.add("connected");
+    };
+    socket.onmessage=event=>{
+      try{
+        const m=JSON.parse(event.data);
+        if(m.type==="telemetry_snapshot"){
+          drones=m.drones||{};
+          updateCounters();renderTelemetry();updateMap();updateTargetUi();
+        }
+        if(m.type==="control_publish_result"){
+          if(m.ok){
+            if(m.action!=="manual_control")setCommandResult(`${m.drone_id}: ${m.action} đã gửi.`,"success");
+          }else setCommandResult(m.error||"Không gửi được lệnh.","error");
+        }
+      }catch(error){console.error(error);}
+    };
+    socket.onclose=()=>{
+      disableAllManual(false);
+      const e=document.getElementById("connection-status");
+      e.textContent="WebSocket disconnected";e.classList.remove("connected");
+      setTimeout(connectWebSocket,2000);
+    };
+    socket.onerror=()=>socket.close();
+  }
+
+  updateModeUi();renderTelemetry();connectWebSocket();
+</script>
+</body>
+</html>
