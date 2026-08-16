@@ -44,9 +44,35 @@ MINIMUM_EXCITATION_M_S = 0.05
 AXES = ("E", "N", "U")
 
 
-def load_samples(path: str | Path) -> dict[str, list[tuple[float, list[float], list[float], list[float]]]]:
+def reached_the_vehicle(record: dict[str, Any]) -> bool:
+    """Did the command recorded here actually go out to PX4?
+
+    `output_velocity_enu_m_s` is what the companion decided, which is not what
+    the vehicle received: a warmup frame streams zeros while that field still
+    carries the live command, and a withheld frame sends nothing at all.
+    Fitting those against the vehicle's response fits a command the vehicle
+    never got, and the plant looks dead on whichever axis the companion wanted
+    most. In `companion_safety_trace_20260812_preguard.jsonl` 25,253 of the
+    35,472 samples this function now rejects were warmup, and 47% of them
+    wanted over 0.3 m/s of climb while a zero went out -- which is the whole
+    reason the vertical channel was written up as a blocker.
+
+    Traces recorded before per-frame accounting carry no frame at all. They
+    cannot be checked, so they are kept and counted separately rather than
+    silently dropped.
+    """
+    frame = record.get("active_offboard_frame")
+    if frame is None:
+        return True
+    return bool(frame.get("transmitted")) and frame.get("decision") == "transmit"
+
+
+def load_samples(
+    path: str | Path,
+) -> tuple[dict[str, list[tuple[float, list[float], list[float], list[float]]]], dict[str, int]]:
     """Return per-drone (time, position, command, measured velocity) samples."""
     samples: dict[str, list[Any]] = {}
+    provenance = {"kept": 0, "not_transmitted": 0, "unverifiable": 0}
     with open(path, encoding="utf-8") as handle:
         for line in handle:
             record = json.loads(line)
@@ -57,12 +83,18 @@ def load_samples(path: str | Path) -> dict[str, list[tuple[float, list[float], l
             measured = record.get("own_velocity_enu_m_s")
             if not position or not command or not measured:
                 continue
+            if not reached_the_vehicle(record):
+                provenance["not_transmitted"] += 1
+                continue
+            if record.get("active_offboard_frame") is None:
+                provenance["unverifiable"] += 1
+            provenance["kept"] += 1
             samples.setdefault(record["drone_id"], []).append(
                 (float(record["wall_clock_s"]), position, command, measured)
             )
     for series in samples.values():
         series.sort()
-    return samples
+    return samples, provenance
 
 
 def _pairs(series: list[Any]) -> list[tuple[Any, Any, float]]:
@@ -130,7 +162,10 @@ def consistency_axis(series: list[Any], axis: int) -> dict[str, Any]:
     integrated = sum(
         0.5 * (first[3][axis] + second[3][axis]) * step for first, second, step in pairs
     )
-    travelled = series[-1][1][axis] - series[0][1][axis]
+    # Both sides must cover the same intervals. Taking the endpoints of the
+    # whole series instead charges the velocity channel for every gap between
+    # OFFBOARD episodes, which flags all three axes on any multi-episode trace.
+    travelled = sum(second[1][axis] - first[1][axis] for first, second, _ in pairs)
     measured = np.array([0.5 * (first[3][axis] + second[3][axis]) for first, second, _ in pairs])
     differentiated = np.array(
         [(second[1][axis] - first[1][axis]) / step for first, second, step in pairs
@@ -153,7 +188,8 @@ def consistency_axis(series: list[Any], axis: int) -> dict[str, Any]:
 
 def analyse(path: str | Path) -> dict[str, Any]:
     per_drone = {}
-    for drone, series in sorted(load_samples(path).items()):
+    samples, provenance = load_samples(path)
+    for drone, series in sorted(samples.items()):
         per_drone[drone] = {
             "samples": len(series),
             "duration_s": round(series[-1][0] - series[0][0], 2) if series else 0.0,
@@ -170,6 +206,7 @@ def analyse(path: str | Path) -> dict[str, Any]:
     )
     return {
         "trace": str(path),
+        "sample_provenance": provenance,
         "per_drone": per_drone,
         "inconsistent_axes": inconsistent,
         "verdict": "CONSISTENT" if not inconsistent else "CHANNEL_MISMATCH",

@@ -1,0 +1,36 @@
+{
+  "answer": "No, not with this contract. Three separately-seeded final-level policies all drive the pair inside the 10 m physical floor.",
+  "for_comparison_20m_floor_same_speed": {
+    "failure_count": 0,
+    "minimum_distance_m": 27.253152,
+    "minimum_dynamic_margin_m": 4.727,
+    "verdict": "PASS"
+  },
+  "harness_bug_found_and_fixed": "The first run of this experiment judged the 10 m policies with a 20 m gate, because profile_config() keyed the contract off the airframe alone. It read as a mild 1 m/s shortfall. The tell was that three unrelated policies all stopped at exactly 22.055 m = 20 + 2 + uncertainty, which is the wrong contract's requirement. The floor is now threaded through cases(), the spawn geometry and the gate; the 20 m path reproduces its stored artifact field for field.",
+  "not_a_training_problem": "Three seeds with avoidance radii spread 51-88 m all fail the same way, and all three passed 16 of 16 training scenarios.",
+  "question": "Can Sparrow use the 10 m emergency floor the operator asked for?",
+  "recommendation": "Keep the 20 m floor. What the operator actually wanted from '10 to 20 m' was for drones not to be shoved off their paths by a floor that is wider than the gap between two missions. That is cheaper to get at the mission layer, where review_missions() now reports the closest approach between drawn paths at the moment send is pressed.",
+  "seeds": {
+    "7": {
+      "failure_count": 135,
+      "minimum_distance_m": 12.055395,
+      "minimum_dynamic_margin_m": 0.0,
+      "physically_unsafe_cases": 135
+    },
+    "17": {
+      "failure_count": 98,
+      "minimum_distance_m": 12.055431,
+      "minimum_dynamic_margin_m": 0.0,
+      "physically_unsafe_cases": 98
+    },
+    "29": {
+      "failure_count": 167,
+      "minimum_distance_m": 12.06997,
+      "minimum_dynamic_margin_m": 0.006,
+      "physically_unsafe_cases": 167
+    }
+  },
+  "verdict": "FLOOR_10M_NOT_VIABLE",
+  "what_would_be_needed": "A non-zero design_margin_buffer_m to hold the solve off the boundary. The comment on that field records it measured UNSAFE at higher closing speeds: the buffer feeds relative_speed on the next frame, which raises required_margin, which commands a stronger correction. At 1.0 m/s closing a 1.0 m buffer produced 253 infeasible frames against 0 with no buffer. So this is not a knob to turn, it is a second design problem.",
+  "why": "design_margin_buffer_m is 0.0 for Sparrow, and a minimally-invasive CBF converges exactly onto its constraint by construction -- that is documented at length on the field itself. The vehicle then carries through the boundary on its own response lag, measured at tau = 0.860 s horizontally. A 20 m floor absorbs that overshoot because required_margin sits 10 m further out. A 10 m floor does not, and the policy uses the room it is given to get there."
+}

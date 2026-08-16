@@ -16,6 +16,7 @@ MODEL_FORMAT = "cbf_rl_proximity_policy_v1"
 MODEL_FORMAT_V2 = "cbf_rl_proximity_policy_v2"
 MODEL_FORMAT_MISSION_V1 = "cbf_rl_mission_policy_v1"
 MODEL_FORMAT_X500_20M_V1 = "cbf_rl_x500_20m_policy_v1"
+MODEL_FORMAT_SPARROW_20M_V1 = "cbf_rl_sparrow_20m_policy_v1"
 OBSERVATION_SIZE = len(OBSERVATION_FIELDS)
 MINIMUM_SEPARATION_M = 4.0
 
@@ -34,6 +35,20 @@ class ProximityCbfRlPolicy:
     maximum_velocity_m_s: float = 2.0
     vehicle_profile: str = "legacy"
 
+    @property
+    def avoids_vertically(self) -> bool:
+        """Does this contract treat altitude as a real avoidance dimension?
+
+        Four places used to ask `minimum_separation_m >= 20.0` for this, which
+        conflated two independent things: how close the vehicles may get, and
+        whether the policy may use the vertical axis to keep them apart. The
+        legacy 4 m contract is horizontal-only; every 20 m contract so far has
+        been three-dimensional, so the threshold happened to work -- right up
+        until someone wants a 10 m floor that still avoids in 3D, at which
+        point the coupling silently changes the behaviour instead of the limit.
+        """
+        return self.vehicle_profile in {"x500", "sparrow"}
+
     def __post_init__(self) -> None:
         values = (self.goal_gain, self.avoidance_gain, self.avoidance_radius_m)
         if not all(math.isfinite(value) for value in values):
@@ -45,13 +60,22 @@ class ProximityCbfRlPolicy:
             or self.minimum_separation_m <= 0.0
             or not math.isfinite(self.maximum_velocity_m_s)
             or self.maximum_velocity_m_s <= 0.0
-            or self.vehicle_profile not in {"legacy", "x500"}
+            or self.vehicle_profile not in {"legacy", "x500", "sparrow"}
             or (
                 self.vehicle_profile == "legacy"
                 and (
                     self.minimum_separation_m != MINIMUM_SEPARATION_M
                     or self.maximum_velocity_m_s != 2.0
                 )
+            )
+            or (
+                # 10 m is the emergency floor the operator asked for, not a
+                # loosening of the dynamic requirement: required_margin still
+                # grows with closing speed and already exceeds 20 m by the time
+                # the pair is closing at 6.81 m/s. Below 10 m nothing in the
+                # latency and braking reserves is survivable, so it stays hard.
+                self.vehicle_profile in {"x500", "sparrow"}
+                and self.minimum_separation_m < 10.0
             )
             or self.avoidance_radius_m <= self.minimum_separation_m
             or (
@@ -87,7 +111,7 @@ class ProximityCbfRlPolicy:
         peer_horizontal_distance = math.hypot(peer_e, peer_n)
         peer_distance = (
             math.sqrt(peer_e * peer_e + peer_n * peer_n + peer_u * peer_u)
-            if self.minimum_separation_m >= 20.0
+            if self.avoids_vertically
             else peer_horizontal_distance
         )
         proximity = max(
@@ -122,7 +146,7 @@ class ProximityCbfRlPolicy:
                     + peer_n * predicted_relative_n
                     + (
                         peer_u * predicted_relative_u
-                        if self.minimum_separation_m >= 20.0
+                        if self.avoids_vertically
                         else 0.0
                     )
                 )
@@ -139,12 +163,12 @@ class ProximityCbfRlPolicy:
                 1.0,
                 (
                     math.sqrt(goal_e * goal_e + goal_n * goal_n + goal_u * goal_u)
-                    if self.minimum_separation_m >= 20.0
+                    if self.avoids_vertically
                     else math.hypot(goal_e, goal_n)
                 )
                 / self.avoidance_goal_taper_m,
             )
-        if self.minimum_separation_m >= 20.0 and peer_horizontal_distance <= 1.0e-6:
+        if self.avoids_vertically and peer_horizontal_distance <= 1.0e-6:
             pass_e = math.copysign(1.0, peer_u)
             pass_n = 0.0
         else:
@@ -173,11 +197,10 @@ class ProximityCbfRlPolicy:
             parameters["risk_slowdown_gain"] = self.risk_slowdown_gain
             parameters["closing_speed_scale_m_s"] = self.closing_speed_scale_m_s
             model_format = MODEL_FORMAT_MISSION_V1
-        if (
-            self.minimum_separation_m != MINIMUM_SEPARATION_M
-            or self.maximum_velocity_m_s != 2.0
-        ):
+        if self.vehicle_profile == "x500":
             model_format = MODEL_FORMAT_X500_20M_V1
+        elif self.vehicle_profile == "sparrow":
+            model_format = MODEL_FORMAT_SPARROW_20M_V1
         encoded = json.dumps(parameters, sort_keys=True, separators=(",", ":")).encode()
         return {
             "format": model_format,
@@ -197,12 +220,16 @@ class ProximityCbfRlPolicy:
             MODEL_FORMAT_V2,
             MODEL_FORMAT_MISSION_V1,
             MODEL_FORMAT_X500_20M_V1,
+            MODEL_FORMAT_SPARROW_20M_V1,
         }:
             raise ValueError("policy format is invalid")
         if tuple(value.get("observation_fields", ())) != OBSERVATION_FIELDS:
             raise ValueError("policy observation contract mismatch")
         model_format = value.get("format")
-        high_speed_formats = {MODEL_FORMAT_X500_20M_V1}
+        high_speed_formats = {
+            MODEL_FORMAT_X500_20M_V1,
+            MODEL_FORMAT_SPARROW_20M_V1,
+        }
         if model_format in high_speed_formats:
             try:
                 minimum_separation_m = float(value["minimum_separation_m"])
@@ -242,7 +269,10 @@ class ProximityCbfRlPolicy:
                 ),
                 minimum_separation_m,
                 maximum_velocity_m_s,
-                "x500" if model_format == MODEL_FORMAT_X500_20M_V1 else "legacy",
+                {
+                    MODEL_FORMAT_X500_20M_V1: "x500",
+                    MODEL_FORMAT_SPARROW_20M_V1: "sparrow",
+                }.get(model_format, "legacy"),
             )
         except (KeyError, TypeError, ValueError) as error:
             raise ValueError("policy parameters are invalid") from error

@@ -129,3 +129,35 @@ def test_closest_approach_never_overstates_the_gap():
     coarse = closest_approach_m(first, second, sample_step_m=2.0)
     fine = closest_approach_m(first, second, sample_step_m=0.1)
     assert coarse <= fine + 1e-9
+
+
+def bow_tie(side_m: float):
+    """A square with two corners swapped: the classic self-crossing loop."""
+    corners = ((0.0, 0.0), (side_m, 0.0), (0.0, side_m), (side_m, side_m))
+    return [
+        {
+            "latitude_deg": ORIGIN.latitude_deg + north * METRE_LAT,
+            "longitude_deg": ORIGIN.longitude_deg + east * METRE_LON,
+        }
+        for east, north in corners
+    ]
+
+
+def test_a_self_crossing_mission_is_refused():
+    """Nearest-point progress cannot tell the branches apart at a crossing."""
+    with pytest.raises(MissionRejected, match="cross"):
+        validate_mission(mission(waypoints=bow_tie(20.0)), ORIGIN, LIMITS)
+
+
+def test_convex_and_star_shaped_loops_still_pass():
+    from mission_plan import self_intersecting_pair
+
+    square_enu = [(0.0, 0.0, 9.0), (10.0, 0.0, 9.0), (10.0, 10.0, 9.0), (0.0, 10.0, 9.0)]
+    triangle = [(0.0, 0.0, 9.0), (10.0, 0.0, 9.0), (5.0, 9.0, 9.0)]
+    # Non-convex but simple: an L. Adjacent segments touch and must not count.
+    ell = [
+        (0.0, 0.0, 9.0), (20.0, 0.0, 9.0), (20.0, 6.0, 9.0),
+        (6.0, 6.0, 9.0), (6.0, 20.0, 9.0), (0.0, 20.0, 9.0),
+    ]
+    for loop in (square_enu, triangle, ell):
+        assert self_intersecting_pair(loop) is None

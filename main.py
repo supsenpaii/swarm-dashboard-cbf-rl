@@ -59,7 +59,13 @@ from simulation_ground_truth import (
     interpolate_pose,
     optical_center_distance,
 )
-from mission_plan import MissionLimits, MissionRejected, validate_mission
+from mission_plan import (
+    MissionLimits,
+    MissionRejected,
+    review_missions,
+    validate_mission,
+)
+from trajectory_controller import mission_speed_preview
 from swarm_state import GeodeticOrigin, SwarmStateStore
 from tracking_web import TrackingManager
 
@@ -248,12 +254,27 @@ except ValueError:
 
 DRONE_MODELS = {
     "UAV-01": os.environ.get(
-        "SWARM_GAZEBO_MODEL_UAV_01", "x500_custom_0"
+        "SWARM_GAZEBO_MODEL_UAV_01", "sparrow_gimbal_0"
     ).strip(),
     "UAV-02": os.environ.get(
-        "SWARM_GAZEBO_MODEL_UAV_02", "x500_custom_1"
+        "SWARM_GAZEBO_MODEL_UAV_02", "sparrow_gimbal_1"
     ).strip(),
 }
+
+
+def _expected_gazebo_rate(name: str, default: float) -> float:
+    try:
+        return max(0.1, float(os.environ.get(name, str(default))))
+    except ValueError:
+        return default
+
+
+GAZEBO_CAMERA_EXPECTED_RATE_HZ = _expected_gazebo_rate(
+    "SWARM_GAZEBO_CAMERA_EXPECTED_RATE_HZ", 30.0
+)
+GAZEBO_CAMERA_IMU_EXPECTED_RATE_HZ = _expected_gazebo_rate(
+    "SWARM_GAZEBO_CAMERA_IMU_EXPECTED_RATE_HZ", 250.0
+)
 
 GIMBAL_LIMITS_DEG = {
     "roll": (-45.0, 45.0),
@@ -641,6 +662,12 @@ tracking_companion_safety: dict[str, dict[str, Any]] = {
     drone_id: {}
     for drone_id in ALLOWED_DRONES
 }
+# Last mission this server accepted per drone, kept only to answer "does the
+# path being sent now come near one already out there?" at the moment the
+# operator presses send. Advisory, like the rest of this validator: the bridge
+# owns the authoritative copy and may have cleared or replaced a mission
+# without telling us, so this warns and never refuses.
+accepted_mission_paths: dict[str, Any] = {}
 try:
     if FORMATION_LEADER_ID not in ALLOWED_DRONES:
         raise ValueError("leader is not an allowed drone")
@@ -913,7 +940,7 @@ class GazeboDashboardBridge:
         self.gimbal_feedback_deg: dict[str, dict[str, float]] = {}
         self.gimbal_feedback_monotonic: dict[str, float] = {}
         self.lidar_topic = os.environ.get(
-            "SWARM_GAZEBO_LIDAR_TOPIC", "/x500_custom/front_lidar"
+            "SWARM_GAZEBO_LIDAR_TOPIC", "/sparrow_gimbal/front_lidar"
         ).strip()
         self.lidar_lock = threading.Lock()
         self.lidar_scans: dict[str, dict[str, Any]] = {}
@@ -1142,7 +1169,7 @@ class GazeboDashboardBridge:
                         return
                     self._run_subscription_callback(
                         topic_id=selected_topic_id,
-                        expected_rate_hz=50.0,
+                        expected_rate_hz=GAZEBO_CAMERA_EXPECTED_RATE_HZ,
                         message=message,
                         production_callback=lambda item: self._handle_camera_image(
                             selected_drone_id, item
@@ -1203,7 +1230,7 @@ class GazeboDashboardBridge:
                         return
                     self._run_subscription_callback(
                         topic_id=f"camera_imu_{selected_drone_id.lower().replace('-', '')}",
-                        expected_rate_hz=100.0,
+                        expected_rate_hz=GAZEBO_CAMERA_IMU_EXPECTED_RATE_HZ,
                         message=message,
                         production_callback=lambda item: self._handle_gimbal_imu(
                             selected_drone_id, "camera", item
@@ -4965,6 +4992,13 @@ def mission_origin() -> GeodeticOrigin | None:
         return None
 
 
+def _float_environment(name: str, default: float) -> float:
+    try:
+        return float(os.environ.get(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+
+
 async def handle_mission_path(
     websocket: WebSocket,
     send_lock: asyncio.Lock,
@@ -5009,6 +5043,15 @@ async def handle_mission_path(
         )
         return
 
+    with state_lock:
+        pending = dict(accepted_mission_paths)
+    pending[drone_id] = trajectory
+    review = (
+        review_missions(pending)
+        if len(pending) > 1
+        else {"geometrically_separated": True, "conflicts": []}
+    )
+
     ok, error = publish_control_message(
         {
             "type": "mission_path",
@@ -5044,8 +5087,22 @@ async def handle_mission_path(
                 trajectory.lap_duration_s(),
                 1,
             ),
+            "conflict_review": review,
+            "speed_preview": mission_speed_preview(
+                trajectory,
+                maximum_acceleration_m_s2=_float_environment(
+                    "SWARM_MISSION_MAXIMUM_ACCELERATION_M_S2", 0.5
+                ),
+                corner_tracking_tolerance_m=_float_environment(
+                    "SWARM_MISSION_CORNER_TRACKING_TOLERANCE_M", 1.0
+                ),
+            ),
         },
     )
+
+    if ok:
+        with state_lock:
+            accepted_mission_paths[drone_id] = trajectory
 
 
 async def handle_mission_action(

@@ -97,6 +97,21 @@ class CbfConfig:
     # This is deliberately independent of covariance publication, allowing
     # publish + sigma=0 observation without changing the CBF margin math.
     require_position_covariance: bool = False
+    # Reachability. Without this the solver may hand back a velocity the
+    # vehicle cannot arrive at by the next frame: the barrier is satisfied by
+    # a velocity that never exists, and the acceleration limiter downstream
+    # delivers something else, which the barrier was never checked against.
+    # Constraining the solve to the ball of radius a*dt around the measured
+    # velocity makes the answer one the vehicle can actually take.
+    #
+    # Zero disables it and preserves the legacy contract exactly. It is opt-in
+    # because it can turn a previously "solved" frame into an honest
+    # infeasibility -- when no reachable velocity satisfies the barrier, the
+    # correct report is that no such velocity exists, but that is a hold, and
+    # a hold stops the setpoint stream. Turn it on per contract, against the
+    # safety matrix, never as a blanket default.
+    maximum_acceleration_m_s2: float = 0.0
+    control_period_s: float = 0.05
 
     def __post_init__(self) -> None:
         scalars = (
@@ -106,9 +121,13 @@ class CbfConfig:
             self.relative_braking_acceleration_m_s2,
             self.tracking_reserve_m,
             self.design_margin_buffer_m,
+            self.maximum_acceleration_m_s2,
+            self.control_period_s,
         )
         if not all(math.isfinite(value) and value >= 0.0 for value in scalars):
             raise ValueError("CBF configuration is invalid")
+        if self.maximum_acceleration_m_s2 > 0.0 and self.control_period_s <= 0.0:
+            raise ValueError("CBF reachability needs a positive control period")
         if self.minimum_separation_m <= 0.0 or self.maximum_velocity_m_s <= 0.0 or self.lookahead_s <= 0.0:
             raise ValueError("CBF configuration must have positive limits")
         if not _finite(self.geofence_min_enu_m + self.geofence_max_enu_m):
@@ -245,11 +264,19 @@ class CbfCommandGate:
             # d/dt h + alpha*h >= 0, where relative = own - peer.
             required_dot = _dot(relative, peer_velocity) - 0.5 * self.config.barrier_gain_s_inv * h
             constraints.append((relative, required_dot))
+        reachable_radius_m_s = (
+            self.config.maximum_acceleration_m_s2 * self.config.control_period_s
+            if self.config.maximum_acceleration_m_s2 > 0.0
+            else math.inf
+        )
         candidate = list(_limit_norm(nominal, self.config.maximum_velocity_m_s))
         for _ in range(12):
             for axis in range(3):
                 candidate[axis] = min(upper[axis], max(lower[axis], candidate[axis]))
             candidate[:] = _limit_norm(tuple(candidate), self.config.maximum_velocity_m_s)
+            candidate[:] = _limit_norm_about(
+                tuple(candidate), own[1], reachable_radius_m_s
+            )
             for normal, required_dot in constraints:
                 violation = required_dot - _dot(normal, tuple(candidate))
                 if violation > 0.0:
@@ -260,6 +287,8 @@ class CbfCommandGate:
         if (
             any(velocity[i] < lower[i] - 1e-5 or velocity[i] > upper[i] + 1e-5 for i in range(3))
             or _norm(velocity) > self.config.maximum_velocity_m_s + 1e-5
+            or _norm(tuple(velocity[i] - own[1][i] for i in range(3)))
+            > reachable_radius_m_s + 1e-5
             or any(_dot(normal, velocity) < required_dot - 1e-4 for normal, required_dot in constraints)
         ):
             return self._hold(
@@ -344,6 +373,18 @@ def _dot(left: Vector3, right: Vector3) -> float:
 
 def _norm(vector: Vector3) -> float:
     return math.sqrt(_dot(vector, vector))
+
+
+def _limit_norm_about(vector: Vector3, centre: Vector3, maximum: float) -> Vector3:
+    """Nearest point to `vector` inside the ball of radius `maximum` about `centre`."""
+    if maximum == math.inf:
+        return vector
+    offset = tuple(vector[i] - centre[i] for i in range(3))
+    magnitude = _norm(offset)
+    if magnitude <= maximum:
+        return vector
+    scale = maximum / magnitude
+    return tuple(centre[i] + offset[i] * scale for i in range(3))  # type: ignore[return-value]
 
 
 def _limit_norm(vector: Vector3, maximum: float) -> Vector3:

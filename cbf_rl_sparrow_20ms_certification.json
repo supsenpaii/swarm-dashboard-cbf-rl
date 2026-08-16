@@ -1,0 +1,59 @@
+{
+  "certification_scope": "offline_only_no_flight_authority",
+  "certified_speed_by_geometry_m_s": {
+    "horizontal": 20,
+    "vertical_180deg": 17
+  },
+  "command_latency_s": {
+    "cost": "10 m/s improved, 15 m/s margin 1.477 -> 1.093, 20 m/s vertical 18 -> 17 m/s. Horizontal stayed at 20 m/s.",
+    "found_by": "a head-on pair at 1 m/s in shadow breached the requirement by 0.13 m while the gate was commanding a reversal the vehicle had not yet made. The shortfall scales with closing speed: 0.42 m at 2 m/s closing, 8.4 m at 40.",
+    "source": "measured on the 2026-08-15 Sparrow flight: horizontal response tau = 0.860 s against a vertical 0.275 s",
+    "value": 0.86,
+    "was": 0.65
+  },
+  "coordinator_engagement_floor_2026_08_15": {
+    "also": "sparrow_20m_conflict_config still sized its boundary with the x500's 0.65 s latency; it now uses Sparrow's measured 0.86 s, so the coordinator and the gate agree on the same reserve.",
+    "change": "ConflictCoordinator gained an engagement distance floor",
+    "effect": "minimum distance 22.055 -> 22.695 m, dynamic margin 0.000 -> 0.336 m",
+    "found_by": "probing the coordinator directly with the 1 m/s head-on geometry that had just aborted in shadow, rather than assuming the shadow abort was purely a mode artefact",
+    "why": "A fixed 8 s prediction horizon is a distance that shrinks with closing speed. At the certified ceilings it was slack -- trigger_distance was always the tighter gate -- but at 2 m/s closing it put first engagement at 14 m, inside the margin the CBF gate demands of the same pair. The coordinator could therefore only ever latch AFTER the shield it exists to precede. Below minimum_engagement_distance_m an encounter is now latched on range alone."
+  },
+  "headline": "Horizontal encounters certified to 20 m/s, vertical head-on to 17 m/s. A drawn mission is a polyline at one altitude, so horizontal is the geometry the product actually flies.",
+  "matrix": {
+    "case_count": 560,
+    "failure_count": 6,
+    "maximum_speed_m_s": 20,
+    "minimum_distance_m": 22.694521,
+    "minimum_dynamic_margin_m": 0.336,
+    "sha256": "b7577ee81f2d82812ec6d8c4b6e03541f8f6e3be46757fbd8969b964bfeb36bf",
+    "verdict": "FAIL"
+  },
+  "policy": {
+    "path": "cbf_rl_policy_sparrow_20m_20ms_v2.json",
+    "sha256": "ee958f8f7b4aecf7b2d36d1391e179c73da24fb8b7c6885b398c8fc585f31f2a"
+  },
+  "training": {
+    "all_scenarios_successful": true,
+    "best_score": 148145.60460250545,
+    "elite_count": 12,
+    "environment_matched_the_matrix": true,
+    "generations": 26,
+    "level": "final",
+    "population": 48,
+    "seed": 17
+  },
+  "vertical_limit": {
+    "certified_to_m_s": 17,
+    "fails_at_m_s": [
+      18,
+      19,
+      20
+    ],
+    "failure_mode": "deadlock, not collision -- both vehicles stop safely and neither completes the swap",
+    "history": "18 m/s under the 0.65 s latency, 17 m/s once the measured 0.86 s replaced it. The engagement floor bought 0.336 m of dynamic margin but did not move this line: the deadlock is set by how much runway the scenario grants before first contact, not by when the coordinator wakes up.",
+    "not_fixable_by_training": "Three independent runs agree, the last at final level with an environment matching the matrix and 16 of 16 training scenarios passed. Once the pair is inside the required margin the barrier is unsatisfiable and the gate holds, at which point it is not asking the policy anything.",
+    "root_cause": "the matrix spawns the pair with a constant 15 m head start, which is 15/v_close seconds of reaction -- 0.375 s at 20 m/s against a measured 0.860 s response. The scenario gets harder as speed rises for a reason that has nothing to do with the aircraft.",
+    "safety": "never violated at the failing speeds either: physical_safe and dynamic_safe true, 29.7-31.1 m apart against a 20 m floor",
+    "why_this_is_the_right_scope_rather_than_a_looser_gate": "The alternative was making the spawn head start time-based, which makes high-speed cases easier and would have converted this into a PASS by changing the question. Scoping the certification states what is true instead, and costs the product nothing it uses."
+  }
+}

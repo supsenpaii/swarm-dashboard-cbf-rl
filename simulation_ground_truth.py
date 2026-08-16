@@ -9,9 +9,9 @@ from typing import Any, Mapping
 
 
 GT_CONTRACT_VERSION = "gazebo_actual_pose_optical_center_v2"
-CAMERA_SENSOR_TRANSLATION_IN_CAMERA_LINK_M = (-0.0412, 0.0, -0.162)
-CAMERA_SENSOR_QUATERNION_XYZW = (0.0, 0.0, 1.0, 0.0)  # yaw pi
-TARGET_REFERENCE = "x500_custom_1_model_origin"
+CAMERA_SENSOR_TRANSLATION_IN_CAMERA_LINK_M = (0.0, 0.0, 0.0)
+CAMERA_SENSOR_QUATERNION_XYZW = (0.0, 0.0, 0.0, 1.0)
+TARGET_REFERENCE = "sparrow_gimbal_1_model_origin"
 _CONTRACT = {
     "camera_extrinsic_quaternion_xyzw": CAMERA_SENSOR_QUATERNION_XYZW,
     "camera_extrinsic_translation_m": CAMERA_SENSOR_TRANSLATION_IN_CAMERA_LINK_M,

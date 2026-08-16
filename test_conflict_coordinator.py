@@ -5,6 +5,7 @@ from conflict_coordinator import (
     ConflictCoordinator,
     ConflictCoordinatorConfig,
     reset_shared_conflict_state,
+    sparrow_20m_conflict_config,
     x500_20m_conflict_config,
 )
 
@@ -116,7 +117,12 @@ def test_x500_clear_path_uses_mission_velocity_not_rl_candidate() -> None:
     coordinator = ConflictCoordinator(
         "UAV-01", "UAV-02", x500_20m_conflict_config()
     )
-    state = states(20.0)
+    # Genuinely clear: outside the engagement floor AND outside the horizon.
+    # This used to read states(20.0), which is a head-on pair closing inside
+    # the config's own 20 m reserve -- "clear" only because 2 m/s closing puts
+    # the closest approach 10 s away, past the 8 s horizon. That was the bug
+    # the floor exists to close, not a property worth pinning.
+    state = states(80.0)
     candidate = (0.2, 0.3, 0.0)
     mission = (1.0, 0.0, 0.0)
 
@@ -240,3 +246,57 @@ def test_shared_runtime_pair_agrees_on_priority_and_can_be_reset() -> None:
     reset_shared_conflict_state(("UAV-01", "UAV-02"))
     fresh = ConflictCoordinator.shared("UAV-01", "UAV-02")
     assert fresh.encounter == 0
+
+
+def test_slow_head_on_engages_before_the_cbf_reserve() -> None:
+    """A fixed horizon is a distance that shrinks with closing speed.
+
+    At 20 m/s closing, 8 s of lead time is 160 m. At 2 m/s it is 16 m -- inside
+    the margin the CBF gate will demand of the same pair, so the coordinator
+    would only ever latch after the shield had already started braking. The
+    engagement floor makes range, not time, the binding gate down there.
+    """
+    config = sparrow_20m_conflict_config(10.0)
+    assert config.minimum_engagement_distance_m > config.reserve_separation_m
+
+    pair = ConflictCoordinator.pair(("UAV-01", "UAV-02"), config)
+    gap = config.minimum_engagement_distance_m - 1.0
+    state = {
+        "UAV-01": {
+            "valid": True,
+            "position_enu_m": (0.0, 0.0, 10.0),
+            "velocity_enu_m_s": (1.0, 0.0, 0.0),
+        },
+        "UAV-02": {
+            "valid": True,
+            "position_enu_m": (gap, 0.0, 10.0),
+            "velocity_enu_m_s": (-1.0, 0.0, 0.0),
+        },
+    }
+    _, priority = pair["UAV-01"].filter((1.0, 0.0, 0.0), (1.0, 0.0, 0.0), state)
+    yielded, yielding = pair["UAV-02"].filter(
+        (-1.0, 0.0, 0.0), (-1.0, 0.0, 0.0), state
+    )
+
+    assert priority["active"] and yielding["active"]
+    assert {priority["role"], yielding["role"]} == {"priority", "yield"}
+    # The yielding vehicle is actually pushed off the collision line.
+    assert abs(yielded[1]) > 0.5
+
+
+def test_engagement_floor_does_not_move_the_certified_rungs() -> None:
+    """The floor must be slack wherever the rungs were signed off.
+
+    Engagement happens at min(trigger, horizon x closing speed); at every
+    certified ceiling the trigger is the tighter of the two, so adding a floor
+    below it changes nothing those matrices measured.
+    """
+    for ceiling_m_s in (10.0, 15.0, 20.0):
+        for factory in (sparrow_20m_conflict_config, x500_20m_conflict_config):
+            config = factory(ceiling_m_s)
+            closing_m_s = 2.0 * ceiling_m_s
+            assert config.minimum_engagement_distance_m < config.trigger_distance_m
+            assert (
+                config.trigger_distance_m
+                < config.prediction_horizon_s * closing_m_s
+            )

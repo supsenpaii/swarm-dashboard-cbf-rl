@@ -448,6 +448,15 @@ class Flight:
                 self.log("CONFIRMED", drone_id=drone_id, what=description, **self.brief(last))
                 return last
             time.sleep(poll_s)
+        if "hover" in description:
+            # The overwhelmingly likely cause, and the one that cost three
+            # days: PX4 ships MIS_TAKEOFF_ALT at 2.5 m while every driver
+            # here waits for a ~10 m envelope, so the vehicle levels off
+            # early and this reads as a dead vertical channel.
+            raise FlightAbort(
+                f"timeout_waiting_for:{drone_id}:{description}"
+                " (check px4-param show MIS_TAKEOFF_ALT against the hover envelope)"
+            )
         raise FlightAbort(f"timeout_waiting_for:{drone_id}:{description}")
 
     @staticmethod

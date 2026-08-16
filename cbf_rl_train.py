@@ -14,10 +14,13 @@ from typing import Any, Sequence
 
 import numpy as np
 
+from conflict_coordinator import sparrow_20m_conflict_config
 from cbf_rl_env import (
     CbfRlEnvConfig,
     CbfRlEnvironment,
     DRONE_IDS,
+    sparrow_10m_floor_cbf_config,
+    sparrow_20m_cbf_config,
     x500_20m_cbf_config,
 )
 from cbf_rl_policy import ProximityCbfRlPolicy
@@ -51,10 +54,11 @@ Scenario = TrainingScenario | OrbitScenario
 
 def x500_training_scenarios(
     maximum_velocity_m_s: float = 10.0,
+    *,
+    relative_braking_acceleration_m_s2: float = 6.0,
 ) -> tuple[Scenario, ...]:
-    if maximum_velocity_m_s <= 0.0:
-        raise ValueError("maximum velocity must be positive")
-    relative_braking_acceleration_m_s2 = 6.0
+    if maximum_velocity_m_s <= 0.0 or relative_braking_acceleration_m_s2 <= 0.0:
+        raise ValueError("velocity and braking acceleration must be positive")
     angle = math.radians(15.0)
     relative_speed = 2.0 * maximum_velocity_m_s * math.sin(angle / 2.0)
     initial_distance = (
@@ -218,6 +222,15 @@ def x500_training_scenarios(
     )
 
 
+def sparrow_training_scenarios(
+    maximum_velocity_m_s: float = 10.0,
+) -> tuple[Scenario, ...]:
+    return x500_training_scenarios(
+        maximum_velocity_m_s,
+        relative_braking_acceleration_m_s2=8.0,
+    )
+
+
 def training_scenarios() -> tuple[Scenario, ...]:
     """Frozen legacy 4 m suite used to replay authenticated old policies."""
     return (
@@ -262,19 +275,26 @@ def training_scenarios() -> tuple[Scenario, ...]:
 def _policy(
     parameters: Sequence[float], *,
     maximum_velocity_m_s: float = 10.0,
+    vehicle_profile: str = "x500",
+    minimum_separation_m: float = 20.0,
 ) -> ProximityCbfRlPolicy:
     if len(parameters) != 6:
         raise ValueError("parameter vector shape is invalid")
     return ProximityCbfRlPolicy(
         goal_gain=max(0.1, min(20.0, float(parameters[0]))),
         avoidance_gain=max(0.0, min(30.0, float(parameters[1]))),
-        avoidance_radius_m=max(20.01, min(120.0, float(parameters[2]))),
+        # The avoidance radius has to sit outside the floor -- the policy's
+        # proximity term divides by (radius - floor) -- so this lower clamp
+        # follows the floor rather than the 20 m it used to assume.
+        avoidance_radius_m=max(
+            minimum_separation_m + 0.01, min(120.0, float(parameters[2]))
+        ),
         avoidance_goal_taper_m=max(0.25, min(200.0, float(parameters[3]))),
         risk_slowdown_gain=max(0.0, min(2.0, float(parameters[4]))),
         closing_speed_scale_m_s=max(0.05, min(20.0, float(parameters[5]))),
-        minimum_separation_m=20.0,
+        minimum_separation_m=minimum_separation_m,
         maximum_velocity_m_s=maximum_velocity_m_s,
-        vehicle_profile="x500",
+        vehicle_profile=vehicle_profile,
     )
 
 
@@ -291,16 +311,37 @@ def _environment_config(
     response_seed: int = 7,
     response_time_constant_s: float | None = None,
 ) -> CbfRlEnvConfig:
-    if policy.minimum_separation_m >= 20.0:
+    if policy.avoids_vertically:
+        is_sparrow = policy.vehicle_profile == "sparrow"
         return CbfRlEnvConfig(
             maximum_steps=maximum_steps,
-            cbf=x500_20m_cbf_config(policy.maximum_velocity_m_s),
+            cbf=(
+                (
+                    sparrow_10m_floor_cbf_config(policy.maximum_velocity_m_s)
+                    if policy.minimum_separation_m < 20.0
+                    else sparrow_20m_cbf_config(policy.maximum_velocity_m_s)
+                )
+                if is_sparrow
+                else x500_20m_cbf_config(policy.maximum_velocity_m_s)
+            ),
             response_time_constant_s=response_time_constant_s or 0.0,
             response_time_constant_range_s=(
-                None if response_time_constant_s is not None else (0.45, 0.75)
+                None
+                if response_time_constant_s is not None
+                # Sparrow's measured horizontal tau is 0.860 s (2026-08-15
+                # flight). Training against an upper bound of 0.75 taught the
+                # policy a plant quicker than the one it is judged on.
+                else ((0.45, 0.90) if is_sparrow else (0.45, 0.75))
             ),
             response_seed=response_seed,
-            maximum_acceleration_m_s2=3.0,
+            maximum_acceleration_m_s2=4.0 if is_sparrow else 3.0,
+            # Train inside the stack that scores it. Without this the policy
+            # never sees a yield role it will meet in every evaluation.
+            conflict_coordination=(
+                sparrow_20m_conflict_config(policy.maximum_velocity_m_s)
+                if is_sparrow
+                else None
+            ),
         )
     return CbfRlEnvConfig(maximum_steps=maximum_steps)
 
@@ -311,7 +352,7 @@ def _orbit_rollout(
     *,
     maximum_steps: int,
 ) -> dict[str, Any]:
-    high_speed_contract = policy.minimum_separation_m >= 20.0
+    high_speed_contract = policy.avoids_vertically
     points = tuple(
         (
             scenario.radius_m * math.cos(2.0 * math.pi * index / scenario.waypoint_count),
@@ -340,7 +381,16 @@ def _orbit_rollout(
                 if high_speed_contract
                 else FormationConfig()
             ),
-            maximum_acceleration_m_s2=3.0 if high_speed_contract else 0.5,
+            maximum_acceleration_m_s2=(
+                4.0
+                if policy.vehicle_profile == "sparrow"
+                else 3.0 if high_speed_contract else 0.5
+            ),
+            # Without this the corner branch never runs at all -- it needs both
+            # an acceleration and a tolerance -- so the orbit was flown with no
+            # curvature limiting whatsoever. Matches the runtime default in
+            # companion_safety.
+            corner_tracking_tolerance_m=1.0,
         )
         for drone in DRONE_IDS
     }
@@ -357,23 +407,32 @@ def _orbit_rollout(
 
     for step in range(steps):
         state = environment._swarm_state()
-        targets = {
+        commands = {
             drone: controllers[drone].command(
                 step * environment.config.dt_s,
                 state,
-            ).target_enu_m
+            )
             for drone in DRONE_IDS
         }
+        targets = {drone: commands[drone].target_enu_m for drone in DRONE_IDS}
         environment.goals = {
             drone: targets[drone]  # type: ignore[dict-item]
             for drone in DRONE_IDS
         }
         observations = environment.observations()
-        maximum_normalized_speed = (
-            scenario.speed_m_s / environment.config.cbf.maximum_velocity_m_s
-        )
         actions = {}
         for drone in DRONE_IDS:
+            # The runtime caps the policy at the deterministic tracker's speed
+            # for this frame (cbf_rl_shadow.py:174), which is what carries the
+            # corner slowdown. Capping at a constant instead handed the policy
+            # cruise speed through every corner and then scored it on the
+            # cross-track that produced.
+            tracker_speed_m_s = math.sqrt(
+                sum(value * value for value in commands[drone].velocity_enu_m_s)
+            )
+            maximum_normalized_speed = min(
+                scenario.speed_m_s, tracker_speed_m_s
+            ) / environment.config.cbf.maximum_velocity_m_s
             action = policy.act(observations[drone])
             magnitude = math.sqrt(sum(component * component for component in action))
             actions[drone] = (
@@ -530,14 +589,20 @@ def evaluate(
 
 
 def _candidate_score(
-    payload: tuple[np.ndarray, tuple[Scenario, ...], int, float],
+    payload: tuple[np.ndarray, tuple[Scenario, ...], int, float, str, float],
 ) -> float:
-    parameters, scenarios, maximum_steps, maximum_velocity_m_s = payload
+    (
+        parameters,
+        scenarios,
+        maximum_steps,
+        maximum_velocity_m_s,
+        vehicle_profile,
+        minimum_separation_m,
+    ) = payload
     score, _ = evaluate(
-        _policy(
-            parameters,
-            maximum_velocity_m_s=maximum_velocity_m_s,
-        ),
+        _policy(parameters, maximum_velocity_m_s=maximum_velocity_m_s,
+            vehicle_profile=vehicle_profile,
+            minimum_separation_m=minimum_separation_m),
         scenarios,
         maximum_steps=maximum_steps,
     )
@@ -554,6 +619,8 @@ def train(
     maximum_steps: int = 3200,
     workers: int = 1,
     maximum_velocity_m_s: float = 10.0,
+    vehicle_profile: str = "x500",
+    minimum_separation_m: float = 20.0,
 ) -> tuple[ProximityCbfRlPolicy, dict[str, Any]]:
     if (
         generations <= 0
@@ -562,10 +629,16 @@ def train(
         or workers <= 0
         or not math.isfinite(maximum_velocity_m_s)
         or maximum_velocity_m_s <= 0.0
+        or vehicle_profile not in {"x500", "sparrow"}
     ):
         raise ValueError("training population configuration is invalid")
     selected_scenarios = tuple(
-        scenarios or x500_training_scenarios(maximum_velocity_m_s)
+        scenarios
+        or (
+            sparrow_training_scenarios(maximum_velocity_m_s)
+            if vehicle_profile == "sparrow"
+            else x500_training_scenarios(maximum_velocity_m_s)
+        )
     )
     if not selected_scenarios:
         raise ValueError("at least one training scenario is required")
@@ -574,10 +647,9 @@ def train(
     deviation = np.array((1.0, 2.0, 15.0, 25.0, 0.30, 3.0))
     best_parameters = mean.copy()
     best_score, best_runs = evaluate(
-        _policy(
-            best_parameters,
-            maximum_velocity_m_s=maximum_velocity_m_s,
-        ),
+        _policy(best_parameters, maximum_velocity_m_s=maximum_velocity_m_s,
+            vehicle_profile=vehicle_profile,
+            minimum_separation_m=minimum_separation_m),
         selected_scenarios,
         maximum_steps=maximum_steps,
     )
@@ -601,6 +673,8 @@ def train(
                                 selected_scenarios,
                                 maximum_steps,
                                 maximum_velocity_m_s,
+                                vehicle_profile,
+                                minimum_separation_m,
                             )
                         )
                         for candidate in candidates
@@ -616,6 +690,8 @@ def train(
                                 selected_scenarios,
                                 maximum_steps,
                                 maximum_velocity_m_s,
+                                vehicle_profile,
+                                minimum_separation_m,
                             )
                             for candidate in candidates
                         ),
@@ -633,10 +709,9 @@ def train(
                 best_score = float(scores[generation_best])
                 best_parameters = candidates[generation_best].copy()
                 _, best_runs = evaluate(
-                    _policy(
-                        best_parameters,
-                        maximum_velocity_m_s=maximum_velocity_m_s,
-                    ),
+                    _policy(best_parameters, maximum_velocity_m_s=maximum_velocity_m_s,
+            vehicle_profile=vehicle_profile,
+            minimum_separation_m=minimum_separation_m),
                     selected_scenarios,
                     maximum_steps=maximum_steps,
                 )
@@ -651,15 +726,14 @@ def train(
         if executor is not None:
             executor.shutdown()
 
-    policy = _policy(
-        best_parameters,
-        maximum_velocity_m_s=maximum_velocity_m_s,
-    )
+    policy = _policy(best_parameters, maximum_velocity_m_s=maximum_velocity_m_s,
+            vehicle_profile=vehicle_profile,
+            minimum_separation_m=minimum_separation_m)
     speed_tag = f"{maximum_velocity_m_s:g}".replace(".", "P")
     report = {
-        "milestone": f"CBF_RL_X500_20M_{speed_tag}MS_OFFLINE_TRAINING",
-        "algorithm": f"parallel_seeded_cross_entropy_x500_20m_{speed_tag}ms_v1",
-        "vehicle_profile": "x500",
+        "milestone": f"CBF_RL_{vehicle_profile.upper()}_20M_{speed_tag}MS_OFFLINE_TRAINING",
+        "algorithm": f"parallel_seeded_cross_entropy_{vehicle_profile}_20m_{speed_tag}ms_v1",
+        "vehicle_profile": vehicle_profile,
         "seed": seed,
         "generations": generations,
         "population": population,
@@ -684,6 +758,15 @@ def main() -> int:
     parser.add_argument("--maximum-steps", type=int, default=3200)
     parser.add_argument("--maximum-velocity-m-s", type=float, default=10.0)
     parser.add_argument(
+        "--vehicle-profile", choices=("x500", "sparrow"), default="x500"
+    )
+    parser.add_argument(
+        "--minimum-separation-m",
+        type=float,
+        default=20.0,
+        help="physical floor; 10 m is the operator's emergency floor for Sparrow",
+    )
+    parser.add_argument(
         "--workers", type=int, default=max(1, min(8, (os.cpu_count() or 2) - 2))
     )
     parser.add_argument("--output")
@@ -696,10 +779,13 @@ def main() -> int:
         maximum_steps=arguments.maximum_steps,
         workers=arguments.workers,
         maximum_velocity_m_s=arguments.maximum_velocity_m_s,
+        vehicle_profile=arguments.vehicle_profile,
+        minimum_separation_m=arguments.minimum_separation_m,
     )
     speed_tag = f"{arguments.maximum_velocity_m_s:g}".replace(".", "p")
+    floor_tag = f"{arguments.minimum_separation_m:g}".replace(".", "p")
     output = arguments.output or (
-        f"models/cbf_rl_policy_x500_20m_{speed_tag}ms_v1.json"
+        f"cbf_rl_policy_{arguments.vehicle_profile}_{floor_tag}m_{speed_tag}ms_v1.json"
     )
     policy.save(output, training=report)
     print(json.dumps(report, indent=2))

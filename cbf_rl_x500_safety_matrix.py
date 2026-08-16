@@ -12,8 +12,17 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-from cbf_rl_env import CbfRlEnvConfig, CbfRlEnvironment, DRONE_IDS, x500_20m_cbf_config
+from cbf_command_gate import CbfConfig
+from cbf_rl_env import (
+    CbfRlEnvConfig,
+    CbfRlEnvironment,
+    DRONE_IDS,
+    sparrow_10m_floor_cbf_config,
+    sparrow_20m_cbf_config,
+    x500_20m_cbf_config,
+)
 from cbf_rl_policy import ProximityCbfRlPolicy
+from conflict_coordinator import sparrow_20m_conflict_config
 
 
 Vector3 = tuple[float, float, float]
@@ -31,24 +40,55 @@ class SafetyCase:
     goals: dict[str, Vector3]
     maximum_steps: int
     vehicle_profile: str = "x500"
+    minimum_separation_m: float = 20.0
+
+
+def profile_config(
+    vehicle_profile: str,
+    maximum_velocity_m_s: float = 10.0,
+    minimum_separation_m: float = 20.0,
+) -> CbfConfig:
+    """The one contract a policy is judged against, for spawn and for solve.
+
+    The floor is a parameter, not a property of the airframe. Reading it from
+    the profile alone judged a policy trained against a 10 m floor with a 20 m
+    gate: it approached to the distance it was taught was safe, the gate held
+    it at twice that, and three separately-seeded policies all stopped at the
+    same 22.055 m -- which is 20 + 2 + uncertainty, the wrong contract's
+    requirement, and the tell that the wall was the harness rather than them.
+    """
+    if vehicle_profile == "sparrow":
+        return (
+            sparrow_10m_floor_cbf_config(maximum_velocity_m_s)
+            if minimum_separation_m < 20.0
+            else sparrow_20m_cbf_config(maximum_velocity_m_s)
+        )
+    return x500_20m_cbf_config(maximum_velocity_m_s)
 
 
 def _required_distance(
     speed_m_s: float,
     angle_deg: float,
     age_ms: float,
-    relative_braking_acceleration_m_s2: float = 6.0,
+    config: CbfConfig,
 ) -> float:
+    """Spawn far enough apart that the encounter is real, read off the contract.
+
+    Every term here used to be a literal that happened to equal the config it
+    was meant to mirror. Two sources for one number is one too many: lower the
+    floor in the config and the spawn geometry silently kept testing the old
+    one.
+    """
     relative_speed = 2.0 * speed_m_s * math.sin(math.radians(angle_deg) / 2.0)
-    uncertainty = 0.10 * math.sqrt(2.0 * (0.041 + 0.041 + 0.071))
+    uncertainty = config.covariance_sigma * math.sqrt(2.0 * (0.041 + 0.041 + 0.071))
     return (
-        20.0
-        + 2.0
+        config.minimum_separation_m
+        + config.tracking_reserve_m
         + uncertainty
-        + relative_speed * (0.65 + age_ms / 1000.0)
+        + relative_speed * (config.command_latency_s + age_ms / 1000.0)
         + relative_speed
         * relative_speed
-        / (2.0 * relative_braking_acceleration_m_s2)
+        / (2.0 * config.relative_braking_acceleration_m_s2)
     )
 
 
@@ -57,6 +97,8 @@ def _horizontal_case(
     angle: float,
     tau: float,
     age_ms: float,
+    vehicle_profile: str = "x500",
+    minimum_separation_m: float = 20.0,
 ) -> SafetyCase:
     if angle == 0.0:
         spawn = {"UAV-01": (-80.0, 0.0, 20.0), "UAV-02": (-80.0, 30.0, 20.0)}
@@ -68,7 +110,15 @@ def _horizontal_case(
         radians = math.radians(angle)
         second = (math.cos(radians), math.sin(radians), 0.0)
         relative_speed = 2.0 * speed * math.sin(radians / 2.0)
-        initial_distance = _required_distance(speed, angle, age_ms) + 15.0
+        initial_distance = (
+            _required_distance(
+                speed,
+                angle,
+                age_ms,
+                profile_config(vehicle_profile, minimum_separation_m=minimum_separation_m),
+            )
+            + 15.0
+        )
         time_to_conflict = initial_distance / relative_speed
         spawn = {
             "UAV-01": tuple(-speed * time_to_conflict * value for value in first),
@@ -106,11 +156,27 @@ def _horizontal_case(
         velocity=velocity,
         goals=goals,
         maximum_steps=max(800, int(math.ceil(horizon_s / 0.05))) + 1200,
+        vehicle_profile=vehicle_profile,
+        minimum_separation_m=minimum_separation_m,
     )
 
 
-def _vertical_case(speed: float, tau: float, age_ms: float) -> SafetyCase:
-    initial_distance = _required_distance(speed, 180.0, age_ms) + 15.0
+def _vertical_case(
+    speed: float,
+    tau: float,
+    age_ms: float,
+    vehicle_profile: str = "x500",
+    minimum_separation_m: float = 20.0,
+) -> SafetyCase:
+    initial_distance = (
+        _required_distance(
+            speed,
+            180.0,
+            age_ms,
+            profile_config(vehicle_profile, minimum_separation_m=minimum_separation_m),
+        )
+        + 15.0
+    )
     half = initial_distance / 2.0
     center = 100.0
     spawn = {
@@ -133,19 +199,46 @@ def _vertical_case(speed: float, tau: float, age_ms: float) -> SafetyCase:
         velocity=velocity,
         goals=goals,
         maximum_steps=max(800, int(math.ceil(horizon_s / 0.05))) + 1200,
+        vehicle_profile=vehicle_profile,
+        minimum_separation_m=minimum_separation_m,
     )
 
 
-def cases(maximum_speed_m_s: int = 10) -> tuple[SafetyCase, ...]:
-    if maximum_speed_m_s < 1:
-        raise ValueError("maximum speed must be positive")
+def cases(
+    maximum_speed_m_s: int = 10,
+    vehicle_profile: str = "x500",
+    minimum_separation_m: float = 20.0,
+) -> tuple[SafetyCase, ...]:
+    if maximum_speed_m_s < 1 or vehicle_profile not in {"x500", "sparrow"}:
+        raise ValueError("maximum speed and vehicle profile are invalid")
     result: list[SafetyCase] = []
-    variants = ((0.45, 0.0), (0.75, 100.0), (0.75, 150.0))
+    variants = (
+        # 0.90 s, not the 0.75 s this used to carry. The 2026-08-15 Sparrow
+        # flight measured the horizontal response at tau = 0.860 s against a
+        # vertical 0.275 s, so the old upper bound was testing a plant faster
+        # than the real one on the axis that matters most for a crossing.
+        ((0.45, 0.0), (0.90, 100.0))
+        if vehicle_profile == "sparrow"
+        else ((0.45, 0.0), (0.75, 100.0), (0.75, 150.0))
+    )
     for speed in range(1, maximum_speed_m_s + 1):
         for tau, age_ms in variants:
             for angle in range(0, 181, 15):
-                result.append(_horizontal_case(float(speed), float(angle), tau, age_ms))
-            result.append(_vertical_case(float(speed), tau, age_ms))
+                result.append(
+                    _horizontal_case(
+                        float(speed),
+                        float(angle),
+                        tau,
+                        age_ms,
+                        vehicle_profile,
+                        minimum_separation_m,
+                    )
+                )
+            result.append(
+                _vertical_case(
+                    float(speed), tau, age_ms, vehicle_profile, minimum_separation_m
+                )
+            )
     return tuple(result)
 
 
@@ -158,11 +251,46 @@ def _bounded_action(action: Vector3, maximum_normalized_speed: float) -> Vector3
     )  # type: ignore[return-value]
 
 
+def certified_speed_by_geometry(results: list[dict[str, Any]]) -> dict[str, int]:
+    """Highest speed each geometry family clears with every rung below it clean.
+
+    One number for the whole matrix hides the shape of a failure. Sparrow at
+    20 m/s reads FAIL, but the four cases that fail are all vertical head-on,
+    and horizontal -- which is what a drawn mission actually flies, since
+    missions are polylines at one altitude -- is clean to the top. Reporting a
+    single verdict there would either overstate the envelope or discard a
+    result that is genuinely usable.
+    """
+    families: dict[str, dict[float, bool]] = {}
+    for result in results:
+        family = (
+            "vertical_180deg"
+            if result.get("encounter_angle_deg") is None
+            else "horizontal"
+        )
+        speed = float(result["speed_m_s"])
+        passed = families.setdefault(family, {})
+        passed[speed] = passed.get(speed, True) and bool(result["success"])
+    certified = {}
+    for family, by_speed in families.items():
+        top = 0
+        for speed in sorted(by_speed):
+            if not by_speed[speed]:
+                break
+            top = int(speed)
+        certified[family] = top
+    return certified
+
+
 def evaluate_case(
     payload: tuple[ProximityCbfRlPolicy, SafetyCase]
 ) -> dict[str, Any]:
     policy, case = payload
-    cbf = x500_20m_cbf_config(policy.maximum_velocity_m_s)
+    cbf = profile_config(
+        case.vehicle_profile,
+        policy.maximum_velocity_m_s,
+        case.minimum_separation_m,
+    )
     # A vertical right-hand pass can trace almost one avoidance-radius orbit
     # before returning to the goal line. The direct-path horizon alone is not
     # a valid liveness bound at 1 m/s.
@@ -179,8 +307,19 @@ def evaluate_case(
             maximum_steps=evaluation_maximum_steps,
             cbf=cbf,
             response_time_constant_s=case.response_time_constant_s,
-            maximum_acceleration_m_s2=3.0,
-            state_max_age_ms=150.0,
+            maximum_acceleration_m_s2=(
+                4.0 if case.vehicle_profile == "sparrow" else 3.0
+            ),
+            state_max_age_ms=(100.0 if case.vehicle_profile == "sparrow" else 150.0),
+            # Sparrow is judged against the stack it actually flies, which has
+            # run this between the policy and the barrier since the mission
+            # milestone. x500 keeps the older gate so its certified rungs still
+            # mean what they meant when they were signed off.
+            conflict_coordination=(
+                sparrow_20m_conflict_config(policy.maximum_velocity_m_s)
+                if case.vehicle_profile == "sparrow"
+                else None
+            ),
         ),
     )
     observations = environment.reset(
@@ -233,17 +372,24 @@ def run(
     *,
     workers: int = 1,
     maximum_speed_m_s: int | None = None,
+    expected_vehicle_profile: str | None = None,
 ) -> dict[str, Any]:
     policy = ProximityCbfRlPolicy.load(model)
-    if policy.vehicle_profile != "x500":
-        raise ValueError("the safety matrix requires an x500 policy")
+    if policy.vehicle_profile not in {"x500", "sparrow"}:
+        raise ValueError("the safety matrix requires a high-speed policy")
+    if expected_vehicle_profile and policy.vehicle_profile != expected_vehicle_profile:
+        raise ValueError("the safety matrix vehicle profile does not match")
     selected_maximum_speed = maximum_speed_m_s or round(policy.maximum_velocity_m_s)
     if (
         selected_maximum_speed < 1
         or selected_maximum_speed > policy.maximum_velocity_m_s
     ):
         raise ValueError("safety-matrix speed exceeds the policy contract")
-    selected = cases(selected_maximum_speed)
+    selected = cases(
+        selected_maximum_speed,
+        policy.vehicle_profile,
+        policy.minimum_separation_m,
+    )
     if workers == 1:
         results = [evaluate_case((policy, case)) for case in selected]
     else:
@@ -257,15 +403,18 @@ def run(
             )
     failures = [result for result in results if not result["success"]]
     return {
-        "milestone": f"CBF_RL_X500_20M_1_TO_{selected_maximum_speed}MS_SAFETY_MATRIX",
-        "vehicle_profile": "x500",
+        "milestone": f"CBF_RL_{policy.vehicle_profile.upper()}_20M_1_TO_{selected_maximum_speed}MS_SAFETY_MATRIX",
+        "vehicle_profile": policy.vehicle_profile,
         "model": str(model),
         "case_count": len(results),
+        "certified_speed_by_geometry_m_s": certified_speed_by_geometry(results),
         "workers": workers,
         "speed_values_m_s": list(range(1, selected_maximum_speed + 1)),
         "horizontal_angles_deg": list(range(0, 181, 15)),
-        "response_time_constants_s": [0.45, 0.75],
-        "peer_ages_ms": [0.0, 100.0, 150.0],
+        "response_time_constants_s": sorted(
+            {case.response_time_constant_s for case in selected}
+        ),
+        "peer_ages_ms": sorted({case.peer_age_ms for case in selected}),
         "minimum_distance_m": min(result["minimum_distance_m"] for result in results),
         "minimum_dynamic_margin_m": min(
             result["minimum_dynamic_margin_m"] for result in results
@@ -284,16 +433,17 @@ def main() -> int:
         "--workers", type=int, default=max(1, min(8, (os.cpu_count() or 2) - 2))
     )
     parser.add_argument("--maximum-speed-m-s", type=int)
-    parser.add_argument(
-        "--output", default="artifacts/cbf_rl_x500_20m_safety_matrix.json"
-    )
+    parser.add_argument("--output")
     arguments = parser.parse_args()
     report = run(
         arguments.model,
         workers=arguments.workers,
         maximum_speed_m_s=arguments.maximum_speed_m_s,
     )
-    destination = Path(arguments.output)
+    destination = Path(
+        arguments.output
+        or f"artifacts/cbf_rl_{report['vehicle_profile']}_20m_safety_matrix.json"
+    )
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(
         json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"

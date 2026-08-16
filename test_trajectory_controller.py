@@ -9,6 +9,9 @@ from trajectory_controller import (
     SquareWaveVelocityTrajectory,
     TrajectoryReference,
     TrajectoryTrackingController,
+    braking_speed_limit_m_s,
+    corner_profile,
+    fillet_radius_m,
 )
 
 
@@ -234,7 +237,9 @@ class TrajectoryTrackingControllerTests(unittest.TestCase):
 
         self.assertGreater(max(speeds), 14.9)
         self.assertLess(min(speeds[100:]), 4.0)
-        self.assertLess(max(errors), 2.0)
+        # 1.795 m before the fillet radius carried its cosine and before the
+        # corner-exit pass existed, 0.476 m with both.
+        self.assertLess(max(errors), 0.6)
 
     def test_polygon_progress_follows_position_instead_of_elapsed_time(self):
         trajectory = ClosedPolylineTrajectory(
@@ -325,6 +330,83 @@ class TrajectoryTrackingControllerTests(unittest.TestCase):
                     self.trajectory,
                     corner_tracking_tolerance_m=value,
                 )
+
+
+class CornerExitProfileTests(unittest.TestCase):
+    """The corner-exit pass is what keeps tracking speed-independent."""
+
+    def fly_square(self, speed_m_s, tolerance_m=2.0, acceleration_m_s2=4.0):
+        edge_m = 300.0
+        trajectory = ClosedPolylineTrajectory(
+            waypoints_enu_m=(
+                (0.0, 0.0, 9.0),
+                (edge_m, 0.0, 9.0),
+                (edge_m, edge_m, 9.0),
+                (0.0, edge_m, 9.0),
+            ),
+            speed_m_s=speed_m_s,
+        )
+        controller = TrajectoryTrackingController(
+            "UAV-01",
+            trajectory,
+            FormationConfig(maximum_velocity_m_s=speed_m_s),
+            maximum_acceleration_m_s2=acceleration_m_s2,
+            corner_tracking_tolerance_m=tolerance_m,
+        )
+        step_s = 0.05
+        position, velocity, errors, speeds = [0.0, 0.0, 9.0], [0.0, 0.0, 0.0], [], []
+        for step in range(int(1.4 * 4 * edge_m / speed_m_s / step_s)):
+            command = controller.command(
+                step * step_s,
+                {"UAV-01": state(tuple(position), velocity=tuple(velocity))},
+            )
+            velocity = list(command.velocity_enu_m_s)
+            position = [position[a] + velocity[a] * step_s for a in range(3)]
+            errors.append(command.position_error_m or 0.0)
+            speeds.append(math.dist((0.0, 0.0, 0.0), velocity))
+        return max(errors), max(speeds)
+
+    def test_sparrow_holds_the_corner_budget_from_10_to_25_ms(self):
+        for speed_m_s in (10.0, 15.0, 20.0, 25.0):
+            with self.subTest(speed_m_s=speed_m_s):
+                worst_m, fastest_m_s = self.fly_square(speed_m_s)
+                # Without the exit pass this ran 1.21 m at 10 m/s and 3.03 m at
+                # 25 m/s -- the error tracked speed instead of the tolerance.
+                self.assertLess(worst_m, 2.0, "cross-track left the corner budget")
+                self.assertGreater(
+                    fastest_m_s, 0.99 * speed_m_s, "never reached cruise speed"
+                )
+
+    def test_tightening_the_tolerance_slows_the_corner(self):
+        loose_error_m, _ = self.fly_square(25.0, tolerance_m=5.0)
+        tight_error_m, _ = self.fly_square(25.0, tolerance_m=1.0)
+        self.assertLess(tight_error_m, loose_error_m)
+
+
+class FilletRadiusTests(unittest.TestCase):
+    def test_arc_stays_inside_the_tolerance_at_every_turn_angle(self):
+        """Measure the built arc instead of trusting the closed form."""
+        for turn_deg in (15, 30, 60, 90, 120, 150):
+            for tolerance_m in (0.5, 1.0, 2.0):
+                turn_rad = math.radians(turn_deg)
+                radius_m = fillet_radius_m(tolerance_m, turn_rad)
+                # Vertex at the origin, bisector along +y: the arc centre sits
+                # radius/cos(half) up the bisector.
+                centre_y = radius_m / math.cos(0.5 * turn_rad)
+                measured_m = min(
+                    math.hypot(radius_m * math.cos(t), centre_y + radius_m * math.sin(t))
+                    for t in (i * math.pi / 2000 for i in range(4001))
+                )
+                self.assertAlmostEqual(
+                    measured_m,
+                    tolerance_m,
+                    places=3,
+                    msg=f"{turn_deg} deg turn, {tolerance_m} m tolerance",
+                )
+
+    def test_sharper_turns_need_tighter_arcs(self):
+        radii = [fillet_radius_m(1.0, math.radians(d)) for d in (30, 60, 90, 120, 150)]
+        self.assertEqual(radii, sorted(radii, reverse=True))
 
 
 class TrajectoryReferenceTests(unittest.TestCase):
@@ -431,3 +513,101 @@ class ClosedPolylineEntryPointTest(unittest.TestCase):
     def test_a_vehicle_already_on_the_loop_enters_where_it_stands(self) -> None:
         standing = self.trajectory.reference(13.0).position_enu_m
         self.assertAlmostEqual(self.trajectory.nearest_time_s(standing), 13.0, places=3)
+
+
+class MissionSpeedPreviewTests(unittest.TestCase):
+    def preview(self, waypoints, speed_m_s, tolerance_m=2.0):
+        from trajectory_controller import mission_speed_preview
+
+        trajectory = ClosedPolylineTrajectory(
+            waypoints_enu_m=tuple(waypoints), speed_m_s=speed_m_s
+        )
+        return mission_speed_preview(
+            trajectory,
+            maximum_acceleration_m_s2=4.0,
+            corner_tracking_tolerance_m=tolerance_m,
+        )
+
+    def test_a_long_lap_reaches_the_requested_cruise(self):
+        report = self.preview(
+            ((0.0, 0.0, 9.0), (300.0, 0.0, 9.0), (300.0, 300.0, 9.0), (0.0, 300.0, 9.0)),
+            25.0,
+        )
+        self.assertTrue(report["reaches_requested_speed"])
+        self.assertAlmostEqual(report["achievable_speed_m_s"], 25.0, places=2)
+
+    def test_a_short_lap_reports_the_speed_it_can_actually_fly(self):
+        """The operator asks for 25 m/s on a 20 m square and must be told no."""
+        report = self.preview(
+            ((0.0, 0.0, 9.0), (20.0, 0.0, 9.0), (20.0, 20.0, 9.0), (0.0, 20.0, 9.0)),
+            25.0,
+        )
+        self.assertFalse(report["reaches_requested_speed"])
+        self.assertLess(report["achievable_speed_m_s"], 12.0)
+        self.assertEqual(report["requested_speed_m_s"], 25.0)
+
+    def test_a_tighter_tolerance_slows_the_slowest_corner(self):
+        square = ((0.0, 0.0, 9.0), (300.0, 0.0, 9.0), (300.0, 300.0, 9.0), (0.0, 300.0, 9.0))
+        loose = self.preview(square, 25.0, tolerance_m=5.0)
+        tight = self.preview(square, 25.0, tolerance_m=1.0)
+        self.assertLess(tight["slowest_corner_m_s"], loose["slowest_corner_m_s"])
+
+
+class ResponseLagCornerTests(unittest.TestCase):
+    """A corner budget is geometric; a real vehicle spends part of it catching up.
+
+    Measured on a 240 m square at 15 m/s with a 1 m tolerance and Sparrow's
+    0.860 s response: 3.489 m of cross-track when the lag is ignored, 0.145 m
+    when it is planned for. The aircraft was arriving at a 90 degree corner at
+    5.06 m/s against a command of about 1 m/s, having never been given the
+    distance to shed it.
+    """
+
+    def test_zero_lag_is_the_textbook_result(self) -> None:
+        """Default behaviour is unchanged for every caller that has not
+        measured its vehicle."""
+        self.assertAlmostEqual(
+            braking_speed_limit_m_s(2.0, 10.0, 4.0, 0.0),
+            math.sqrt(2.0**2 + 1.4 * 4.0 * 10.0),
+        )
+
+    def test_lag_lowers_the_approach_speed(self) -> None:
+        without = braking_speed_limit_m_s(2.0, 10.0, 4.0, 0.0)
+        with_lag = braking_speed_limit_m_s(2.0, 10.0, 4.0, 0.86)
+
+        self.assertLess(with_lag, without)
+        # The root is the speed whose own lag distance still leaves enough
+        # room to brake, so substituting it back reproduces the geometry.
+        self.assertAlmostEqual(
+            with_lag**2,
+            2.0**2 + 1.4 * 4.0 * (10.0 - with_lag * 0.86),
+            places=6,
+        )
+
+    def test_the_corner_speed_itself_is_capped_by_the_lag(self) -> None:
+        _, without_m_s, _ = corner_profile(math.pi / 2, 240.0, 240.0, 15.0, 4.0, 1.0)
+        _, with_lag_m_s, _ = corner_profile(
+            math.pi / 2, 240.0, 240.0, 15.0, 4.0, 1.0, 0.86
+        )
+
+        # v * tau * sin(half) inside the tolerance, at a 90 degree turn.
+        self.assertAlmostEqual(
+            with_lag_m_s, 1.0 / (0.86 * math.sin(math.pi / 4)), places=6
+        )
+        self.assertLess(with_lag_m_s, without_m_s)
+
+    def test_the_cap_scales_with_how_sharp_the_turn_is(self) -> None:
+        """An angle-blind cap would hold a 1 degree bend to a right angle's
+        speed -- and on a gentle bend the corner window covers nearly half the
+        leg, so the whole mission would crawl."""
+        speeds = [
+            corner_profile(
+                math.radians(degrees), 240.0, 240.0, 15.0, 4.0, 1.0, 0.86
+            )[1]
+            for degrees in (90.0, 45.0, 15.0, 1.0)
+        ]
+
+        self.assertEqual(speeds, sorted(speeds))
+        self.assertLess(speeds[0], 2.0)
+        # A 1 degree bend needs no help from the lag term at all.
+        self.assertEqual(speeds[-1], 15.0)

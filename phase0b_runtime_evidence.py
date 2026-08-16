@@ -28,12 +28,20 @@ from typing import Any, Callable, Iterable
 
 
 DRONE_MODELS = {
-    "UAV-01": "x500_custom_0",
-    "UAV-02": "x500_custom_1",
+    "UAV-01": os.environ.get("SWARM_GAZEBO_MODEL_UAV_01", "sparrow_gimbal_0"),
+    "UAV-02": os.environ.get("SWARM_GAZEBO_MODEL_UAV_02", "sparrow_gimbal_1"),
 }
-EXPECTED_CAMERA_WIDTH = 480
-EXPECTED_CAMERA_HEIGHT = 270
-EXPECTED_CAMERA_HORIZONTAL_FOV_RAD = 1.35
+EXPECTED_CAMERA_WIDTH = int(os.environ.get("SWARM_CAMERA_WIDTH", "640"))
+EXPECTED_CAMERA_HEIGHT = int(os.environ.get("SWARM_CAMERA_HEIGHT", "360"))
+EXPECTED_CAMERA_HORIZONTAL_FOV_RAD = float(
+    os.environ.get("SWARM_CAMERA_HORIZONTAL_FOV_RAD", "2.0")
+)
+EXPECTED_CAMERA_RATE_HZ = float(
+    os.environ.get("SWARM_GAZEBO_CAMERA_EXPECTED_RATE_HZ", "30")
+)
+EXPECTED_CAMERA_IMU_RATE_HZ = float(
+    os.environ.get("SWARM_GAZEBO_CAMERA_IMU_EXPECTED_RATE_HZ", "250")
+)
 DEFAULT_API_URL = "http://127.0.0.1:8000/api/drones"
 DEFAULT_DURATION_S = 12.0
 DEFAULT_API_INTERVAL_S = 0.5
@@ -792,8 +800,12 @@ class Phase0BRuntimeCollector:
     def subscribe(self) -> None:
         for drone_id, model_name in DRONE_MODELS.items():
             topics = self._camera_topics(model_name)
-            image_recorder = StreamRecorder(f"{drone_id}.camera_image", 50.0)
-            imu_recorder = StreamRecorder(f"{drone_id}.camera_imu", 100.0)
+            image_recorder = StreamRecorder(
+                f"{drone_id}.camera_image", EXPECTED_CAMERA_RATE_HZ
+            )
+            imu_recorder = StreamRecorder(
+                f"{drone_id}.camera_imu", EXPECTED_CAMERA_IMU_RATE_HZ
+            )
             self.streams[image_recorder.name] = image_recorder
             self.streams[imu_recorder.name] = imu_recorder
             self._subscribe(

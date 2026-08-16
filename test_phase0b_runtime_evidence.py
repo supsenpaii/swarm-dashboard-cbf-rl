@@ -6,6 +6,9 @@ from pathlib import Path
 
 from phase0b_runtime_evidence import (
     ClockMapping,
+    EXPECTED_CAMERA_HEIGHT,
+    EXPECTED_CAMERA_HORIZONTAL_FOV_RAD,
+    EXPECTED_CAMERA_WIDTH,
     StatsRecorder,
     StreamRecorder,
     evaluate_api_safety,
@@ -71,11 +74,23 @@ def test_stats_mean_rtf_uses_sim_and_real_deltas() -> None:
 
 
 def matching_camera_info() -> dict[str, object]:
-    fx = 480.0 / (2.0 * math.tan(1.35 / 2.0))
+    fx = EXPECTED_CAMERA_WIDTH / (
+        2.0 * math.tan(EXPECTED_CAMERA_HORIZONTAL_FOV_RAD / 2.0)
+    )
     return {
-        "width": 480,
-        "height": 270,
-        "intrinsics_k": [fx, 0.0, 240.0, 0.0, fx, 135.0, 0.0, 0.0, 1.0],
+        "width": EXPECTED_CAMERA_WIDTH,
+        "height": EXPECTED_CAMERA_HEIGHT,
+        "intrinsics_k": [
+            fx,
+            0.0,
+            EXPECTED_CAMERA_WIDTH / 2.0,
+            0.0,
+            fx,
+            EXPECTED_CAMERA_HEIGHT / 2.0,
+            0.0,
+            0.0,
+            1.0,
+        ],
         "distortion_k": [0.0, 0.0, 0.0, 0.0, 0.0],
     }
 
@@ -88,7 +103,7 @@ def test_camera_info_is_authoritative_when_contract_matches() -> None:
 
 def test_camera_info_mismatch_fails_closed() -> None:
     snapshot = matching_camera_info()
-    snapshot["width"] = 640
+    snapshot["width"] = EXPECTED_CAMERA_WIDTH + 1
     result = validate_camera_info(snapshot)
     assert not result["pass"]
     assert result["reason"] == "contract_mismatch"

@@ -60,22 +60,20 @@ def test_pose_interpolation_requires_two_valid_brackets() -> None:
         interpolate_pose(lower, upper, 4.0)
 
 
-def test_camera_sensor_extrinsic_translation_is_applied() -> None:
+def test_sparrow_camera_sensor_is_at_camera_link_origin() -> None:
     pose = {"position_xyz": (1.0, 2.0, 3.0), "quaternion_xyzw": (0.0, 0.0, 0.0, 1.0)}
     optical = camera_optical_center(pose)
     assert optical["position_xyz"] == pytest.approx(tuple(1.0 + CAMERA_SENSOR_TRANSLATION_IN_CAMERA_LINK_M[i] if i == 0 else (2.0 if i == 1 else 3.0) + CAMERA_SENSOR_TRANSLATION_IN_CAMERA_LINK_M[i] for i in range(3)))
 
 
-def test_camera_extrinsic_rotates_with_camera_link() -> None:
+def test_zero_camera_extrinsic_stays_at_link_origin_after_rotation() -> None:
     yaw_90 = (0.0, 0.0, math.sin(math.pi/4), math.cos(math.pi/4))
     optical = camera_optical_center({"position_xyz": (0.0, 0.0, 0.0), "quaternion_xyzw": yaw_90})
-    assert optical["position_xyz"] == pytest.approx((0.0, -0.0412, -0.162), abs=1e-6)
+    assert optical["position_xyz"] == pytest.approx((0.0, 0.0, 0.0), abs=1e-6)
 
 
-def test_gt_distance_uses_optical_center_not_link_origin() -> None:
+def test_gt_distance_uses_sparrow_optical_center_at_link_origin() -> None:
     camera = {"position_xyz": (0.0, 0.0, 0.0), "quaternion_xyzw": (0.0, 0.0, 0.0, 1.0)}
     target = {"position_xyz": (3.0, 0.0, 0.0), "quaternion_xyzw": (0.0, 0.0, 0.0, 1.0)}
     result = optical_center_distance(camera, target)
-    expected = math.sqrt((3.0+0.0412)**2 + 0.162**2)
-    assert result["distance_m"] == pytest.approx(expected)
-    assert result["distance_m"] != pytest.approx(3.0)
+    assert result["distance_m"] == pytest.approx(3.0)

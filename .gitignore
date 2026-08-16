@@ -4,6 +4,7 @@
 
 # Virtualenv and caches
 .venv/
+.venv
 __pycache__/
 *.py[cod]
 .pytest_cache/
@@ -19,8 +20,16 @@ build/
 logs/
 *.log
 
-# Trained model binaries
-models/
+# Trained model binaries and third-party weights stay local. The native
+# Sparrow plant is source input, so keep only those model directories tracked.
+models/*
+!models/models/
+models/models/*
+!models/models/SPARROW_TUNING_TUNG_BUOC.md
+!models/models/sparrow_base/
+!models/models/sparrow/
+!models/models/sparrow_gimbal_core/
+!models/models/sparrow_gimbal/
 
 # Distribution snapshots taken by hand
 handoff/

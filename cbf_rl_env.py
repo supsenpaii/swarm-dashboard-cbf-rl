@@ -8,12 +8,14 @@ network access, simulator process, or flight authority.
 
 from __future__ import annotations
 
+import dataclasses
 import math
 import random
 from dataclasses import dataclass, field
 from typing import Any, Mapping, Sequence
 
 from cbf_command_gate import CbfCommandGate, CbfConfig
+from conflict_coordinator import ConflictCoordinator, ConflictCoordinatorConfig
 
 
 DRONE_IDS = ("UAV-01", "UAV-02")
@@ -71,6 +73,49 @@ def x500_20m_cbf_config(maximum_velocity_m_s: float = 10.0) -> CbfConfig:
     )
 
 
+def sparrow_10m_floor_cbf_config(maximum_velocity_m_s: float = 10.0) -> CbfConfig:
+    """Sparrow contract with the 10 m emergency floor the operator asked for.
+
+    "10 to 20 m" is one contract, not two. The floor is the distance the pair
+    may never close inside; the 20 m end of that range appears on its own,
+    because `required_margin` grows with closing speed and already exceeds
+    20 m once the pair is closing at 6.81 m/s. So a static 10 m floor gives
+    exactly the asked-for behaviour with no ramp and no extra gain in the
+    feedback loop `design_margin_buffer_m` warns about: drones on parallel
+    tracks may sit 12 m apart and hold their paths, while anything genuinely
+    converging is held off at 20 m or more.
+
+    At the speeds this project cares about the floor is a minor term anyway --
+    at 25 m/s head-on it is 20 m of a 206 m requirement.
+    """
+    return dataclasses.replace(
+        sparrow_20m_cbf_config(maximum_velocity_m_s), minimum_separation_m=10.0
+    )
+
+
+def sparrow_20m_cbf_config(maximum_velocity_m_s: float = 10.0) -> CbfConfig:
+    """Sparrow 20 m contract using the airframe's 4 m/s^2 XY limit."""
+    return CbfConfig(
+        minimum_separation_m=20.0,
+        barrier_gain_s_inv=2.0,
+        maximum_velocity_m_s=maximum_velocity_m_s,
+        covariance_sigma=0.10,
+        # 0.86 s, measured, not the inherited 0.65. The 2026-08-15 Sparrow
+        # flight fits the horizontal response at tau = 0.860 s, and a head-on
+        # pair at 1 m/s breached the requirement by 0.13 m with the gate
+        # commanding a reversal the vehicle had not yet made. The shortfall
+        # scales with closing speed -- 0.42 m at 2 m/s closing, 8.4 m at 40 --
+        # so the old value was least accurate exactly where it mattered most.
+        command_latency_s=0.86,
+        relative_braking_acceleration_m_s2=8.0,
+        tracking_reserve_m=2.0,
+        design_margin_buffer_m=0.0,
+        require_position_covariance=True,
+        geofence_min_enu_m=(-500.0, -500.0, 0.0),
+        geofence_max_enu_m=(500.0, 500.0, 200.0),
+    )
+
+
 @dataclass(frozen=True)
 class CbfRlEnvConfig:
     dt_s: float = 0.05
@@ -98,6 +143,20 @@ class CbfRlEnvConfig:
     # Zero preserves legacy instantaneous velocity response. High-speed
     # profiles pair this with their CBF relative-braking contract.
     maximum_acceleration_m_s2: float = 0.0
+    # Deterministic yielding between the pair, off by default.
+    #
+    # The runtime has run a ConflictCoordinator between the policy and the CBF
+    # since the mission milestone (cbf_rl_shadow.py:181), but the offline gate
+    # never did, so the matrix has been judging a stack strictly weaker than
+    # the one that flies. That gap is invisible until a geometry needs someone
+    # to yield: at 20 m/s the vertical head-on cases deadlocked with thousands
+    # of hold frames while staying perfectly safe, because nothing in the
+    # evaluated stack decides which vehicle goes first.
+    #
+    # Off by default so every already-certified rung keeps meaning what it
+    # meant. Turning it on changes what PASS is, which is a decision about the
+    # certification method, not a tuning knob.
+    conflict_coordination: ConflictCoordinatorConfig | None = None
 
     def __post_init__(self) -> None:
         if (
@@ -141,6 +200,13 @@ class CbfRlEnvironment:
             )
             for drone in DRONE_IDS
         }
+        self.coordinators = (
+            # pair(), never shared(): shared() hangs the encounter state off a
+            # module global, which the matrix's parallel workers would trample.
+            ConflictCoordinator.pair(DRONE_IDS, self.config.conflict_coordination)
+            if self.config.conflict_coordination is not None
+            else None
+        )
         self.positions: dict[str, Vector3] = {}
         self.velocities: dict[str, Vector3] = {}
         self.covariances: dict[str, Vector3 | None] = {}
@@ -193,6 +259,11 @@ class CbfRlEnvironment:
         }
         self.reached = set()
         self.steps = 0
+        if self.coordinators is not None:
+            # Encounter state is per episode. Leaking a latched yield role from
+            # the previous case would make the matrix order-dependent.
+            for coordinator in self.coordinators.values():
+                coordinator.reset()
         span = self.config.response_time_constant_range_s
         if span is not None:
             self.response_time_constant_s = self._random.uniform(*span)
@@ -240,6 +311,16 @@ class CbfRlEnvironment:
         nominal = {drone: self._nominal_action(actions[drone]) for drone in DRONE_IDS}
         state = self._swarm_state()
         before = {drone: self._goal_distance(drone) for drone in DRONE_IDS}
+        if self.coordinators is not None:
+            # Same seat as the runtime: after the policy, before the barrier.
+            # There is no separate deterministic nominal here -- the policy is
+            # the nominal -- so it is passed for both arguments.
+            nominal = {
+                drone: self.coordinators[drone].filter(
+                    nominal[drone], nominal[drone], state
+                )[0]
+                for drone in DRONE_IDS
+            }
         commands = {
             drone: self.gates[drone].filter(nominal[drone], state)
             for drone in DRONE_IDS

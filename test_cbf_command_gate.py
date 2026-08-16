@@ -170,3 +170,67 @@ class CbfCommandGateTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ReachableVelocityTests(unittest.TestCase):
+    """Opt-in reachability: the solve may only pick a velocity the vehicle can take.
+
+    Measured on the 280-case Sparrow matrix with it enabled at 4 m/s^2 / 20 Hz:
+    safety never degraded -- physical_safe and dynamic_safe stayed true in all
+    280 -- but 178 cases stopped passing on liveness, with hold frames and 87
+    failures to reach the goal. The 0.2 m/s of authority a frame buys is less
+    than the correction the barrier asks for, so the solve reports infeasible
+    rather than reaching. It stays off until a barrier that spreads the
+    correction over frames justifies turning it on.
+    """
+
+    def config(self, **overrides):
+        return CbfConfig(
+            minimum_separation_m=4.0,
+            maximum_velocity_m_s=2.0,
+            geofence_min_enu_m=(-20.0, -20.0, 0.0),
+            geofence_max_enu_m=(20.0, 20.0, 20.0),
+            **overrides,
+        )
+
+    def test_off_by_default_leaves_the_command_unbounded_by_acceleration(self):
+        gate = CbfCommandGate("UAV-02", ("UAV-01",), self.config())
+        command = gate.filter(
+            (2.0, 0.0, 0.0),
+            {"UAV-02": state((0.0, 0.0, 5.0)), "UAV-01": state((15.0, 0.0, 5.0))},
+        )
+        self.assertTrue(command.active)
+        # Standing start to full command in one frame, the legacy contract.
+        self.assertAlmostEqual(command.velocity_enu_m_s[0], 2.0, places=6)
+
+    def test_enabled_keeps_the_command_inside_one_frame_of_acceleration(self):
+        gate = CbfCommandGate(
+            "UAV-02",
+            ("UAV-01",),
+            self.config(maximum_acceleration_m_s2=4.0, control_period_s=0.05),
+        )
+        command = gate.filter(
+            (2.0, 0.0, 0.0),
+            {"UAV-02": state((0.0, 0.0, 5.0)), "UAV-01": state((15.0, 0.0, 5.0))},
+        )
+        self.assertTrue(command.active)
+        self.assertAlmostEqual(command.velocity_enu_m_s[0], 0.2, places=6)
+
+    def test_reachability_is_measured_from_the_vehicle_not_from_zero(self):
+        gate = CbfCommandGate(
+            "UAV-02",
+            ("UAV-01",),
+            self.config(maximum_acceleration_m_s2=4.0, control_period_s=0.05),
+        )
+        command = gate.filter(
+            (2.0, 0.0, 0.0),
+            {
+                "UAV-02": state((0.0, 0.0, 5.0), velocity=(1.0, 0.0, 0.0)),
+                "UAV-01": state((15.0, 0.0, 5.0)),
+            },
+        )
+        self.assertAlmostEqual(command.velocity_enu_m_s[0], 1.2, places=6)
+
+    def test_a_positive_acceleration_needs_a_positive_control_period(self):
+        with self.assertRaises(ValueError):
+            self.config(maximum_acceleration_m_s2=4.0, control_period_s=0.0)

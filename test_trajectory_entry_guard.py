@@ -13,7 +13,8 @@ import math
 import pytest
 
 from companion_safety import CompanionSafetyMonitor
-from formation_controller import FormationSlot
+from conflict_coordinator import ConflictCoordinator, sparrow_20m_conflict_config
+from formation_controller import FormationConfig, FormationSlot
 from trajectory_controller import ClosedPolylineTrajectory, LinearTrajectory
 
 SQUARE = ClosedPolylineTrajectory(
@@ -22,12 +23,17 @@ SQUARE = ClosedPolylineTrajectory(
 )
 
 
-def monitor() -> CompanionSafetyMonitor:
+def monitor(maximum_velocity_m_s: float = 2.0) -> CompanionSafetyMonitor:
+    """The ceiling is a parameter because the tracker and the entry controller
+    share it, so a test that installs a faster leg has to raise it too -- a
+    mission above the ceiling is refused now, being the exact runaway this
+    file's docstring is about."""
     subject = CompanionSafetyMonitor(
         drone_id="UAV-01",
         peer_ids=("UAV-02",),
         leader_id="UAV-01",
         slots=(FormationSlot("UAV-02", (-10.0, 0.0, 0.0)),),
+        formation_config=FormationConfig(maximum_velocity_m_s=maximum_velocity_m_s),
     )
     subject.set_trajectory(SQUARE)
     return subject
@@ -165,7 +171,7 @@ def test_normal_tracking_lag_does_not_trip_the_re_entry():
 
 
 def test_linear_reentry_joins_at_current_progress_instead_of_flying_back_to_start():
-    subject = monitor()
+    subject = monitor(10.0)
     leg = LinearTrajectory((-70.0, 0.0, 9.0), (70.0, 0.0, 9.0), 10.0)
     subject.set_trajectory(leg)
     subject.evaluate(state((-70.0, 0.0, 9.0)), 1000.0, station_keeping=True)
@@ -182,7 +188,7 @@ def test_linear_reentry_joins_at_current_progress_instead_of_flying_back_to_star
 
 
 def test_linear_reentry_never_regresses_behind_scheduled_progress():
-    subject = monitor()
+    subject = monitor(10.0)
     leg = LinearTrajectory((70.0, 0.0, 9.0), (-70.0, 0.0, 9.0), 10.0)
     subject.set_trajectory(leg)
     subject.evaluate(state((70.0, 0.0, 9.0)), 1000.0, station_keeping=True)
@@ -204,3 +210,62 @@ def test_linear_reentry_never_regresses_behind_scheduled_progress():
 def test_the_two_radii_cannot_chatter():
     subject = monitor()
     assert subject.trajectory_reentry_error_m > subject.trajectory_entry_radius_m
+
+
+def latched_coordinator() -> ConflictCoordinator:
+    """A coordinator holding a confirmed head-on encounter."""
+    coordinators = ConflictCoordinator.pair(
+        ("UAV-01", "UAV-02"), sparrow_20m_conflict_config()
+    )
+    closing = {
+        "UAV-01": {
+            "valid": True,
+            "position_enu_m": (-28.0, 0.0, 9.0),
+            "velocity_enu_m_s": (10.0, 0.0, 0.0),
+        },
+        "UAV-02": {
+            "valid": True,
+            "position_enu_m": (28.0, 0.0, 9.0),
+            "velocity_enu_m_s": (-10.0, 0.0, 0.0),
+        },
+    }
+    subject = coordinators["UAV-01"]
+    subject.filter((10.0, 0.0, 0.0), (10.0, 0.0, 0.0), closing)
+    assert subject.active
+    return subject
+
+
+def test_a_yield_on_a_linear_leg_is_not_treated_as_lost_tracking():
+    """A one-sided yield in a shared corridor REQUIRES leaving the path by the
+    whole separation floor -- ~22.6 m at 20 m -- against a 5 m re-entry band.
+    Re-entering mid-encounter hands the coordinator an entry command pointing
+    back at the path instead of the corridor direction. Measured on the 1 m/s
+    head-on replay: dynamic margin 0.000 -> 5.585 m, CBF interventions 15.3%
+    -> 0%, and the peer's own cross-track 19.18 -> 0.54 m."""
+    subject = monitor(10.0)
+    leg = LinearTrajectory((-70.0, 0.0, 9.0), (70.0, 0.0, 9.0), 10.0)
+    subject.set_trajectory(leg)
+    subject.evaluate(state((-70.0, 0.0, 9.0)), 1000.0, station_keeping=True)
+    subject.cbf_rl_shadow.coordinator = latched_coordinator()
+
+    status = subject.evaluate(
+        state((0.0, 20.0, 9.0)), 1005.0, station_keeping=True
+    )
+
+    assert status.nominal_reason == "tracking_trajectory"
+    assert subject.trajectory_start_monotonic_s is not None
+
+
+def test_a_yield_on_a_closed_polygon_still_re_enters():
+    """A closed path has nowhere to yield to -- it comes back. Suppressing
+    re-entry there cost the 240 m counter-rotating square 2.399 m of dynamic
+    margin, down to 0.174 m."""
+    subject = monitor()
+    on_path = SQUARE.reference(0.0).position_enu_m
+    subject.evaluate(state(on_path), 1000.0, station_keeping=True)
+    subject.cbf_rl_shadow.coordinator = latched_coordinator()
+
+    status = subject.evaluate(state((0.0, 0.0, 0.5)), 1005.0, station_keeping=True)
+
+    assert status.nominal_reason == "trajectory_entering"
+    assert subject.trajectory_start_monotonic_s is None

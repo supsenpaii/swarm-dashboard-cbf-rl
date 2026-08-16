@@ -122,6 +122,59 @@ def waypoints_to_enu(
     return tuple(converted)
 
 
+def _orientation(a: Vector3, b: Vector3, c: Vector3) -> float:
+    return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
+
+
+def _on_segment(a: Vector3, b: Vector3, point: Vector3) -> bool:
+    return (
+        min(a[0], b[0]) - 1e-9 <= point[0] <= max(a[0], b[0]) + 1e-9
+        and min(a[1], b[1]) - 1e-9 <= point[1] <= max(a[1], b[1]) + 1e-9
+    )
+
+
+def _segments_cross(a: Vector3, b: Vector3, c: Vector3, d: Vector3) -> bool:
+    """Do closed segments ab and cd meet? Planar: a mission flies one altitude."""
+    d1, d2 = _orientation(c, d, a), _orientation(c, d, b)
+    d3, d4 = _orientation(a, b, c), _orientation(a, b, d)
+    if ((d1 > 0) != (d2 > 0)) and ((d3 > 0) != (d4 > 0)):
+        return True
+    return (
+        (abs(d1) <= 1e-9 and _on_segment(c, d, a))
+        or (abs(d2) <= 1e-9 and _on_segment(c, d, b))
+        or (abs(d3) <= 1e-9 and _on_segment(a, b, c))
+        or (abs(d4) <= 1e-9 and _on_segment(a, b, d))
+    )
+
+
+def self_intersecting_pair(waypoints: Sequence[Vector3]) -> tuple[int, int] | None:
+    """First pair of non-adjacent segments that cross, if any.
+
+    A crossing is not a cosmetic problem. Progress along the path is found by
+    nearest point, so at the crossing the two branches are equidistant and the
+    follower can pick the wrong one -- flying the mission out of order, or
+    skipping the leg between. Rejecting is the small, safe answer; supporting
+    it means carrying arclength state across frames.
+    """
+    count = len(waypoints)
+    for first in range(count):
+        for second in range(first + 1, count):
+            adjacent = (
+                second == first + 1
+                or (first == 0 and second == count - 1)
+            )
+            if adjacent:
+                continue
+            if _segments_cross(
+                waypoints[first],
+                waypoints[(first + 1) % count],
+                waypoints[second],
+                waypoints[(second + 1) % count],
+            ):
+                return first, second
+    return None
+
+
 def validate_mission(
     payload: Mapping[str, Any],
     origin: GeodeticOrigin,
@@ -158,6 +211,13 @@ def validate_mission(
                 f"waypoints {index} and {(index + 1) % count} are closer than "
                 f"{MINIMUM_SEGMENT_M} m apart"
             )
+
+    crossing = self_intersecting_pair(waypoints)
+    if crossing is not None:
+        raise MissionRejected(
+            f"segments {crossing[0]} and {crossing[1]} cross: the follower "
+            "cannot tell the branches apart at the crossing"
+        )
 
     try:
         return ClosedPolylineTrajectory(waypoints_enu_m=waypoints, speed_m_s=speed_m_s)

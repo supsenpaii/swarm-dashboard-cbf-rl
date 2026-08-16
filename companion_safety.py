@@ -46,7 +46,11 @@ from cbf_command_gate import (
     cbf_position_covariance_required,
 )
 from cbf_rl_shadow import CbfRlShadow
-from conflict_coordinator import ConflictCoordinator, x500_20m_conflict_config
+from conflict_coordinator import (
+    ConflictCoordinator,
+    sparrow_20m_conflict_config,
+    x500_20m_conflict_config,
+)
 from emergency_supervisor import EmergencyConfig, EmergencyDecision, EmergencySupervisor
 from formation_controller import (
     AltitudeHoldConfig,
@@ -76,11 +80,14 @@ def _coordinated_cbf_rl(
 ) -> CbfRlShadow:
     runtime = CbfRlShadow.from_environment()
     peer_id = next(other for other in all_drone_ids if other != drone_id)
-    config = (
-        x500_20m_conflict_config(runtime.policy.maximum_velocity_m_s)
-        if runtime.policy is not None and runtime.policy.vehicle_profile == "x500"
-        else None
-    )
+    config = None
+    if runtime.policy is not None:
+        if runtime.policy.vehicle_profile == "x500":
+            config = x500_20m_conflict_config(runtime.policy.maximum_velocity_m_s)
+        elif runtime.policy.vehicle_profile == "sparrow":
+            config = sparrow_20m_conflict_config(
+                runtime.policy.maximum_velocity_m_s
+            )
     runtime.coordinator = ConflictCoordinator.shared(drone_id, peer_id, config)
     return runtime
 
@@ -266,6 +273,12 @@ class CompanionSafetyMonitor:
         self.mission_corner_tracking_tolerance_m = _float_env(
             "SWARM_MISSION_CORNER_TRACKING_TOLERANCE_M", 1.0
         )
+        # The corner budget is geometric; a vehicle with a real velocity lag
+        # spends part of it just catching up. Zero keeps the pure-geometry
+        # behaviour, so only a profile that has MEASURED its aircraft sets it.
+        self.mission_response_time_constant_s = _float_env(
+            "SWARM_MISSION_RESPONSE_TIME_CONSTANT_S", 0.0
+        )
         # Opt-in, per-drone: when set, REPLACES the formation/altitude-hold
         # nominal for this drone entirely (see evaluate()). Reuses the
         # formation controller's own resolved gain/velocity/arrival config,
@@ -281,6 +294,7 @@ class CompanionSafetyMonitor:
                     else None
                 ),
                 corner_tracking_tolerance_m=self.mission_corner_tracking_tolerance_m,
+                response_time_constant_s=self.mission_response_time_constant_s,
             )
             if trajectory is not None
             else None
@@ -399,6 +413,19 @@ class CompanionSafetyMonitor:
         """
         if self.trajectory_start_monotonic_s is not None:
             raise RuntimeError("mission is already running")
+        # Same trap as the env path: the entry controller and the tracker share
+        # one ceiling, so a mission drawn faster than it degrades to an endless
+        # crawl toward a reference that has already left.
+        configured_speed_m_s = getattr(trajectory, "speed_m_s", None)
+        if (
+            configured_speed_m_s is not None
+            and configured_speed_m_s > self.formation.config.maximum_velocity_m_s
+        ):
+            raise ValueError(
+                f"mission speed {configured_speed_m_s:g} m/s exceeds this "
+                f"vehicle's {self.formation.config.maximum_velocity_m_s:g} m/s "
+                "tracking ceiling"
+            )
         self.trajectory_entry_time_s = None
         self.trajectory_tracking = (
             TrajectoryTrackingController(
@@ -411,6 +438,7 @@ class CompanionSafetyMonitor:
                     else None
                 ),
                 corner_tracking_tolerance_m=self.mission_corner_tracking_tolerance_m,
+                response_time_constant_s=self.mission_response_time_constant_s,
             )
             if trajectory is not None
             else None
@@ -439,6 +467,29 @@ class CompanionSafetyMonitor:
         followers = tuple(
             sorted(other for other in all_drone_ids if other != leader_id)
         )
+        formation_maximum_velocity_m_s = _float_env(
+            "SWARM_FORMATION_MAXIMUM_VELOCITY_M_S", 2.0
+        )
+        trajectory = _trajectory_env(drone_id)
+        # One ceiling serves both the entry controller and the tracker (they
+        # share formation config), so a trajectory faster than it can never be
+        # flown -- the reference runs away, the error crosses the re-entry
+        # threshold, and the vehicle falls back to approaching at the ceiling
+        # forever. That failure is a silent crawl, not a crash, so it reads on
+        # a dashboard as "flying, slowly" for as long as anyone lets it. Refuse
+        # the pair up front instead, naming both knobs.
+        configured_speed_m_s = getattr(trajectory, "speed_m_s", None)
+        if (
+            configured_speed_m_s is not None
+            and configured_speed_m_s > formation_maximum_velocity_m_s
+        ):
+            raise ValueError(
+                f"{drone_id} trajectory speed {configured_speed_m_s:g} m/s exceeds "
+                f"SWARM_FORMATION_MAXIMUM_VELOCITY_M_S "
+                f"({formation_maximum_velocity_m_s:g} m/s); the entry controller "
+                "and the tracker share that ceiling, so the path could never be "
+                "entered"
+            )
         return cls(
             drone_id=drone_id,
             peer_ids=tuple(sorted(other for other in all_drone_ids if other != drone_id)),
@@ -450,9 +501,7 @@ class CompanionSafetyMonitor:
                 position_gain_s_inv=_float_env(
                     "SWARM_FORMATION_POSITION_GAIN_S_INV", 0.6
                 ),
-                maximum_velocity_m_s=_float_env(
-                    "SWARM_FORMATION_MAXIMUM_VELOCITY_M_S", 2.0
-                ),
+                maximum_velocity_m_s=formation_maximum_velocity_m_s,
                 arrival_radius_m=_float_env("SWARM_FORMATION_ARRIVAL_RADIUS_M", 0.25),
             ),
             cbf_config=CbfConfig(
@@ -482,7 +531,7 @@ class CompanionSafetyMonitor:
                 altitude_base_m=_float_env("SWARM_EMERGENCY_ALTITUDE_BASE_M", 10.0),
                 altitude_step_m=_float_env("SWARM_EMERGENCY_ALTITUDE_STEP_M", 3.0),
             ),
-            trajectory=_trajectory_env(drone_id),
+            trajectory=trajectory,
             cbf_rl_shadow=(
                 CbfRlShadow.from_environment()
                 if len(all_drone_ids) != 2
@@ -529,8 +578,30 @@ class CompanionSafetyMonitor:
                 # The spatial polygon follower cannot run away in phase, but a
                 # genuine displacement from the path still returns to the
                 # bounded entry controller instead of chasing longitudinally.
+                #
+                # Not while a conflict is latched, though.  A one-sided yield in
+                # a shared corridor REQUIRES the yielding vehicle to leave its
+                # path by the full separation floor -- ~22.6 m at the 20 m
+                # floor, against a 5 m re-entry threshold -- so re-entering
+                # there hands the coordinator an entry command pointing back at
+                # the path in place of the corridor direction, and the lane
+                # change comes out perpendicular.  The displacement is the
+                # maneuver, not a tracking failure; re-entry resumes on release.
+                # The coordinator state read here is one frame old, which is
+                # nothing against a latch that lasts the whole encounter.
+                # Linear legs only.  A closed polygon has nowhere to yield TO
+                # -- the path comes back -- and suppressing re-entry there cost
+                # the 240 m counter-rotating square 2.399 m of dynamic margin,
+                # down to 0.174 m.
+                coordinator = self.cbf_rl_shadow.coordinator
+                yielding_on_a_leg = (
+                    coordinator is not None
+                    and coordinator.active
+                    and isinstance(self.trajectory_tracking.trajectory, LinearTrajectory)
+                )
                 if (
-                    nominal.position_error_m is not None
+                    not yielding_on_a_leg
+                    and nominal.position_error_m is not None
                     and nominal.position_error_m > self.trajectory_reentry_error_m
                 ):
                     scheduled_time_s = mission_elapsed_s + (

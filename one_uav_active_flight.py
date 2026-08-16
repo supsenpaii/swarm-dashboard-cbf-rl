@@ -17,9 +17,24 @@ UAV-01 is the formation leader and therefore has no slot: its nominal
 controller reports `formation_slot_unassigned` and outputs zero velocity.
 There is no climb command anywhere in the companion pipeline, so a
 companion-driven ascent is not merely untested, it is not expressible.
-PX4's own AUTO takeoff (MIS_TAKEOFF_ALT = 9.0 m, a firmware default this
-project does not change) lifts the vehicle, and OFFBOARD is handed over at a
-stable hover.
+PX4's own AUTO takeoff lifts the vehicle to MIS_TAKEOFF_ALT, and OFFBOARD is
+handed over at a stable hover.
+
+MIS_TAKEOFF_ALT IS NOT 9 m
+--------------------------
+This docstring used to claim 9.0 m and call it an unchanged firmware default.
+Both halves were wrong: PX4 ships 2.5 m, and the value on a given instance is
+whatever was last saved to its parameter file. Every driver here waits for a
+~10 m hover envelope, so on a stock instance the vehicle levels off at 2.5 m
+and the driver times out with `timeout_waiting_for:hover_reached` -- which
+looks exactly like a broken vertical channel and was read as one for three
+days, including the 2026-08-12 "vertical channel blocker". The vertical axis
+was fine the whole time; on Sparrow it measures gain 1.060, tau 0.275 s.
+
+Check it before blaming the aircraft:
+
+    px4-param --instance 0 show MIS_TAKEOFF_ALT
+    px4-param --instance 0 set MIS_TAKEOFF_ALT 10.0
 
 That makes the flight a test of the thing actually in question: whether the
 companion's setpoint stream can HOLD an armed, airborne vehicle in OFFBOARD.
@@ -156,6 +171,15 @@ class Flight:
                 self.log("CONFIRMED", what=description, **self.brief(last))
                 return last
             time.sleep(poll_s)
+        if "hover" in description:
+            # The overwhelmingly likely cause, and the one that cost three
+            # days: PX4 ships MIS_TAKEOFF_ALT at 2.5 m while every driver
+            # here waits for a ~10 m envelope, so the vehicle levels off
+            # early and this reads as a dead vertical channel.
+            raise FlightAbort(
+                f"timeout_waiting_for:{description}"
+                " (check px4-param show MIS_TAKEOFF_ALT against the hover envelope)"
+            )
         raise FlightAbort(f"timeout_waiting_for:{description}")
 
     @staticmethod

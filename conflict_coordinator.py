@@ -44,6 +44,12 @@ class ConflictCoordinatorConfig:
     release_at_reserve_when_nonclosing: bool = False
     clear_uses_mission_velocity: bool = False
     yield_lateral_speed_m_s: float = 0.0
+    # A fixed prediction horizon is a distance that shrinks with closing
+    # speed: 8 s of lead time is 160 m at 20 m/s closing but only 16 m at
+    # 2 m/s, which is already inside the margin the CBF will demand. Below
+    # this distance an encounter is latched on geometry alone, so the
+    # coordinator can never arrive after the shield it is meant to precede.
+    minimum_engagement_distance_m: float = 0.0
 
     def __post_init__(self) -> None:
         values = (
@@ -63,6 +69,9 @@ class ConflictCoordinatorConfig:
             or self.release_frames <= 0
             or not math.isfinite(self.yield_lateral_speed_m_s)
             or self.yield_lateral_speed_m_s < 0.0
+            or not math.isfinite(self.minimum_engagement_distance_m)
+            or self.minimum_engagement_distance_m < 0.0
+            or self.minimum_engagement_distance_m > self.trigger_distance_m
         ):
             raise ValueError("conflict coordinator configuration is invalid")
 
@@ -99,6 +108,44 @@ def x500_20m_conflict_config(
             if maximum_velocity_m_s <= 10.0
             else 0.5 * maximum_velocity_m_s + 2.0
         ),
+        minimum_engagement_distance_m=dynamic_boundary_m,
+    )
+
+
+def sparrow_20m_conflict_config(
+    maximum_velocity_m_s: float = 10.0,
+) -> ConflictCoordinatorConfig:
+    """Early one-sided yielding for the Sparrow 20 m envelope."""
+    if not math.isfinite(maximum_velocity_m_s) or maximum_velocity_m_s <= 0.0:
+        raise ValueError("maximum velocity must be positive and finite")
+    relative_speed_m_s = 2.0 * maximum_velocity_m_s
+    dynamic_boundary_m = (
+        20.0
+        + 2.0
+        # 0.86 s is Sparrow's measured command response, not the 0.65 s the
+        # x500 rungs were signed off against; the CBF gate uses the same
+        # number, and this boundary is now the coordinator's own engagement
+        # floor, so the two must agree or the shield acts first.
+        + relative_speed_m_s * (0.86 + 0.10)
+        + relative_speed_m_s * relative_speed_m_s / (2.0 * 8.0)
+    )
+    return ConflictCoordinatorConfig(
+        trigger_distance_m=max(120.0, dynamic_boundary_m + 25.0),
+        release_distance_m=80.0,
+        encounter_reset_distance_m=100.0,
+        predicted_miss_distance_m=20.0,
+        prediction_horizon_s=8.0,
+        reserve_separation_m=20.0,
+        yield_gain_s_inv=0.6,
+        release_frames=10,
+        release_at_reserve_when_nonclosing=True,
+        clear_uses_mission_velocity=True,
+        yield_lateral_speed_m_s=(
+            3.0
+            if maximum_velocity_m_s <= 10.0
+            else 0.5 * maximum_velocity_m_s + 2.0
+        ),
+        minimum_engagement_distance_m=dynamic_boundary_m,
     )
 
 
@@ -246,7 +293,11 @@ class ConflictCoordinator:
         )
         threat = bool(
             distance < self.config.trigger_distance_m
-            and 0.0 < time_to_closest < self.config.prediction_horizon_s
+            and time_to_closest > 0.0
+            and (
+                time_to_closest < self.config.prediction_horizon_s
+                or distance < self.config.minimum_engagement_distance_m
+            )
             and miss_distance < self.config.predicted_miss_distance_m
         )
         with self._lock:

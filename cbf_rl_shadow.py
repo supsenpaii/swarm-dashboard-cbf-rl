@@ -252,14 +252,20 @@ def _validate_active_contract(
         (config.minimum_separation_m, policy.minimum_separation_m),
         (config.barrier_gain_s_inv, 2.0),
         (config.maximum_velocity_m_s, policy.maximum_velocity_m_s),
-        (config.command_latency_s, 0.65),
+        # Per profile, like braking and the design buffer beside it. Sparrow's
+        # 0.86 s is its measured response; x500 keeps the 0.65 s its certified
+        # rungs were signed off against.
+        (
+            config.command_latency_s,
+            0.86 if policy.vehicle_profile == "sparrow" else 0.65,
+        ),
         (
             config.design_margin_buffer_m,
             5.0 if policy.vehicle_profile == "x500" else 0.0,
         ),
         (config.covariance_sigma, 0.10),
     ]
-    if policy.minimum_separation_m >= 20.0:
+    if policy.avoids_vertically:
         relative_braking_acceleration = (
             6.0 if policy.vehicle_profile == "x500" else 8.0
         )
