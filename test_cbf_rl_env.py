@@ -98,6 +98,35 @@ class CbfRlEnvironmentTests(unittest.TestCase):
         self.assertFalse(terminated)
         self.assertIn("UAV-01", environment.reached)
 
+    def test_mission_velocity_points_at_the_goal_and_sheds_speed_into_it(self) -> None:
+        """The coordinator's `mission` argument, which used to be the policy.
+
+        Every role in ConflictCoordinator rebuilds its output from `mission`
+        for the Sparrow config, so this vector -- not the policy -- is what
+        the matrix actually certifies.
+        """
+        config = CbfRlEnvConfig(
+            maximum_acceleration_m_s2=4.0,
+            response_time_constant_s=0.86,
+            mission_speed_m_s=15.0,
+        )
+        environment = CbfRlEnvironment(
+            {"UAV-01": (100.0, 0.0, 9.0), "UAV-02": (0.0, 50.0, 9.0)}, config
+        )
+        environment.reset({"UAV-01": (0.0, 0.0, 9.0), "UAV-02": (0.0, 0.0, 9.0)})
+
+        far = environment._mission_velocity("UAV-01")
+        self.assertAlmostEqual(far[0], 15.0)
+        self.assertAlmostEqual(far[1], 0.0)
+
+        environment.positions["UAV-01"] = (99.0, 0.0, 9.0)
+        near = environment._mission_velocity("UAV-01")
+        self.assertLess(near[0], 15.0)
+        self.assertGreater(near[0], 0.0)
+
+        environment.positions["UAV-01"] = (100.0, 0.0, 9.0)
+        self.assertEqual(environment._mission_velocity("UAV-01"), (0.0, 0.0, 0.0))
+
 
 if __name__ == "__main__":
     unittest.main()

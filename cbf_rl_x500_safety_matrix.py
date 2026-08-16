@@ -320,6 +320,9 @@ def evaluate_case(
                 if case.vehicle_profile == "sparrow"
                 else None
             ),
+            # The policy is bounded to the case speed below, so the mission
+            # the coordinator rebuilds its output from is bounded with it.
+            mission_speed_m_s=case.speed_m_s,
         ),
     )
     observations = environment.reset(

@@ -16,6 +16,7 @@ from typing import Any, Mapping, Sequence
 
 from cbf_command_gate import CbfCommandGate, CbfConfig
 from conflict_coordinator import ConflictCoordinator, ConflictCoordinatorConfig
+from trajectory_controller import braking_speed_limit_m_s
 
 
 DRONE_IDS = ("UAV-01", "UAV-02")
@@ -157,6 +158,11 @@ class CbfRlEnvConfig:
     # meant. Turning it on changes what PASS is, which is a decision about the
     # certification method, not a tuning knob.
     conflict_coordination: ConflictCoordinatorConfig | None = None
+    # Speed of the deterministic mission velocity handed to the coordinator.
+    # None means the CBF ceiling, which is right for training; an evaluation
+    # that caps the policy below that ceiling must cap the mission with it, or
+    # the mission outruns the case it is meant to fly.
+    mission_speed_m_s: float | None = None
 
     def __post_init__(self) -> None:
         if (
@@ -173,6 +179,10 @@ class CbfRlEnvConfig:
             or self.maximum_acceleration_m_s2 < 0.0
         ):
             raise ValueError("CBF-RL environment configuration is invalid")
+        if self.mission_speed_m_s is not None and (
+            not math.isfinite(self.mission_speed_m_s) or self.mission_speed_m_s <= 0.0
+        ):
+            raise ValueError("mission speed is invalid")
         span = self.response_time_constant_range_s
         if span is not None and (
             len(span) != 2
@@ -312,12 +322,12 @@ class CbfRlEnvironment:
         state = self._swarm_state()
         before = {drone: self._goal_distance(drone) for drone in DRONE_IDS}
         if self.coordinators is not None:
-            # Same seat as the runtime: after the policy, before the barrier.
-            # There is no separate deterministic nominal here -- the policy is
-            # the nominal -- so it is passed for both arguments.
+            # Same seat as the runtime: after the policy, before the barrier,
+            # and handed the same two arguments the runtime hands it -- the
+            # policy as candidate, a deterministic mission velocity as mission.
             nominal = {
                 drone: self.coordinators[drone].filter(
-                    nominal[drone], nominal[drone], state
+                    nominal[drone], self._mission_velocity(drone), state
                 )[0]
                 for drone in DRONE_IDS
             }
@@ -425,6 +435,41 @@ class CbfRlEnvironment:
             max(-1.0, min(1.0, component))
             * self.config.cbf.maximum_velocity_m_s
             for component in vector
+        )  # type: ignore[return-value]
+
+    def _mission_velocity(self, drone: str) -> Vector3:
+        """The deterministic goal-seeking command, the coordinator's `mission`.
+
+        The runtime feeds the coordinator two different things: the policy as
+        candidate, and the trajectory tracker's command as mission. This
+        environment used to pass the policy for both, which quietly certified
+        a wiring no vehicle flies -- and it mattered, because
+        `clear_uses_mission_velocity` and the yield lane-change rebuild the
+        output from `mission` at every role.
+        """
+        distance = self._goal_distance(drone)
+        if distance <= self.config.arrival_radius_m:
+            return (0.0, 0.0, 0.0)
+        speed = self.config.mission_speed_m_s or self.config.cbf.maximum_velocity_m_s
+        if self.config.maximum_acceleration_m_s2 > 0.0:
+            # A tracker sheds speed into its endpoint; a bare goal-direction
+            # vector at cruise does not, and a lagged plant then orbits the
+            # arrival radius forever. Same braking law the mission controller
+            # uses, so the stand-in arrives the way the real one does.
+            speed = min(
+                speed,
+                braking_speed_limit_m_s(
+                    0.0,
+                    distance,
+                    self.config.maximum_acceleration_m_s2,
+                    self.response_time_constant_s,
+                ),
+            )
+        return tuple(
+            (self.goals[drone][axis] - self.positions[drone][axis])
+            / distance
+            * speed
+            for axis in range(3)
         )  # type: ignore[return-value]
 
     def _goal_distance(self, drone: str) -> float:
