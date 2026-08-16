@@ -358,6 +358,31 @@ class CompanionSafetyConfigTests(unittest.TestCase):
         self.assertEqual(reference.position_enu_m, (0.0, 0.0, 10.0))
         self.assertEqual(reference.velocity_enu_m_s, (1.5, 0.0, 0.0))
 
+    def test_polyline_trajectory_kind_is_parsed_from_environment(self) -> None:
+        environment = {
+            "SWARM_TRAJECTORY_UAV_01_KIND": "polyline",
+            "SWARM_TRAJECTORY_UAV_01_WAYPOINTS_ENU_M": (
+                "0,0,30:240,0,30:240,240,30:0,240,30"
+            ),
+            "SWARM_TRAJECTORY_UAV_01_SPEED_M_S": "15",
+            "SWARM_FORMATION_MAXIMUM_VELOCITY_M_S": "15",
+        }
+        with mock.patch.dict("os.environ", environment, clear=True):
+            built = CompanionSafetyMonitor.from_environment(
+                "UAV-01", ("UAV-01", "UAV-02")
+            )
+
+        trajectory = built.trajectory_tracking.trajectory
+        self.assertEqual(len(trajectory.waypoints_enu_m), 4)
+        self.assertEqual(trajectory.reference(0.0).position_enu_m, (0.0, 0.0, 30.0))
+
+    def test_polyline_without_waypoints_fails_loud(self) -> None:
+        with mock.patch.dict(
+            "os.environ", {"SWARM_TRAJECTORY_UAV_01_KIND": "polyline"}, clear=True
+        ):
+            with self.assertRaises(ValueError):
+                CompanionSafetyMonitor.from_environment("UAV-01", ("UAV-01", "UAV-02"))
+
     def test_unknown_trajectory_kind_fails_loud(self) -> None:
         with mock.patch.dict(
             "os.environ", {"SWARM_TRAJECTORY_UAV_01_KIND": "spiral"}, clear=True

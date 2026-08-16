@@ -127,6 +127,24 @@ def _vector_env(name: str, default: str) -> Vector3:
     return values  # type: ignore[return-value]
 
 
+def _waypoints_env(name: str) -> tuple[Vector3, ...]:
+    """`e,n,u:e,n,u:...` -- colons between waypoints, commas inside one.
+
+    Colon rather than semicolon because run_all.sh sources these profiles as
+    shell, where an unquoted semicolon ends the assignment.
+    """
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        raise ValueError(f"{name} is required for a polyline trajectory")
+    waypoints = []
+    for chunk in raw.split(":"):
+        values = tuple(float(value.strip()) for value in chunk.split(","))
+        if len(values) != 3:
+            raise ValueError(f"{name} requires three ENU components per waypoint")
+        waypoints.append(values)
+    return tuple(waypoints)
+
+
 def _slot_env(drone_id: str) -> Vector3:
     return _vector_env(
         f"SWARM_FORMATION_SLOT_{drone_id.replace('-', '_')}_ENU_M", "-10,0,0"
@@ -154,6 +172,14 @@ def _trajectory_env(drone_id: str) -> Trajectory | None:
             radius_m=_float_env(f"{prefix}_RADIUS_M", 5.0),
             angular_rate_rad_s=_float_env(f"{prefix}_ANGULAR_RATE_RAD_S", 0.2),
             start_angle_rad=_float_env(f"{prefix}_START_ANGLE_RAD", 0.0),
+        )
+    if kind == "polyline":
+        # The corner logic -- angle-scaled speed cap and lag-aware braking --
+        # only ever runs on a polygon vertex, and no env-driven profile could
+        # reach it. ClosedPolylineTrajectory validates the shape itself.
+        return ClosedPolylineTrajectory(
+            waypoints_enu_m=_waypoints_env(f"{prefix}_WAYPOINTS_ENU_M"),
+            speed_m_s=_float_env(f"{prefix}_SPEED_M_S", 1.0),
         )
     if kind == "square_wave":
         return SquareWaveVelocityTrajectory(
