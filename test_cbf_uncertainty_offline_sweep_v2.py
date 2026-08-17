@@ -68,16 +68,45 @@ class FlightTraceReplayTests(unittest.TestCase):
             "UAV-01": (0.04306085780262947, 0.04300913214683533, 0.07411964237689972),
             "UAV-02": (0.0433967150747776, 0.04333620145916939, 0.07437072694301605),
         },)
+        # The edge sat between 1.40 and 1.50 until 2026-08-17, when the
+        # companion started applying its configured acceleration limit to a
+        # LinearTrajectory instead of only to a closed polyline. Commanding a
+        # step change to cruise gave the pair closing speeds no real vehicle
+        # reaches, and required_margin is quadratic in closing speed -- so the
+        # old edge was pessimistic for a reason that was an artifact of the
+        # simulation, not a property of the barrier. It now sits between 1.50
+        # and 1.60.
         results = {
             sigma: simulate(scenario, sigma, covariance_frames=measured_max).as_dict()
-            for sigma in (0.10, 1.40, 1.50)
+            for sigma in (0.10, 1.50, 1.60)
         }
         completers = _expected_completers(scenario)
 
         self.assertEqual(_feasible(results[0.10], completers), (True, True))
-        self.assertEqual(_feasible(results[1.40], completers), (True, True))
-        self.assertEqual(_feasible(results[1.50], completers), (False, False))
-        self.assertIsNotNone(results[1.50]["first_infeasible_s"])
+        self.assertEqual(_feasible(results[1.50], completers), (True, True))
+        self.assertEqual(_feasible(results[1.60], completers), (False, False))
+        self.assertIsNotNone(results[1.60]["first_infeasible_s"])
+
+    def test_the_sweep_answers_the_same_whatever_ran_before_it(self) -> None:
+        """The coordinator's encounter ledger is a module global.
+
+        Without a reset per run this test gave one answer under pytest and
+        another standalone, which is how the acceleration-limit change above
+        first surfaced -- as a failure that vanished when the file was run on
+        its own.
+        """
+        scenario = replace(
+            next(item for item in scenarios() if item.name == "crossing_validated"),
+            peer_age_ms=100.0,
+        )
+        completers = _expected_completers(scenario)
+
+        first = _feasible(simulate(scenario, 0.10).as_dict(), completers)
+        for _ in range(3):
+            simulate(scenario, 1.60)
+        again = _feasible(simulate(scenario, 0.10).as_dict(), completers)
+
+        self.assertEqual(first, again)
 
 
 if __name__ == "__main__":

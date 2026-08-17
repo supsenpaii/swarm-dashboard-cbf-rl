@@ -53,6 +53,7 @@ from typing import Any
 
 from cbf_command_gate import CbfConfig
 from companion_safety import CompanionSafetyMonitor
+from conflict_coordinator import reset_shared_conflict_state
 from formation_controller import FormationConfig, FormationSlot
 from swarm_state import ned_variance_to_enu
 from trajectory_controller import LinearTrajectory, Trajectory
@@ -327,6 +328,14 @@ def simulate(
         raise ValueError("velocity time constant must be finite and nonnegative")
 
     drones = tuple(scenario.spawn)
+    # The coordinator keys its encounter ledger by drone pair in a module
+    # global, so run N+1 would otherwise inherit N's priority alternation and
+    # its release latch and answer a different question than the one asked --
+    # the same reason sparrow_corridor_replay resets it. Without this, a sweep
+    # gives one answer under pytest and another standalone, which was how the
+    # 2026-08-17 acceleration-limit change surfaced as a mysterious failure in
+    # a test that passed on its own.
+    reset_shared_conflict_state(drones)
     config = _cbf_config(scenario, sigma, with_covariance=with_covariance)
     monitors = {
         drone: CompanionSafetyMonitor(

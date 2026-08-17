@@ -92,6 +92,34 @@ def _coordinated_cbf_rl(
     return runtime
 
 
+def _command_acceleration_limit(
+    trajectory: Any, configured_m_s2: float
+) -> float | None:
+    """The command rate limit for this path, or None to leave it unlimited.
+
+    Applies to every trajectory a vehicle is asked to FLY. It used to apply
+    only to a closed polyline, which left LinearTrajectory -- every corridor
+    rung, and now every two-point drawn mission -- commanding a step change
+    to cruise and letting PX4 sort it out.
+
+    That is not a cosmetic difference. It is why the corridor replay could
+    not reproduce the runaway-clock failure that grounded the ladder: with no
+    limit the replay's first-order plant followed the step at an effective
+    ~14 m/s^2 and reached 13.7 m/s one second in, while the real vehicle was
+    held to MPC_ACC_HOR_MAX = 4 m/s^2. The simulated transient gap was a
+    quarter of the real one -- 11.4 m against 46.8 -- so it stayed close
+    enough to the 5 m runaway threshold to recover every time, and the
+    offline tool reported a healthy flight the aircraft could not fly.
+
+    SquareWaveVelocityTrajectory is the exception, and the reason is in its
+    name: it exists to measure the response to a step, and a limited step is
+    not one.
+    """
+    if trajectory is None or isinstance(trajectory, SquareWaveVelocityTrajectory):
+        return None
+    return configured_m_s2
+
+
 def _own_position(state: Any) -> Vector3 | None:
     """This drone's ENU position, or None when the state cannot be trusted.
 
@@ -314,10 +342,8 @@ class CompanionSafetyMonitor:
                 drone_id,
                 trajectory,
                 self.formation.config,
-                maximum_acceleration_m_s2=(
-                    self.mission_maximum_acceleration_m_s2
-                    if isinstance(trajectory, ClosedPolylineTrajectory)
-                    else None
+                maximum_acceleration_m_s2=_command_acceleration_limit(
+                    trajectory, self.mission_maximum_acceleration_m_s2
                 ),
                 corner_tracking_tolerance_m=self.mission_corner_tracking_tolerance_m,
                 response_time_constant_s=self.mission_response_time_constant_s,
@@ -458,10 +484,8 @@ class CompanionSafetyMonitor:
                 self.drone_id,
                 trajectory,
                 self.formation.config,
-                maximum_acceleration_m_s2=(
-                    self.mission_maximum_acceleration_m_s2
-                    if isinstance(trajectory, ClosedPolylineTrajectory)
-                    else None
+                maximum_acceleration_m_s2=_command_acceleration_limit(
+                    trajectory, self.mission_maximum_acceleration_m_s2
                 ),
                 corner_tracking_tolerance_m=self.mission_corner_tracking_tolerance_m,
                 response_time_constant_s=self.mission_response_time_constant_s,
