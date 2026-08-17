@@ -20,12 +20,55 @@
   },
   "matrix": {
     "case_count": 280,
+    "certified_speed_by_geometry_m_s": {
+      "horizontal": 10,
+      "vertical_180deg": 10
+    },
     "failure_count": 0,
+    "failures": [],
+    "horizontal_angles_deg": [
+      0,
+      15,
+      30,
+      45,
+      60,
+      75,
+      90,
+      105,
+      120,
+      135,
+      150,
+      165,
+      180
+    ],
     "maximum_speed_m_s": 10,
-    "minimum_distance_m": 22.055319,
+    "milestone": "CBF_RL_SPARROW_20M_1_TO_10MS_SAFETY_MATRIX",
+    "minimum_distance_m": 22.055349,
     "minimum_dynamic_margin_m": 0.0,
-    "sha256": "af1088bc6eebb4a6c4e283c934203f1169e235c1b78ff2c982a76cdc430f0ae7",
-    "verdict": "PASS"
+    "model": "cbf_rl_policy_sparrow_20m_10ms_v1.json",
+    "peer_ages_ms": [
+      0.0,
+      100.0
+    ],
+    "response_time_constants_s": [
+      0.45,
+      0.9
+    ],
+    "speed_values_m_s": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10
+    ],
+    "vehicle_profile": "sparrow",
+    "verdict": "PASS",
+    "workers": 8
   },
   "policy": {
     "format": "cbf_rl_sparrow_20m_policy_v1",
@@ -48,6 +91,7 @@
     "why": "The runtime passes the policy as candidate and the trajectory tracker's command as mission (cbf_rl_shadow.py:181). The offline environment passed the policy for BOTH, and for the Sparrow config every coordinator role rebuilds its output from mission -- clear_uses_mission_velocity is True and the yield lane change reconstructs the vector from mission plus the tangent. So every number signed before this measured a wiring no vehicle flies.",
     "why_the_margin_fell_to_zero": "A minimally-invasive CBF converges exactly onto its constraint by construction, which is documented at length on CbfConfig.design_margin_buffer_m. Minimum distance is now 22.055 m at every rung, the requirement to six figures. The old 4.741 and 2.661 m were the POLICY's avoidance bias steering the pair wide -- a bias that has never reached an aircraft, because the coordinator discards the candidate at every role."
   },
+  "recertified_2026_08_17_vertical_yield_and_posable_vertical_case": "Re-signed after two changes to the safety layer. (1) A purely vertical encounter had no avoidance maneuver at all: the yield's lane change needs a horizontal normal and a horizontal mission and had neither, so only the maximum_toward_peer clamp acted. The yield now steps sideways, latched for the encounter so its own displacement cannot switch it back to the horizontal branch. Measured on the 20 m/s vertical cases: minimum distance 22.31 -> 35.98 m, dynamic margin 0.156 -> 6.389 m. (2) _vertical_case scaled its geometry with speed and at 20 m/s placed both goals 0.728 m outside the 0-200 m geofence it is judged against, so the vehicles passed cleanly, reached the fence and hovered short of a goal they were forbidden to reach. That, not the missing maneuver, was the cause of the two long-standing 20 m/s failures; the case is now posed inside its own fence and raises rather than emitting an unpassable case.",
   "training": {
     "all_scenarios_successful": true,
     "best_score": 101321.3365946921,

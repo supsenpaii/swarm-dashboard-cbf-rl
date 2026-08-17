@@ -22,6 +22,11 @@ class _EncounterState:
     # The along-path direction the lane change is built on, frozen for the
     # duration of one yield.  See the latch site in `filter` for why.
     yield_heading: tuple[float, float] | None = None
+    # Whether this yield is a vertical one, decided on its first frame and
+    # held.  Also see `filter`: a vertical yield creates the very horizontal
+    # mission component that would otherwise switch it to the horizontal
+    # branch, one frame after it starts working.
+    yield_vertical: bool | None = None
 
 
 _SHARED_STATES: dict[tuple[str, str], _EncounterState] = {}
@@ -254,6 +259,7 @@ class ConflictCoordinator:
             self._state.released_until_clear = False
             self._state.yield_side = 1.0
             self._state.yield_heading = None
+            self._state.yield_vertical = None
 
     def filter(
         self,
@@ -367,6 +373,7 @@ class ConflictCoordinator:
                     self._state.active = False
                     self._state.release_count = 0
                     self._state.yield_heading = None
+                    self._state.yield_vertical = None
                     if self.config.release_at_reserve_when_nonclosing:
                         self._state.released_until_clear = True
                     elif distance >= self.config.encounter_reset_distance_m:
@@ -395,15 +402,34 @@ class ConflictCoordinator:
                     # horizontal conflict destroyed trajectory tracking.
                     horizontal_normal_norm = math.hypot(normal[0], normal[1])
                     mission_horizontal_speed = math.hypot(mission[0], mission[1])
+                    side = self._state.yield_side
+                    # Latched, not re-decided per frame: a vertical yield
+                    # steps sideways, and one frame later that displacement
+                    # gives `mission` a horizontal component pointing back at
+                    # the axis. Re-deciding would hand the horizontal branch
+                    # that pull-back as its along-path heading and fly the
+                    # vehicle straight back into the standoff.
+                    if self._state.yield_vertical is None:
+                        self._state.yield_vertical = (
+                            mission_horizontal_speed <= 1.0e-6
+                        )
                     if (
-                        horizontal_normal_norm > 1.0e-6
+                        not self._state.yield_vertical
                         and mission_horizontal_speed > 1.0e-6
                     ):
-                        tangent = (
-                            -normal[1] / horizontal_normal_norm,
-                            normal[0] / horizontal_normal_norm,
-                        )
-                        side = self._state.yield_side
+                        if horizontal_normal_norm > 1.0e-6:
+                            tangent = (
+                                -normal[1] / horizontal_normal_norm,
+                                normal[0] / horizontal_normal_norm,
+                            )
+                        else:
+                            # A vertically stacked pair has no horizontal
+                            # normal, and then every horizontal direction is
+                            # perpendicular to it. Step across the mission.
+                            tangent = (
+                                -mission[1] / mission_horizontal_speed,
+                                mission[0] / mission_horizontal_speed,
+                            )
                         lateral_speed = min(
                             self.config.yield_lateral_speed_m_s,
                             mission_horizontal_speed,
@@ -438,6 +464,39 @@ class ConflictCoordinator:
                             mission_direction[1] * forward_speed
                             + side * tangent[1] * lateral_speed,
                             mission[2],
+                        )
+                    elif self._state.yield_vertical and abs(mission[2]) > 1.0e-6:
+                        # A purely vertical mission: the block above needs a
+                        # horizontal mission to preserve and has none, so it
+                        # used to leave the yield with no maneuver at all --
+                        # only the maximum_toward_peer clamp slowing the
+                        # approach. Nothing then broke the symmetry of a
+                        # vertical head-on, and the pair held separation
+                        # forever without ever passing: the two liveness
+                        # failures in the 20 m/s matrix, still safe at 22.3 m
+                        # and 0.156 m of margin after 17,218 steps.
+                        #
+                        # Stepping sideways is free here for the same reason
+                        # the horizontal lane change spends forward speed:
+                        # the mission has no horizontal component to give up.
+                        vertical_speed = abs(mission[2])
+                        lateral_speed = min(
+                            self.config.yield_lateral_speed_m_s, vertical_speed
+                        )
+                        remaining = math.sqrt(
+                            max(0.0, vertical_speed * vertical_speed
+                                - lateral_speed * lateral_speed)
+                        )
+                        step = (
+                            (-normal[1] / horizontal_normal_norm,
+                             normal[0] / horizontal_normal_norm)
+                            if horizontal_normal_norm > 1.0e-6
+                            else (1.0, 0.0)
+                        )
+                        output = (
+                            side * step[0] * lateral_speed,
+                            side * step[1] * lateral_speed,
+                            math.copysign(remaining, mission[2]),
                         )
                 maximum_toward_peer = sum(
                     peer[1][axis] * normal[axis] for axis in range(3)

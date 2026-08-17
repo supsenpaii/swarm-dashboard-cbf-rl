@@ -178,15 +178,35 @@ def _vertical_case(
         + 15.0
     )
     half = initial_distance / 2.0
-    center = 100.0
+    config = profile_config(
+        vehicle_profile, minimum_separation_m=minimum_separation_m
+    )
+    floor_m = config.geofence_min_enu_m[2]
+    ceiling_m = config.geofence_max_enu_m[2]
+    center = (floor_m + ceiling_m) / 2.0
+    # The goal has to sit inside the fence the barrier will hold the vehicle
+    # to. This case scales its spawn distance with speed, and at 20 m/s the
+    # 15 m goal margin put both goals 0.728 m OUTSIDE a 0-200 m fence: each
+    # vehicle flew its encounter cleanly, passed, reached the fence, and then
+    # hovered a fraction short of a goal it was forbidden to reach. That read
+    # as two liveness failures in the Sparrow 20 m/s matrix for as long as the
+    # matrix existed, and neither was one -- both held 22.3 m of separation
+    # over 25,000 steps.
+    goal_margin_m = min(15.0, (ceiling_m - floor_m) / 2.0 - half - 1.0)
+    if goal_margin_m <= 0.0:
+        raise ValueError(
+            f"vertical case at {speed:g} m/s needs "
+            f"{2.0 * (half + 1.0):.1f} m of fence and has "
+            f"{ceiling_m - floor_m:.1f} m"
+        )
     spawn = {
         "UAV-01": (0.0, 0.0, center - half),
         "UAV-02": (0.0, 0.0, center + half),
     }
     velocity = {"UAV-01": (0.0, 0.0, speed), "UAV-02": (0.0, 0.0, -speed)}
     goals = {
-        "UAV-01": (0.0, 0.0, center + half + 15.0),
-        "UAV-02": (0.0, 0.0, center - half - 15.0),
+        "UAV-01": (0.0, 0.0, center + half + goal_margin_m),
+        "UAV-02": (0.0, 0.0, center - half - goal_margin_m),
     }
     horizon_s = 2.0 * half / speed + 35.0
     return SafetyCase(
@@ -413,6 +433,11 @@ def run(
         "certified_speed_by_geometry_m_s": certified_speed_by_geometry(results),
         "workers": workers,
         "speed_values_m_s": list(range(1, selected_maximum_speed + 1)),
+        # The rung this sweep certifies. It was never emitted, so every
+        # certification carried a hand-written copy -- two sources for one
+        # number, which is exactly what _required_distance's own comment
+        # warns about, and the ladder test reads this one.
+        "maximum_speed_m_s": selected_maximum_speed,
         "horizontal_angles_deg": list(range(0, 181, 15)),
         "response_time_constants_s": sorted(
             {case.response_time_constant_s for case in selected}
