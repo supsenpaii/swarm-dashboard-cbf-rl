@@ -27,6 +27,8 @@ class _EncounterState:
     # mission component that would otherwise switch it to the horizontal
     # branch, one frame after it starts working.
     yield_vertical: bool | None = None
+    # Consecutive non-threatening frames since a release.  See `filter`.
+    clear_frames: int = 0
 
 
 _SHARED_STATES: dict[tuple[str, str], _EncounterState] = {}
@@ -260,6 +262,7 @@ class ConflictCoordinator:
             self._state.yield_side = 1.0
             self._state.yield_heading = None
             self._state.yield_vertical = None
+            self._state.clear_frames = 0
 
     def filter(
         self,
@@ -317,13 +320,30 @@ class ConflictCoordinator:
             and miss_distance < self.config.predicted_miss_distance_m
         )
         with self._lock:
-            if (
-                self._state.released_until_clear
-                and distance >= self.config.encounter_reset_distance_m
-                and closing_speed < 0.0
+            if self._state.released_until_clear:
+                self._state.clear_frames = (
+                    0 if threat else self._state.clear_frames + 1
+                )
+            if self._state.released_until_clear and (
+                (
+                    distance >= self.config.encounter_reset_distance_m
+                    and closing_speed < 0.0
+                )
+                # Or simply: the pair stopped being a threat. This suppression
+                # exists to stop a released encounter re-latching immediately,
+                # on geometry that has not changed yet. Requiring
+                # encounter_reset_distance_m WHILE separating is a condition
+                # two vehicles orbiting a shared waypoint never meet, so
+                # coordination stayed off for the rest of the flight after the
+                # first pass. Measured on diagonal_cross: latched at 90.1 m,
+                # yielded 9.7 s, released at 25.6 m, then held role "clear"
+                # through a convergence with a 3.4 m predicted miss distance
+                # against a 20 m threshold, to a CBF margin of -0.840 m.
+                or self._state.clear_frames >= self.config.release_frames
             ):
                 self._state.released_until_clear = False
                 self._state.priority_drone_id = None
+                self._state.clear_frames = 0
 
             if (
                 not self._state.active

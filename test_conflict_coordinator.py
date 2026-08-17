@@ -444,3 +444,65 @@ def test_a_horizontal_encounter_is_untouched_by_the_vertical_branch() -> None:
     assert math.isclose(abs(output[1]), 3.0)
     assert math.isclose(math.hypot(output[0], output[1]), 9.4)
     assert output[2] == 0.25
+
+
+def test_a_released_encounter_can_latch_again_once_the_pair_is_clear() -> None:
+    """Otherwise coordination stops for the rest of a crossing mission.
+
+    `released_until_clear` exists to stop a released encounter re-latching
+    immediately, on geometry that has not changed yet. Clearing it only at
+    encounter_reset_distance_m WHILE separating is a condition two vehicles
+    orbiting a shared waypoint never meet: measured on diagonal_cross, the
+    pair latched at 90.1 m, yielded 9.7 s, released at 25.6 m and then held
+    role "clear" through a convergence with a 3.4 m predicted miss distance,
+    to a CBF margin of -0.840 m.
+    """
+    config = replace(sparrow_20m_conflict_config(10.0), release_frames=3)
+    coordinator = ConflictCoordinator("UAV-02", "UAV-01", config)
+    closing = states(100.0)
+    closing["UAV-01"]["velocity_enu_m_s"] = (10.0, 0.0, 0.0)
+    closing["UAV-02"]["velocity_enu_m_s"] = (-10.0, 0.0, 0.0)
+    _, latched = coordinator.filter((-10.0, 0.0, 0.0), (-10.0, 0.0, 0.0), closing)
+    assert latched["active"], latched
+
+    # Released at a distance a crossing mission never leaves.
+    parted = states(60.0)
+    for drone_id in ("UAV-01", "UAV-02"):
+        parted[drone_id]["velocity_enu_m_s"] = (0.0, 0.0, 0.0)
+    for _ in range(8):
+        _, released = coordinator.filter((0.0, 0.0, 0.0), (0.0, 0.0, 0.0), parted)
+    assert not released["active"]
+
+    _, again = coordinator.filter((-10.0, 0.0, 0.0), (-10.0, 0.0, 0.0), closing)
+
+    assert again["active"], "a fresh convergence was left uncoordinated"
+    assert again["encounter"] == 2
+
+
+def test_a_release_is_still_not_undone_on_unchanged_geometry() -> None:
+    """The suppression the previous test relaxes must still do its job."""
+    config = replace(sparrow_20m_conflict_config(10.0), release_frames=3)
+    coordinator = ConflictCoordinator("UAV-02", "UAV-01", config)
+    closing = states(100.0)
+    closing["UAV-01"]["velocity_enu_m_s"] = (10.0, 0.0, 0.0)
+    closing["UAV-02"]["velocity_enu_m_s"] = (-10.0, 0.0, 0.0)
+    coordinator.filter((-10.0, 0.0, 0.0), (-10.0, 0.0, 0.0), closing)
+    stopped = states(70.0)
+    for drone_id in ("UAV-01", "UAV-02"):
+        stopped[drone_id]["velocity_enu_m_s"] = (0.0, 0.0, 0.0)
+    # Only as far as the release itself: stop the moment it happens, so the
+    # non-threat counter has had no frame of its own to run.
+    for _ in range(12):
+        _, status = coordinator.filter((0.0, 0.0, 0.0), (0.0, 0.0, 0.0), stopped)
+        if status["released"]:
+            break
+    assert status["released"], status
+
+    # Straight back onto a collision course in the very next frame. The
+    # geometry has not changed since the release, which is exactly what this
+    # suppression is for.
+    _, immediate = coordinator.filter(
+        (-10.0, 0.0, 0.0), (-10.0, 0.0, 0.0), closing
+    )
+    assert immediate["encounter"] == 1, immediate
+    assert not immediate["active"], immediate
