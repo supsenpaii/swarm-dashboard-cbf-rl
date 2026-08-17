@@ -139,11 +139,43 @@ class TrajectoryTrackingControllerTests(unittest.TestCase):
             FormationConfig(position_gain_s_inv=0.5, maximum_velocity_m_s=3.0, arrival_radius_m=0.2),
         )
 
-    def test_tracks_ahead_of_lagging_position(self):
+    def test_on_the_line_it_commands_cruise_and_nothing_more(self):
+        """A vehicle on its path is not behind: the leg is followed from
+        measured progress, so there is no clock for it to fall behind.
+
+        This used to assert the opposite -- that a vehicle sitting at the
+        start with the mission clock at 2.0 s would be commanded to chase a
+        reference 4 m ahead. That chase is exactly what pinned the 20 m/s rung
+        at 2.4 m/s: the resulting along-track error tripped the companion's
+        5 m runaway guard on every lap.
+        """
         command = self.controller.command(2.0, {"UAV-01": state((0.0, 0.0, 5.0))})
+
         self.assertTrue(command.active)
         self.assertEqual(command.reason, "tracking_trajectory")
-        self.assertGreater(command.velocity_enu_m_s[0], 2.0)
+        self.assertAlmostEqual(command.velocity_enu_m_s[0], 2.0)
+        self.assertAlmostEqual(command.velocity_enu_m_s[1], 0.0)
+
+    def test_off_the_line_it_corrects_toward_the_line(self):
+        # 3 m to the left of the leg, a third of the way along it.
+        command = self.controller.command(0.0, {"UAV-01": state((3.0, 3.0, 5.0))})
+
+        self.assertEqual(command.reason, "tracking_trajectory")
+        self.assertAlmostEqual(command.velocity_enu_m_s[0], 2.0)   # cruise kept
+        self.assertAlmostEqual(command.velocity_enu_m_s[1], -1.5)  # 0.5 * -3.0
+
+    def test_the_mission_clock_no_longer_moves_the_reference(self):
+        """The contract the 2026-08-17 change is really about."""
+        def fresh():
+            return TrajectoryTrackingController(
+                "UAV-01", self.trajectory, self.controller.config
+            )
+
+        at_zero = fresh().command(0.0, {"UAV-01": state((3.0, 3.0, 5.0))})
+        much_later = fresh().command(900.0, {"UAV-01": state((3.0, 3.0, 5.0))})
+
+        self.assertEqual(at_zero.velocity_enu_m_s, much_later.velocity_enu_m_s)
+        self.assertEqual(at_zero.reason, much_later.reason)
 
     def test_command_is_velocity_limited(self):
         command = self.controller.command(2.0, {"UAV-01": state((-100.0, 0.0, 5.0))})
@@ -154,7 +186,10 @@ class TrajectoryTrackingControllerTests(unittest.TestCase):
         self.assertEqual(command.reason, "trajectory_reached")
         self.assertEqual(command.velocity_enu_m_s, (0.0, 0.0, 0.0))
 
-    def test_keeps_tracking_past_duration_if_still_out_of_radius(self):
+    def test_a_stale_clock_does_not_finish_a_leg_the_vehicle_is_halfway_down(self):
+        # Renamed from "past duration": the clock reading 999 s no longer says
+        # anything about how far along the leg the vehicle is. Half a leg from
+        # the end is half a leg from the end, whatever the clock says.
         command = self.controller.command(999.0, {"UAV-01": state((5.0, 0.0, 5.0))})
         self.assertEqual(command.reason, "tracking_trajectory")
         self.assertGreater(command.velocity_enu_m_s[0], 0.0)

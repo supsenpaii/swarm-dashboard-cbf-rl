@@ -661,11 +661,39 @@ class TrajectoryTrackingController:
                 mission_elapsed_s, own_position, swarm_state
             )
 
-        reference = self.trajectory.reference(mission_elapsed_s)
+        # A straight leg is followed from measured progress, like the closed
+        # polyline above and for the same reason. Parameterised by the mission
+        # clock, the reference leaves the start point at full cruise the
+        # instant the lap latches, while the vehicle is still accelerating at
+        # maximum_acceleration_m_s2. `error` is then dominated by a purely
+        # transient along-track gap of v*t - a*t^2/2, peaking at v^2/2a: 48.5 m
+        # at 19.69 m/s and 4 m/s^2. Measured on the 20 m/s rung, 46.8 m, and
+        # already 5.84 m by t=0.30 s against a predicted 5.73.
+        #
+        # That gap is not a tracking failure -- it is the vehicle obeying its
+        # acceleration limit -- but the companion's runaway guard reads it as
+        # one at 5 m, resets the lap, and the vehicle never escapes the entry
+        # loop. It peaked at 2.391 m/s over a full 120 s hold. With the guard
+        # raised past the transient so the loop could not close, the same
+        # profile reached 20.77 m/s.
+        #
+        # Projected, `error` carries no along-track term at all -- only
+        # cross-track -- so it stays small at any speed and acceleration, and
+        # the 5 m guard means what it says again.
+        #
+        # Only LinearTrajectory: CircularTrajectory has no projection, and
+        # SquareWaveVelocityTrajectory is a velocity profile for system
+        # identification where position projection is meaningless.
+        progress_s = (
+            self.trajectory.nearest_time_s(own_position)
+            if isinstance(self.trajectory, LinearTrajectory)
+            else mission_elapsed_s
+        )
+        reference = self.trajectory.reference(progress_s)
         error = tuple(reference.position_enu_m[i] - own_position[i] for i in range(3))
         error_norm = _norm(error)
 
-        if self.trajectory.is_finished(mission_elapsed_s) and error_norm <= self.config.arrival_radius_m:
+        if self.trajectory.is_finished(progress_s) and error_norm <= self.config.arrival_radius_m:
             return FormationCommand(
                 self.drone_id, reference.position_enu_m, (0.0, 0.0, 0.0), True, "trajectory_reached", error_norm
             )
