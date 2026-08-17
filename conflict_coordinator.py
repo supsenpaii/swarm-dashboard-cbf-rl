@@ -143,11 +143,17 @@ def sparrow_20m_conflict_config(
         release_frames=10,
         release_at_reserve_when_nonclosing=True,
         clear_uses_mission_velocity=True,
-        yield_lateral_speed_m_s=(
-            3.0
-            if maximum_velocity_m_s <= 10.0
-            else 0.5 * maximum_velocity_m_s + 2.0
-        ),
+        # Continuous, unlike the x500 line this was copied from, which holds
+        # 3.0 at and below 10 m/s to preserve an authenticated x500 rung.
+        # Sparrow inherited that step without inheriting the reason, and it
+        # landed exactly on the 10 m/s rung: 3.0 m/s of lateral authority
+        # against 9.5 at the next rung up. The 2026-08-17 ladder shows what
+        # that cost -- minimum CBF margin 0.013 m at 10 m/s, 2.28 at 15 and
+        # 3.12 at 20, so the SLOWEST rung was the fragile one. Thirteen
+        # millimetres is the barrier doing the coordinator's job at its own
+        # boundary, which is precisely the situation the coordinator exists
+        # to prevent. Extending the same line down gives 7.0 m/s here.
+        yield_lateral_speed_m_s=0.5 * maximum_velocity_m_s + 2.0,
         minimum_engagement_distance_m=dynamic_boundary_m,
     )
 

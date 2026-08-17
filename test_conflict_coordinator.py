@@ -326,3 +326,32 @@ def test_yield_lane_change_does_not_saturate_against_tracker_feedback() -> None:
         offset_m += output[1] * dt_s
 
     assert abs(offset_m) > 25.0, offset_m
+
+
+def test_sparrow_lateral_authority_is_continuous_where_x500_steps() -> None:
+    """The 10 m/s rung was the fragile one because of this step.
+
+    x500 holds 3.0 m/s at and below 10 m/s to preserve an authenticated rung;
+    Sparrow copied the step without the reason and landed on it. Measured on
+    the 2026-08-17 ladder: minimum CBF margin 0.013 m at 10 m/s against 2.28
+    at 15 and 3.12 at 20.
+    """
+    assert x500_20m_conflict_config(10.0).yield_lateral_speed_m_s == 3.0
+    assert sparrow_20m_conflict_config(10.0).yield_lateral_speed_m_s == 7.0
+
+    # Same line either side of 10, so nothing jumps at the boundary.
+    below = sparrow_20m_conflict_config(9.99).yield_lateral_speed_m_s
+    above = sparrow_20m_conflict_config(10.01).yield_lateral_speed_m_s
+    assert math.isclose(above - below, 0.01, abs_tol=1e-9)
+
+    # The faster rungs are untouched, so only the 10 m/s matrix re-runs.
+    assert sparrow_20m_conflict_config(15.0).yield_lateral_speed_m_s == 9.5
+    assert sparrow_20m_conflict_config(20.0).yield_lateral_speed_m_s == 12.0
+
+
+def test_the_lane_change_still_fits_inside_cruise_at_every_rung() -> None:
+    """forward_speed = sqrt(v^2 - lateral^2) must stay real and useful."""
+    for speed in (10.0, 15.0, 20.0):
+        lateral = sparrow_20m_conflict_config(speed).yield_lateral_speed_m_s
+        assert lateral < speed, (speed, lateral)
+        assert math.sqrt(speed * speed - lateral * lateral) > 0.5 * lateral
