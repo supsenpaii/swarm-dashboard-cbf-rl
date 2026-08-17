@@ -98,12 +98,15 @@ class CbfRlEnvironmentTests(unittest.TestCase):
         self.assertFalse(terminated)
         self.assertIn("UAV-01", environment.reached)
 
-    def test_mission_velocity_points_at_the_goal_and_sheds_speed_into_it(self) -> None:
-        """The coordinator's `mission` argument, which used to be the policy.
+    def test_the_coordinator_mission_is_a_real_tracker_command(self) -> None:
+        """The coordinator's `mission` argument, and the matrix's blind spot.
 
         Every role in ConflictCoordinator rebuilds its output from `mission`
         for the Sparrow config, so this vector -- not the policy -- is what
-        the matrix actually certifies.
+        the matrix certifies. It used to be a hand-written goal-direction
+        vector, which is why 1260 cases passed a yield geometry that
+        saturated at 5 m in flight: a bare direction has no position-feedback
+        term for the lane change to be cancelled by.
         """
         config = CbfRlEnvConfig(
             maximum_acceleration_m_s2=4.0,
@@ -115,16 +118,55 @@ class CbfRlEnvironmentTests(unittest.TestCase):
         )
         environment.reset({"UAV-01": (0.0, 0.0, 9.0), "UAV-02": (0.0, 0.0, 9.0)})
 
-        far = environment._mission_velocity("UAV-01")
-        self.assertAlmostEqual(far[0], 15.0)
-        self.assertAlmostEqual(far[1], 0.0)
+        # It ramps from rest rather than stepping to cruise, because it is the
+        # same controller the companion installs and it obeys the same limit.
+        first = environment._mission_velocity("UAV-01")
+        self.assertEqual(first, (0.0, 0.0, 0.0))
+        # 15 m/s at 4 m/s^2 is 3.75 s, and dt is 0.05 s.
+        speeds = []
+        for _ in range(100):
+            environment.steps += 1
+            speeds.append(environment._mission_velocity("UAV-01")[0])
+        self.assertLess(speeds[0], 15.0)
+        self.assertTrue(
+            all(b >= a - 1e-9 for a, b in zip(speeds, speeds[1:])), speeds[:8]
+        )
+        self.assertAlmostEqual(speeds[-1], 15.0, places=3)
 
-        environment.positions["UAV-01"] = (99.0, 0.0, 9.0)
-        near = environment._mission_velocity("UAV-01")
-        self.assertLess(near[0], 15.0)
-        self.assertGreater(near[0], 0.0)
+    def test_the_mission_carries_the_feedback_that_cancels_a_lane_change(self) -> None:
+        """Displaced sideways, it pulls back -- which is the whole point.
 
+        A yield pushes the vehicle off its leg; the tracker answers with
+        position_gain_s_inv * cross-track, and that term re-enters the lane
+        change weighted by forward_speed. Without it the matrix cannot see a
+        yield saturate, however long it runs.
+        """
+        config = CbfRlEnvConfig(mission_speed_m_s=15.0, position_gain_s_inv=0.6)
+        environment = CbfRlEnvironment(
+            {"UAV-01": (300.0, 0.0, 9.0), "UAV-02": (0.0, 900.0, 9.0)}, config
+        )
+        environment.reset({"UAV-01": (0.0, 0.0, 9.0), "UAV-02": (0.0, 800.0, 9.0)})
+
+        on_the_line = environment._mission_velocity("UAV-01")
+        environment.positions["UAV-01"] = (150.0, 8.0, 9.0)
+        displaced = environment._mission_velocity("UAV-01")
+
+        self.assertAlmostEqual(on_the_line[1], 0.0, places=6)
+        # 0.6 * -8 m of cross-track pulls back toward the leg. The pair is
+        # then (15.0, -4.8), whose norm exceeds the 15 m/s ceiling, so the
+        # command is scaled onto it and the lateral term lands at -4.57.
+        self.assertLess(displaced[1], -4.0)
+        self.assertAlmostEqual(displaced[1], -4.572, places=3)
+        self.assertAlmostEqual(math.hypot(*displaced), 15.0, places=6)
+
+    def test_it_holds_once_the_goal_is_reached(self) -> None:
+        config = CbfRlEnvConfig(mission_speed_m_s=15.0)
+        environment = CbfRlEnvironment(
+            {"UAV-01": (100.0, 0.0, 9.0), "UAV-02": (0.0, 50.0, 9.0)}, config
+        )
+        environment.reset({"UAV-01": (0.0, 0.0, 9.0), "UAV-02": (0.0, 0.0, 9.0)})
         environment.positions["UAV-01"] = (100.0, 0.0, 9.0)
+
         self.assertEqual(environment._mission_velocity("UAV-01"), (0.0, 0.0, 0.0))
 
 

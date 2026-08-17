@@ -740,7 +740,38 @@ class TrajectoryTrackingController:
         requested = tuple(
             reference.velocity_enu_m_s[i] + self.config.position_gain_s_inv * error[i] for i in range(3)
         )
-        requested = _limit_norm(requested, self.config.maximum_velocity_m_s)
+        ceiling_m_s = self.config.maximum_velocity_m_s
+        if (
+            isinstance(self.trajectory, LinearTrajectory)
+            and self.maximum_acceleration_m_s2 is not None
+        ):
+            # Brake into the endpoint instead of arriving at cruise and
+            # discovering the wall. A closed polyline already does this for
+            # every corner; the end of an open leg is the same problem, a
+            # place the vehicle has to reach at rest.
+            #
+            # The proportional term alone cannot do it. Past the end the
+            # reference feeds forward zero and the P term brakes, but under an
+            # acceleration limit that takes v^2/2a -- 50 m at 20 m/s and
+            # 4 m/s^2 -- so the vehicle sails past. Measured in the offline
+            # matrix once it started obeying that limit: the 20 m/s cases
+            # overshot by 32 to 58 m and settled OUTSIDE the geofence, ten
+            # cases that were safe the whole way and simply never arrived.
+            remaining_m = _norm(
+                tuple(
+                    self.trajectory.end_enu_m[i] - own_position[i] for i in range(3)
+                )
+            )
+            ceiling_m_s = min(
+                ceiling_m_s,
+                braking_speed_limit_m_s(
+                    0.0,
+                    remaining_m,
+                    self.maximum_acceleration_m_s2,
+                    self.response_time_constant_s,
+                ),
+            )
+        requested = _limit_norm(requested, ceiling_m_s)
         return FormationCommand(
             self.drone_id,
             reference.position_enu_m,

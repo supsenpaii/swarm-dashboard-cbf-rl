@@ -7,6 +7,7 @@ import argparse
 import concurrent.futures
 import json
 import math
+import statistics
 import os
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -353,6 +354,20 @@ def evaluate_case(
     minimum_distance = math.dist(case.spawn["UAV-01"], case.spawn["UAV-02"])
     minimum_margin = math.inf
     hold_frames = 0
+    # How hard the barrier had to work, not just whether it held. A CBF is a
+    # hard constraint: it holds the line whether the coordinator resolved the
+    # encounter or left the whole job to it, so distance and margin cannot
+    # tell those apart. Measured on the Sparrow 10 m/s cases, the yield
+    # geometry that saturated at 5 m in flight moved the worst per-case margin
+    # from 2.632 m to 1.701 m and the peak intervention from 2.401 to 2.603
+    # m/s -- while minimum_distance_m stayed identical to seven digits,
+    # because the aggregate minimum is set by cases where the barrier sits on
+    # its boundary by construction. That is why 1260 cases certified PASS
+    # through a broken lane change.
+    barrier_frames = 0
+    intervened_frames = 0
+    peak_intervention_m_s = 0.0
+    coordinated_frames = 0
     terminated = truncated = False
     maximum_normalized_speed = case.speed_m_s / cbf.maximum_velocity_m_s
     while not terminated and not truncated:
@@ -372,6 +387,15 @@ def evaluate_case(
         for drone in DRONE_IDS:
             command = info[drone]["cbf"]
             hold_frames += int(not command["active"])
+            barrier_frames += 1
+            norm = command.get("intervention_norm_m_s") or 0.0
+            # 0.1 m/s is PX4's measured tracking noise floor, the same bound
+            # the 2026-08-10 crossing sweep used to call an intervention real.
+            intervened_frames += int(norm > 0.1)
+            peak_intervention_m_s = max(peak_intervention_m_s, norm)
+            coordinated_frames += int(
+                bool((info[drone].get("conflict_coordination") or {}).get("active"))
+            )
             if command["minimum_margin_m"] is not None:
                 minimum_margin = min(minimum_margin, command["minimum_margin_m"])
     physical_safe = minimum_distance >= 20.0 - 1.0e-6
@@ -383,6 +407,11 @@ def evaluate_case(
         "minimum_distance_m": round(minimum_distance, 6),
         "minimum_dynamic_margin_m": round(minimum_margin, 6),
         "hold_frames": hold_frames,
+        "cbf_intervention_rate": (
+            round(intervened_frames / barrier_frames, 4) if barrier_frames else None
+        ),
+        "peak_intervention_norm_m_s": round(peak_intervention_m_s, 3),
+        "coordinated_frames": coordinated_frames,
         "reached_goals": terminated,
         "physical_safe": physical_safe,
         "dynamic_safe": dynamic_safe,
@@ -446,6 +475,42 @@ def run(
         "minimum_distance_m": min(result["minimum_distance_m"] for result in results),
         "minimum_dynamic_margin_m": min(
             result["minimum_dynamic_margin_m"] for result in results
+        ),
+        # Barrier effort, aggregated so a coordinator regression is visible
+        # even when every case still passes. The minima above cannot show one:
+        # a CBF holds its constraint whether the coordinator did its job or
+        # left the whole encounter to it, and minimum_distance_m is set by
+        # cases that sit on the boundary by construction.
+        # A minimum is the wrong statistic for a coordinator regression. It
+        # is set by one case, and the case that sets it is one where the
+        # barrier sits on its constraint boundary by construction -- 0.000 m
+        # whether the lane change works or not. What a broken coordinator does
+        # is make MANY cases worse at once, which only a robust central
+        # statistic can see.
+        #
+        # Measured across the Sparrow 10 m/s matrix against the yield geometry
+        # that saturated at 5 m in flight: 72 of 280 cases degraded, one from
+        # 10.083 m of margin to 5.944, and every number the matrix reported
+        # stayed bit-identical -- minimum_distance_m to seven digits. The
+        # median moved 2.760 -> 1.957 and the count under 2 m moved 125 -> 143.
+        # That is how 1260 cases certified PASS through a broken lane change.
+        "median_dynamic_margin_m": round(
+            statistics.median(
+                result["minimum_dynamic_margin_m"] for result in results
+            ),
+            6,
+        ),
+        "cases_below_two_metres_of_margin": sum(
+            1 for result in results if result["minimum_dynamic_margin_m"] < 2.0
+        ),
+        "coordinated_case_count": sum(
+            1 for result in results if result["coordinated_frames"] > 0
+        ),
+        "maximum_cbf_intervention_rate": max(
+            (result["cbf_intervention_rate"] or 0.0) for result in results
+        ),
+        "peak_intervention_norm_m_s": max(
+            result["peak_intervention_norm_m_s"] for result in results
         ),
         "failure_count": len(failures),
         "verdict": "PASS" if not failures else "FAIL",

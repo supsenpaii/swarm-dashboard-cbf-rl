@@ -16,7 +16,8 @@ from typing import Any, Mapping, Sequence
 
 from cbf_command_gate import CbfCommandGate, CbfConfig
 from conflict_coordinator import ConflictCoordinator, ConflictCoordinatorConfig
-from trajectory_controller import braking_speed_limit_m_s
+from formation_controller import FormationConfig
+from trajectory_controller import LinearTrajectory, TrajectoryTrackingController
 
 
 DRONE_IDS = ("UAV-01", "UAV-02")
@@ -163,6 +164,11 @@ class CbfRlEnvConfig:
     # that caps the policy below that ceiling must cap the mission with it, or
     # the mission outruns the case it is meant to fly.
     mission_speed_m_s: float | None = None
+    # The tracker gain the coordinator's `mission` is produced with. 0.6 is
+    # SWARM_FORMATION_POSITION_GAIN_S_INV's default, which is what every
+    # Sparrow profile flies; the excursion the yield can hold is
+    # yield_lateral_speed_m_s / this, so the matrix has to use the same one.
+    position_gain_s_inv: float = 0.6
 
     def __post_init__(self) -> None:
         if (
@@ -218,6 +224,7 @@ class CbfRlEnvironment:
             else None
         )
         self.positions: dict[str, Vector3] = {}
+        self.trackers: dict[str, TrajectoryTrackingController] = {}
         self.velocities: dict[str, Vector3] = {}
         self.covariances: dict[str, Vector3 | None] = {}
         self.message_ages_ms: dict[str, float] = {}
@@ -237,6 +244,7 @@ class CbfRlEnvironment:
         velocity_by_drone: Mapping[str, Sequence[float]] | None = None,
     ) -> dict[str, tuple[float, ...]]:
         self.positions = self._vectors(spawn_enu_m, "spawn")
+        self.trackers = self._build_trackers()
         self.velocities = (
             self._vectors(velocity_by_drone, "velocity")
             if velocity_by_drone is not None
@@ -321,16 +329,23 @@ class CbfRlEnvironment:
         nominal = {drone: self._nominal_action(actions[drone]) for drone in DRONE_IDS}
         state = self._swarm_state()
         before = {drone: self._goal_distance(drone) for drone in DRONE_IDS}
+        coordination: dict[str, dict[str, Any]] = {}
         if self.coordinators is not None:
             # Same seat as the runtime: after the policy, before the barrier,
             # and handed the same two arguments the runtime hands it -- the
-            # policy as candidate, a deterministic mission velocity as mission.
-            nominal = {
+            # policy as candidate, the trajectory tracker's command as mission.
+            filtered = {
                 drone: self.coordinators[drone].filter(
                     nominal[drone], self._mission_velocity(drone), state
-                )[0]
+                )
                 for drone in DRONE_IDS
             }
+            nominal = {drone: value[0] for drone, value in filtered.items()}
+            # Kept, not discarded. The status used to be dropped on the floor,
+            # so nothing downstream could answer the one question that decides
+            # whether a matrix result says anything about the coordinator:
+            # did it ever engage in this case at all?
+            coordination = {drone: value[1] for drone, value in filtered.items()}
         commands = {
             drone: self.gates[drone].filter(nominal[drone], state)
             for drone in DRONE_IDS
@@ -384,6 +399,7 @@ class CbfRlEnvironment:
                 "safe_velocity_enu_m_s": applied[drone],
                 "goal_distance_m": distance,
                 "cbf": command.as_dict(),
+                "conflict_coordination": coordination.get(drone, {}),
             }
         terminated = all(at_goal.values())
         truncated = self.steps >= self.config.maximum_steps and not terminated
@@ -437,6 +453,45 @@ class CbfRlEnvironment:
             for component in vector
         )  # type: ignore[return-value]
 
+    def _build_trackers(self) -> dict[str, TrajectoryTrackingController]:
+        """The real tracker, on the real leg, as the coordinator's `mission`.
+
+        This used to be a hand-written goal-direction vector, and that was the
+        matrix's blind spot. The runtime hands the coordinator a TRACKER
+        command, which carries a position-feedback term; a bare direction does
+        not. The yield lane change is built from `mission`, so on 2026-08-17
+        the feedback re-entered it weighted by forward_speed and cancelled the
+        lateral push -- the excursion stalled at 5 m in flight against ~52 m
+        required -- and every one of these 1260 cases certified PASS through
+        it, because offline there was no feedback to cancel anything.
+
+        A matrix case is a straight leg from spawn to goal, so the same
+        LinearTrajectory and TrajectoryTrackingController the companion
+        installs reproduces it exactly, feedback included.
+        """
+        speed = self.config.mission_speed_m_s or self.config.cbf.maximum_velocity_m_s
+        trackers: dict[str, TrajectoryTrackingController] = {}
+        for drone in DRONE_IDS:
+            start, goal = self.positions[drone], self.goals[drone]
+            if math.dist(start, goal) <= self.config.arrival_radius_m:
+                continue  # nowhere to go; _mission_velocity holds instead
+            trackers[drone] = TrajectoryTrackingController(
+                drone,
+                LinearTrajectory(
+                    start_enu_m=start, end_enu_m=goal, speed_m_s=speed
+                ),
+                FormationConfig(
+                    position_gain_s_inv=self.config.position_gain_s_inv,
+                    maximum_velocity_m_s=speed,
+                    arrival_radius_m=self.config.arrival_radius_m,
+                ),
+                maximum_acceleration_m_s2=(
+                    self.config.maximum_acceleration_m_s2 or None
+                ),
+                response_time_constant_s=self.response_time_constant_s,
+            )
+        return trackers
+
     def _mission_velocity(self, drone: str) -> Vector3:
         """The deterministic goal-seeking command, the coordinator's `mission`.
 
@@ -447,30 +502,21 @@ class CbfRlEnvironment:
         `clear_uses_mission_velocity` and the yield lane-change rebuild the
         output from `mission` at every role.
         """
-        distance = self._goal_distance(drone)
-        if distance <= self.config.arrival_radius_m:
+        tracker = self.trackers.get(drone)
+        if tracker is None or self._goal_distance(drone) <= self.config.arrival_radius_m:
             return (0.0, 0.0, 0.0)
-        speed = self.config.mission_speed_m_s or self.config.cbf.maximum_velocity_m_s
-        if self.config.maximum_acceleration_m_s2 > 0.0:
-            # A tracker sheds speed into its endpoint; a bare goal-direction
-            # vector at cruise does not, and a lagged plant then orbits the
-            # arrival radius forever. Same braking law the mission controller
-            # uses, so the stand-in arrives the way the real one does.
-            speed = min(
-                speed,
-                braking_speed_limit_m_s(
-                    0.0,
-                    distance,
-                    self.config.maximum_acceleration_m_s2,
-                    self.response_time_constant_s,
-                ),
-            )
-        return tuple(
-            (self.goals[drone][axis] - self.positions[drone][axis])
-            / distance
-            * speed
-            for axis in range(3)
-        )  # type: ignore[return-value]
+        command = tracker.command(
+            self.steps * self.config.dt_s,
+            {
+                other: {
+                    "position_enu_m": self.positions[other],
+                    "velocity_enu_m_s": self.velocities[other],
+                    "valid": True,
+                }
+                for other in DRONE_IDS
+            },
+        )
+        return tuple(command.velocity_enu_m_s) if command.active else (0.0, 0.0, 0.0)  # type: ignore[return-value]
 
     def _goal_distance(self, drone: str) -> float:
         return math.sqrt(
