@@ -3869,9 +3869,24 @@ def on_mqtt_message(
                 tracking_companion_safety[drone_id] = copy.deepcopy(
                     companion_safety
                 )
-                tracking_cbf_intervention[drone_id].append(
-                    bool(companion_safety.get("intervened"))
-                )
+                # `station_keeping and nominal_active` is the same pair the
+                # runtime itself uses to decide whether the coordinator
+                # applies (companion_safety.py:705), so this counts exactly
+                # the frames where the stack was in control of a real
+                # command. Both halves are needed. Without nominal_active, a
+                # parked vehicle reads 100%: the gate reports intervened
+                # because the geofence floor adds ~0.4 m/s upward to a drone
+                # sitting at z=0. Without station_keeping, the follower still
+                # reads 100%, because it has a formation slot to track and is
+                # commanded toward it while disarmed on the ground. Neither
+                # is a barrier saving anyone, and this number is only worth
+                # showing if it never cries wolf.
+                if companion_safety.get("station_keeping") and companion_safety.get(
+                    "nominal_active"
+                ):
+                    tracking_cbf_intervention[drone_id].append(
+                        bool(companion_safety.get("intervened"))
+                    )
 
         elif topic.endswith(
             "/telemetry/state"
