@@ -73,7 +73,12 @@ px4_sim_model="${SWARM_PX4_SIM_MODEL:-gz_sparrow_gimbal}"
 gz_model_name="${px4_sim_model#gz_}"
 px4_airframe="${PX4_AUTOPILOT_ROOT}/build/px4_sitl_default/etc/init.d-posix/airframes/${px4_sys_autostart}_${px4_sim_model}"
 uav_01_model_pose="${SWARM_UAV_01_MODEL_POSE:-0,0,0,0,0,0}"
-uav_02_model_pose="${SWARM_UAV_02_MODEL_POSE:-0,6,0,0,0,0}"
+# 60 m west, on the follower's own approach axis to its slot. The old
+# default was 6 m north of the leader with a slot 10 m west -- a
+# perpendicular swing past the leader that test_formation_spawn_geometry
+# was written about, and that a 20 m separation envelope makes outright
+# infeasible. Along-axis, the closest approach is the slot itself.
+uav_02_model_pose="${SWARM_UAV_02_MODEL_POSE:--60,0,0,0,0,0}"
 
 export PX4_AUTOPILOT_ROOT SWARM_ROS_SETUP SWARM_TRACKING_PACKAGE_ROOT
 export GZ_SIM_RESOURCE_PATH="${gz_model_root}:${GZ_SIM_RESOURCE_PATH:-}"

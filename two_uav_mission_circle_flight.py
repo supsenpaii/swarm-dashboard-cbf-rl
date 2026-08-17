@@ -11,7 +11,7 @@ import subprocess
 import time
 import urllib.request
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 import websockets
 
@@ -128,6 +128,70 @@ def mission_waypoints_enu(
     return {
         "UAV-01": uav_01,
         "UAV-02": reversed_points[reversed_second:] + reversed_points[:reversed_second],
+    }
+
+
+def fit_to_spawns(
+    points_by_drone: dict[str, list[tuple[float, float, float]]],
+    actual_first: Sequence[float],
+    actual_second: Sequence[float],
+) -> dict[str, list[tuple[float, float, float]]]:
+    """Rotate and scale the whole picture onto where the vehicles actually are.
+
+    The scenarios below are drawn against SPAWN_ENU_M, two points 5.39 m apart
+    -- a geometry from the 4 m separation envelope. Sparrow's certified
+    envelope asks for 20 m of separation and its coordinator does not engage
+    until 120 m, so at that scale the vehicles start inside the barrier and
+    every scenario aborts before it flies.
+
+    A similarity transform about the nominal spawn midpoint fixes that without
+    touching a single scenario: every crossing angle, every bow-tie, every
+    orbit is preserved exactly, and only the distances become real. Nothing
+    here is scenario-specific, so a scenario added later scales for free.
+    """
+    nominal_first = SPAWN_ENU_M[DRONE_IDS[0]]
+    nominal_second = SPAWN_ENU_M[DRONE_IDS[1]]
+    nominal = (
+        nominal_second[0] - nominal_first[0],
+        nominal_second[1] - nominal_first[1],
+    )
+    actual = (
+        float(actual_second[0]) - float(actual_first[0]),
+        float(actual_second[1]) - float(actual_first[1]),
+    )
+    nominal_span = math.hypot(*nominal)
+    actual_span = math.hypot(*actual)
+    if nominal_span <= 1.0e-6 or actual_span <= 1.0e-6:
+        # Fail closed: without two distinguishable spawns there is no frame to
+        # fit to, and a silently unscaled scenario is one that flies the wrong
+        # distances at the right angles.
+        raise FlightAbort(
+            f"cannot_fit_scenario_to_spawns:{nominal_span:.3f}:{actual_span:.3f}"
+        )
+    scale = actual_span / nominal_span
+    angle = math.atan2(actual[1], actual[0]) - math.atan2(nominal[1], nominal[0])
+    cos_a, sin_a = math.cos(angle), math.sin(angle)
+    nominal_mid = (
+        (nominal_first[0] + nominal_second[0]) / 2.0,
+        (nominal_first[1] + nominal_second[1]) / 2.0,
+    )
+    actual_mid = (
+        (float(actual_first[0]) + float(actual_second[0])) / 2.0,
+        (float(actual_first[1]) + float(actual_second[1])) / 2.0,
+    )
+
+    def place(point: tuple[float, float, float]) -> tuple[float, float, float]:
+        east = (point[0] - nominal_mid[0]) * scale
+        north = (point[1] - nominal_mid[1]) * scale
+        return (
+            actual_mid[0] + east * cos_a - north * sin_a,
+            actual_mid[1] + east * sin_a + north * cos_a,
+            point[2],  # altitude is commanded separately, never scaled
+        )
+
+    return {
+        drone_id: [place(point) for point in points]
+        for drone_id, points in points_by_drone.items()
     }
 
 
@@ -330,13 +394,31 @@ class Flight:
                     "PRECHECK_PASS",
                     separation_m=round(physical_separation_m(states) or 0.0, 3),
                 )
-                points = mission_waypoints_enu(
-                    self.arguments.scenario,
-                    center_enu_m=(
-                        self.arguments.center_east_m,
-                        self.arguments.center_north_m,
+                points = fit_to_spawns(
+                    mission_waypoints_enu(
+                        self.arguments.scenario,
+                        center_enu_m=(
+                            self.arguments.center_east_m,
+                            self.arguments.center_north_m,
+                        ),
+                        radius_m=self.arguments.radius_m,
                     ),
-                    radius_m=self.arguments.radius_m,
+                    states[DRONE_IDS[0]]["position_enu_m"],
+                    states[DRONE_IDS[1]]["position_enu_m"],
+                )
+                self.log(
+                    "SCENARIO_FITTED",
+                    scenario=self.arguments.scenario,
+                    spawn_separation_m=round(physical_separation_m(states) or 0.0, 3),
+                    extent_m={
+                        drone_id: round(
+                            max(
+                                math.dist(point[:2], legs[0][:2]) for point in legs
+                            ),
+                            1,
+                        )
+                        for drone_id, legs in points.items()
+                    },
                 )
                 waypoints = enu_waypoints_to_geodetic(points)
                 for drone_id in DRONE_IDS:

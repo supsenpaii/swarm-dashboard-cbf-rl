@@ -1209,6 +1209,12 @@
     const y=getValue(d,["local_position.y_east_m","local_position.y","y"]);
     const z=getValue(d,["local_position.z_down_m","local_position.z","z"]);
     const pos=dronePosition(d);
+    // Margin says whether the barrier held; the rate says whether the
+    // coordinator ever needed it to. A sustained few percent is the warning
+    // a comfortable-looking margin hides.
+    const cbf=getValue(d,["cbf_status"],null)||{};
+    const cbfMargin=Number.isFinite(Number(cbf.minimum_margin_m))?Number(cbf.minimum_margin_m):null;
+    const cbfRate=Number.isFinite(Number(cbf.intervention_rate))?Number(cbf.intervention_rate):null;
     document.getElementById("actual-mode").textContent=navStateName(nav);
 
     const actualMode=modeFromNavState(nav);
@@ -1249,6 +1255,8 @@
       <div class="telemetry-item"><div class="field-label">Voltage</div><div class="field-value">${formatNumber(voltage,2)} V</div></div>
       <div class="telemetry-item"><div class="field-label">GPS satellites</div><div class="field-value">${sats??"N/A"}</div></div>
       <div class="telemetry-item"><div class="field-label">Local XYZ</div><div class="field-value">${formatNumber(x,1)}, ${formatNumber(y,1)}, ${formatNumber(z,1)}</div></div>
+      <div class="telemetry-item"><div class="field-label">CBF margin</div><div class="field-value">${cbfMargin===null?"N/A":`${formatNumber(cbfMargin,2)} m`}</div></div>
+      <div class="telemetry-item"><div class="field-label">CBF can thiệp</div><div class="field-value">${cbfRate===null?"N/A":`${(cbfRate*100).toFixed(1)} %`}</div></div>
       <div class="telemetry-item"><div class="field-label">Global position</div><div class="field-value">${pos?`${pos.latitude.toFixed(6)}, ${pos.longitude.toFixed(6)}`:"N/A"}</div></div>`;
 
     updateModeUi();

@@ -662,6 +662,38 @@ tracking_companion_safety: dict[str, dict[str, Any]] = {
     drone_id: {}
     for drone_id in ALLOWED_DRONES
 }
+# How often the barrier had to correct the command it was handed. A flight
+# can hold a positive margin and still be one configuration change away from
+# not holding it, and the intervention rate is what says so first: the
+# Sparrow 10 m/s rung passed on 2026-08-17 with 13 mm of margin while the
+# barrier was acting on 3.5% of frames, and widening the coordinator's lane
+# change took that to 5.4 m and 0.4%. Margin alone showed a pass either way.
+# 200 frames is about 10 s at the 20 Hz peer-state rate.
+CBF_INTERVENTION_WINDOW = 200
+tracking_cbf_intervention: dict[str, deque[bool]] = {
+    drone_id: deque(maxlen=CBF_INTERVENTION_WINDOW)
+    for drone_id in ALLOWED_DRONES
+}
+
+
+def cbf_status(drone_id: str) -> dict[str, Any]:
+    """Live barrier health for one vehicle, for the dashboard and drivers."""
+    window = tracking_cbf_intervention[drone_id]
+    safety = tracking_companion_safety[drone_id] or {}
+    return {
+        "minimum_margin_m": (safety.get("cbf") or {}).get("minimum_margin_m"),
+        "intervention_rate": (
+            round(sum(window) / len(window), 3) if window else None
+        ),
+        "intervention_samples": len(window),
+    }
+
+
+def with_cbf_status(drones: dict[str, Any]) -> dict[str, Any]:
+    for drone_id in ALLOWED_DRONES:
+        if isinstance(drones.get(drone_id), dict):
+            drones[drone_id]["cbf_status"] = cbf_status(drone_id)
+    return drones
 # Last mission this server accepted per drone, kept only to answer "does the
 # path being sent now come near one already out there?" at the moment the
 # operator presses send. Advisory, like the rest of this validator: the bridge
@@ -3837,6 +3869,9 @@ def on_mqtt_message(
                 tracking_companion_safety[drone_id] = copy.deepcopy(
                     companion_safety
                 )
+                tracking_cbf_intervention[drone_id].append(
+                    bool(companion_safety.get("intervened"))
+                )
 
         elif topic.endswith(
             "/telemetry/state"
@@ -4047,7 +4082,7 @@ async def get_drones() -> dict[str, Any]:
         )
 
     return {
-        "drones": drones,
+        "drones": with_cbf_status(drones),
         "mission_config": mission_runtime_config(),
         "control_results": results,
         "gimbal_angles_deg": gimbal_state,
@@ -4388,7 +4423,7 @@ async def send_snapshots(
                 "type": (
                     "telemetry_snapshot"
                 ),
-                "drones": drones,
+                "drones": with_cbf_status(drones),
                 "missions": missions,
                 "mission_config": mission_runtime_config(),
                 "control_results": (
