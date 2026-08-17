@@ -18,6 +18,7 @@ from two_uav_trajectory_flight import (
     INITIAL_ERROR_LIMIT_DEFAULT_M,
     Flight,
     FlightAbort,
+    TRAJECTORY_NOMINAL_REASONS,
     check_hold_was_flown,
     check_initial_frame_alignment,
     initial_error_limit_m,
@@ -382,3 +383,22 @@ class HollowHoldTests(unittest.TestCase):
 
         self.assertEqual(len(reasons), 1)
         self.assertIn("None of 14.76", reasons[0])
+
+
+class TrajectoryModeReasonTests(unittest.TestCase):
+    """The 15 m/s rung lost a flight to a reason missing from this set."""
+
+    def test_entering_the_path_counts_as_flying_it(self) -> None:
+        # Both vehicles crossed trajectory_entry_radius_m back and forth every
+        # ~2.7 s and out of phase, so a gate that demanded both be tracking in
+        # the same poll almost never held, at any timeout.
+        self.assertIn("trajectory_entering", TRAJECTORY_NOMINAL_REASONS)
+
+    def test_the_silent_fallbacks_this_gate_exists_to_catch_still_fail(self) -> None:
+        for reason in (
+            "formation_slot_unassigned",
+            "trajectory_inactive",
+            "trajectory_entry_state_invalid",
+        ):
+            with self.subTest(reason=reason):
+                self.assertNotIn(reason, TRAJECTORY_NOMINAL_REASONS)

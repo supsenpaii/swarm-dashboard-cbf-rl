@@ -96,7 +96,22 @@ PX4_INSTANCE: dict[str, str] = {UAV_01: "0", UAV_02: "1"}
 NAV_STATE_OFFBOARD = PX4_FACTS["nav_state_offboard"]["value"]
 NAV_STATE_POSCTL = PX4_FACTS["nav_state_posctl"]["value"]
 
-TRAJECTORY_NOMINAL_REASONS = {"tracking_trajectory", "trajectory_reached"}
+# "trajectory_entering" belongs here: it is what the companion reports while
+# the vehicle flies toward a path it is further than trajectory_entry_radius_m
+# from -- after a yield detour, or simply overshooting at cruise. It is a
+# trajectory state, not the formation/altitude-hold fallback these checks
+# exist to catch, and sparrow_corridor_replay.py:277 already reads it that
+# way. Leaving it out cost the 15 m/s rung a flight: both vehicles crossed the
+# entry radius back and forth every ~2.7 s, out of phase with each other, so
+# the gate's demand that BOTH be tracking in the same 0.25 s poll almost never
+# held and a longer timeout would not have helped. The fallback reasons
+# ("formation_slot_unassigned", "trajectory_inactive",
+# "trajectory_entry_state_invalid") still fail, which is the whole point.
+TRAJECTORY_NOMINAL_REASONS = {
+    "tracking_trajectory",
+    "trajectory_reached",
+    "trajectory_entering",
+}
 
 # What this driver's guards/measurements assume is configured in the live
 # stack's .env before ./run_all.sh starts. Not enforced by this process --
