@@ -300,3 +300,29 @@ def test_engagement_floor_does_not_move_the_certified_rungs() -> None:
                 config.trigger_distance_m
                 < config.prediction_horizon_s * closing_m_s
             )
+
+
+def test_yield_lane_change_does_not_saturate_against_tracker_feedback() -> None:
+    """The 2026-08-16 flight failure, closed loop.
+
+    `mission` is the tracker's corrected command, so once the vehicle is off
+    its line it carries a pull-back term -- and that term used to re-enter the
+    yield output weighted by forward_speed.  The excursion then stalled at
+    yield_lateral_speed_m_s / position_gain_s_inv (3.0 / 0.6 = 5 m measured)
+    while the barrier wanted ~52 m.
+    """
+    coordinator = ConflictCoordinator("UAV-02", "UAV-01", x500_20m_conflict_config())
+    state = states(100.0)
+    state["UAV-01"]["velocity_enu_m_s"] = (10.0, 0.0, 0.0)
+    state["UAV-02"]["velocity_enu_m_s"] = (-10.0, 0.0, 0.0)
+    position_gain_s_inv = 0.6
+    dt_s = 0.1
+
+    offset_m = 0.0
+    for _ in range(100):
+        mission = (-9.4, -position_gain_s_inv * offset_m, 0.25)
+        output, status = coordinator.filter((0.0, 0.0, 0.0), mission, state)
+        assert status["role"] == "yield"
+        offset_m += output[1] * dt_s
+
+    assert abs(offset_m) > 25.0, offset_m

@@ -19,6 +19,9 @@ class _EncounterState:
     release_count: int = 0
     released_until_clear: bool = False
     yield_side: float = 1.0
+    # The along-path direction the lane change is built on, frozen for the
+    # duration of one yield.  See the latch site in `filter` for why.
+    yield_heading: tuple[float, float] | None = None
 
 
 _SHARED_STATES: dict[tuple[str, str], _EncounterState] = {}
@@ -244,6 +247,7 @@ class ConflictCoordinator:
             self._state.release_count = 0
             self._state.released_until_clear = False
             self._state.yield_side = 1.0
+            self._state.yield_heading = None
 
     def filter(
         self,
@@ -356,6 +360,7 @@ class ConflictCoordinator:
                 if self._state.release_count >= release_threshold:
                     self._state.active = False
                     self._state.release_count = 0
+                    self._state.yield_heading = None
                     if self.config.release_at_reserve_when_nonclosing:
                         self._state.released_until_clear = True
                     elif distance >= self.config.encounter_reset_distance_m:
@@ -408,6 +413,19 @@ class ConflictCoordinator:
                             mission[0] / mission_horizontal_speed,
                             mission[1] / mission_horizontal_speed,
                         )
+                        # Frozen: `mission` is the tracker's corrected
+                        # command, so once the lane change moves the vehicle
+                        # off its line it carries a pull-back term -- and it
+                        # re-enters here weighted by forward_speed, nearly the
+                        # whole cruise.  Live, that cancels the lateral push
+                        # and the excursion stalls at yield_lateral_speed_m_s
+                        # / position_gain_s_inv: 5 m in flight against ~52 m
+                        # of barrier.  ponytail: stale if one encounter spans
+                        # a corner; re-latch per leg if a rung yields at a
+                        # vertex.
+                        if self._state.yield_heading is None:
+                            self._state.yield_heading = mission_direction
+                        mission_direction = self._state.yield_heading
                         output = (
                             mission_direction[0] * forward_speed
                             + side * tangent[0] * lateral_speed,
