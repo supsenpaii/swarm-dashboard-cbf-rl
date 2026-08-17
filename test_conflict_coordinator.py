@@ -355,3 +355,92 @@ def test_the_lane_change_still_fits_inside_cruise_at_every_rung() -> None:
         lateral = sparrow_20m_conflict_config(speed).yield_lateral_speed_m_s
         assert lateral < speed, (speed, lateral)
         assert math.sqrt(speed * speed - lateral * lateral) > 0.5 * lateral
+
+
+def _vertical_pair(gap_m: float = 80.0, speed: float = 20.0):
+    return {
+        "UAV-01": {
+            "valid": True,
+            "position_enu_m": (0.0, 0.0, 100.0 - gap_m / 2.0),
+            "velocity_enu_m_s": (0.0, 0.0, speed),
+        },
+        "UAV-02": {
+            "valid": True,
+            "position_enu_m": (0.0, 0.0, 100.0 + gap_m / 2.0),
+            "velocity_enu_m_s": (0.0, 0.0, -speed),
+        },
+    }
+
+
+def test_a_vertical_head_on_gets_a_sideways_yield() -> None:
+    """It used to get no maneuver at all.
+
+    The lane change needs a horizontal normal to take its tangent from and a
+    horizontal mission to preserve; a vertical head-on has neither, so the
+    whole block was skipped and only the maximum_toward_peer clamp acted --
+    output (0, 0, -16) against a mission of (0, 0, -20). Nothing broke the
+    symmetry, and the pair held separation without ever passing.
+    """
+    reset_shared_conflict_state(("UAV-01", "UAV-02"))
+    coordinator = ConflictCoordinator(
+        "UAV-02", "UAV-01", sparrow_20m_conflict_config(20.0)
+    )
+
+    output, status = coordinator.filter(
+        (0.0, 0.0, -20.0), (0.0, 0.0, -20.0), _vertical_pair()
+    )
+
+    assert status["role"] == "yield"
+    assert math.hypot(output[0], output[1]) > 1.0, output
+    # The sideways speed is drawn from the vertical mission, exactly as the
+    # horizontal branch draws forward speed from the horizontal one.
+    assert math.isclose(
+        math.hypot(*output), 20.0, rel_tol=1e-6
+    ), output
+
+
+def test_a_vertical_yield_does_not_flip_to_the_horizontal_branch() -> None:
+    """The displacement it creates would otherwise switch branches.
+
+    One frame after the sideways step starts working, the vehicle is off the
+    axis and `mission` grows a horizontal component pointing back at it.
+    Re-deciding per frame handed the horizontal branch that pull-back as its
+    along-path heading and flew the vehicle back into the standoff.
+    """
+    reset_shared_conflict_state(("UAV-01", "UAV-02"))
+    coordinator = ConflictCoordinator(
+        "UAV-02", "UAV-01", sparrow_20m_conflict_config(20.0)
+    )
+    coordinator.filter((0.0, 0.0, -20.0), (0.0, 0.0, -20.0), _vertical_pair())
+
+    state = _vertical_pair()
+    state["UAV-02"]["position_enu_m"] = (30.0, 0.0, 140.0)
+    # The mission now points back at the axis, which is the trap.
+    output, status = coordinator.filter(
+        (0.0, 0.0, -20.0), (-12.0, 0.0, -16.0), state
+    )
+
+    assert status["role"] == "yield"
+    # Displaced to +x, the yield must not carry the vehicle back toward the
+    # axis it just left. It may step tangentially -- once off-axis the normal
+    # has a horizontal part again and the step rotates with it -- but a
+    # negative x component here is the standoff reasserting itself.
+    assert output[0] >= 0.0, f"yield reversed into the standoff: {output}"
+    # It keeps the mission's vertical progress and discards the horizontal
+    # component outright -- which is the pull-back, and the whole point.
+    assert math.isclose(math.hypot(*output), 16.0, rel_tol=1e-6), output
+
+
+def test_a_horizontal_encounter_is_untouched_by_the_vertical_branch() -> None:
+    reset_shared_conflict_state(("UAV-01", "UAV-02"))
+    coordinator = ConflictCoordinator("UAV-02", "UAV-01", x500_20m_conflict_config())
+    state = states(100.0)
+    state["UAV-01"]["velocity_enu_m_s"] = (10.0, 0.0, 0.0)
+    state["UAV-02"]["velocity_enu_m_s"] = (-10.0, 0.0, 0.0)
+
+    output, status = coordinator.filter((9.0, -0.1, 8.0), (-9.4, 0.0, 0.25), state)
+
+    assert status["role"] == "yield"
+    assert math.isclose(abs(output[1]), 3.0)
+    assert math.isclose(math.hypot(output[0], output[1]), 9.4)
+    assert output[2] == 0.25
