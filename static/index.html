@@ -454,8 +454,8 @@
 
       <div class="target-information">
         <div class="information-row"><span>Waypoints</span><strong id="mission-waypoints">0</strong></div>
-        <div class="information-row"><span>Chu vi</span><strong id="mission-perimeter">N/A</strong></div>
-        <div class="information-row"><span>Một vòng</span><strong id="mission-lap">N/A</strong></div>
+        <div class="information-row"><span id="mission-perimeter-label">Chu vi</span><strong id="mission-perimeter">N/A</strong></div>
+        <div class="information-row"><span id="mission-lap-label">Một vòng</span><strong id="mission-lap">N/A</strong></div>
         <div class="information-row"><span>Profile runtime</span><strong id="mission-profile">Đang tải...</strong></div>
         <div class="information-row"><span>Trạng thái</span><strong id="mission-state">Chưa gửi</strong></div>
         <div class="information-row"><span>Thực thi</span><strong id="mission-execution">Chưa chạy</strong></div>
@@ -1471,18 +1471,24 @@
     const points=missionPaths[droneId];
     if(!points||points.length<2)return;
     // Repeat the first point so the operator sees the loop the drone will
-    // actually fly; the closing edge is implicit in what gets sent.
+    // actually fly; the closing edge is implicit in what gets sent. Two
+    // points are an open line and have no closing edge to draw -- showing
+    // one would draw a path the drone is not going to fly.
     const latlngs=points.map(p=>[p.lat,p.lng]);
-    latlngs.push(latlngs[0]);
+    if(!missionIsOpenLine(points))latlngs.push(latlngs[0]);
     missionLayers[droneId]=L.polyline(latlngs,{
       color:MISSION_COLORS[droneId]||"#38bdf8",weight:2,dashArray:"6 4",opacity:.9
     }).addTo(map);
   }
 
-  function missionPerimeterM(points){
-    if(!points||points.length<3)return 0;
+  // Two points draw an open line, three or more a closed loop -- the same
+  // split the server makes, so what the panel shows matches what will fly.
+  function missionIsOpenLine(points){return Boolean(points)&&points.length===2;}
+  function missionPathLengthM(points){
+    if(!points||points.length<2)return 0;
+    const closed=!missionIsOpenLine(points);
     let total=0;
-    for(let i=0;i<points.length;i++){
+    for(let i=0;i<(closed?points.length:points.length-1);i++){
       const a=points[i], b=points[(i+1)%points.length];
       total+=map.distance(L.latLng(a.lat,a.lng),L.latLng(b.lat,b.lng));
     }
@@ -1539,17 +1545,20 @@
 
   function updateMissionUi(){
     const points=missionPaths[selectedDroneId]||[];
-    const perimeter=missionPerimeterM(points);
+    const pathLength=missionPathLengthM(points);
+    const openLine=missionIsOpenLine(points);
     const speed=Number(document.getElementById("mission-speed").value);
     const mission=missionVerdicts[selectedDroneId];
     const execution=mission?.execution_state||"idle";
     const executing=["entering","running","stopping"].includes(execution);
     document.getElementById("mission-drone-label").textContent=selectedDroneId;
     document.getElementById("mission-waypoints").textContent=String(points.length);
-    document.getElementById("mission-perimeter").textContent=perimeter?`${perimeter.toFixed(1)} m`:"N/A";
+    document.getElementById("mission-perimeter-label").textContent=openLine?"Chiều dài":"Chu vi";
+    document.getElementById("mission-lap-label").textContent=openLine?"Bay hết":"Một vòng";
+    document.getElementById("mission-perimeter").textContent=pathLength?`${pathLength.toFixed(1)} m`:"N/A";
     document.getElementById("mission-lap").textContent=
-      perimeter&&Number.isFinite(speed)&&speed>0?`${(perimeter/speed).toFixed(0)} s`:"N/A";
-    document.getElementById("mission-send-button").disabled=points.length<3||executing;
+      pathLength&&Number.isFinite(speed)&&speed>0?`${(pathLength/speed).toFixed(0)} s`:"N/A";
+    document.getElementById("mission-send-button").disabled=points.length<2||executing;
     document.getElementById("mission-start-button").disabled=mission?.start_ready!==true;
     document.getElementById("mission-stop-button").disabled=!["entering","running"].includes(execution);
     document.getElementById("mission-draw-button").classList.toggle("active",missionDrawing);
@@ -1606,7 +1615,7 @@
 
   function sendMission(){
     const points=missionPaths[selectedDroneId];
-    if(!points||points.length<3)return;
+    if(!points||points.length<2)return;
     const ok=sendJson({
       type:"mission_path",
       drone_id:selectedDroneId,

@@ -82,6 +82,26 @@ class LinearTrajectory:
         )
         return fraction * self._duration_s()
 
+    @property
+    def waypoints_enu_m(self) -> tuple[Vector3, Vector3]:
+        """The two ends. A line has waypoints like any other drawn path, and
+        naming them the same thing the closed polyline does is what lets the
+        mission bridge and the dashboard report an open leg without either of
+        them having to know which kind it is holding."""
+        return (self.start_enu_m, self.end_enu_m)
+
+    def perimeter_m(self) -> float:
+        """Length of the leg. Named for the closed-polyline protocol the
+        mission bridge reads, which has no notion of an open path -- for a
+        line there is no perimeter, only the distance from end to end."""
+        return _norm(
+            tuple(self.end_enu_m[i] - self.start_enu_m[i] for i in range(3))
+        )
+
+    def lap_duration_s(self) -> float:
+        """Time to fly it once. A line is not a lap and does not repeat."""
+        return self._duration_s()
+
     def is_finished(self, t_s: float) -> bool:
         return t_s >= self._duration_s()
 
@@ -397,7 +417,7 @@ def corner_profile(
 
 
 def mission_speed_preview(
-    trajectory: "ClosedPolylineTrajectory",
+    trajectory: "ClosedPolylineTrajectory | LinearTrajectory",
     *,
     maximum_acceleration_m_s2: float,
     corner_tracking_tolerance_m: float,
@@ -411,6 +431,25 @@ def mission_speed_preview(
     dishonest thing the mission pipeline could do, so this returns the real
     profile for the dashboard to display next to the request.
     """
+    if isinstance(trajectory, LinearTrajectory):
+        # An open line has no corner to slow for and no next leg to brake
+        # into: it accelerates once and holds at the end. The only thing that
+        # can hold it under the request is the leg being too short to reach
+        # it, which is the same v^2 = 2*a*L the corner case uses.
+        length_m = trajectory.perimeter_m()
+        achievable_m_s = min(
+            trajectory.speed_m_s,
+            math.sqrt(max(0.0, maximum_acceleration_m_s2 * length_m)),
+        )
+        return {
+            "requested_speed_m_s": round(trajectory.speed_m_s, 3),
+            "achievable_speed_m_s": round(achievable_m_s, 3),
+            # No corner exists, so the slowest one is the leg itself.
+            "slowest_corner_m_s": round(achievable_m_s, 3),
+            "reaches_requested_speed": achievable_m_s
+            >= trajectory.speed_m_s - 1e-6,
+            "estimated_lap_s": round(length_m / max(0.1, achievable_m_s), 1),
+        }
     segments = trajectory._segments()
     ceiling_m_s = trajectory.speed_m_s
     corner_speeds = []

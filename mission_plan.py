@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 
 from swarm_state import GeodeticOrigin, geodetic_to_enu
-from trajectory_controller import ClosedPolylineTrajectory
+from trajectory_controller import ClosedPolylineTrajectory, LinearTrajectory
 
 Vector3 = tuple[float, float, float]
 
@@ -98,9 +98,12 @@ def waypoints_to_enu(
     """Map waypoints (degrees) to the shared ENU frame at one altitude."""
     if not isinstance(waypoints, (list, tuple)):
         raise MissionRejected("waypoints must be a list")
-    if not 3 <= len(waypoints) <= MAXIMUM_WAYPOINTS:
+    # Two points draw an open line, three or more a closed loop. Both are
+    # missions an operator legitimately wants: a survey leg is not a lap.
+    if not 2 <= len(waypoints) <= MAXIMUM_WAYPOINTS:
         raise MissionRejected(
-            f"a closed mission needs 3 to {MAXIMUM_WAYPOINTS} waypoints, got {len(waypoints)}"
+            f"a mission needs 2 to {MAXIMUM_WAYPOINTS} waypoints, "
+            f"got {len(waypoints)}"
         )
     converted = []
     for index, waypoint in enumerate(waypoints):
@@ -179,8 +182,12 @@ def validate_mission(
     payload: Mapping[str, Any],
     origin: GeodeticOrigin,
     limits: MissionLimits | None = None,
-) -> ClosedPolylineTrajectory:
-    """Turn a dashboard mission payload into a trajectory, or refuse it."""
+) -> ClosedPolylineTrajectory | LinearTrajectory:
+    """Turn a dashboard mission payload into a trajectory, or refuse it.
+
+    Two waypoints give a LinearTrajectory -- an open leg, flown once and held
+    at the far end. Three or more give a closed loop, flown until stopped.
+    """
     limits = limits or MissionLimits.from_environment()
     altitude_m = _finite(
         payload.get("altitude_m"),
@@ -204,7 +211,9 @@ def validate_mission(
                 )
 
     count = len(waypoints)
-    for index in range(count):
+    open_line = count == 2
+    # An open line has count - 1 segments; a loop wraps back to the start.
+    for index in range(count - 1 if open_line else count):
         following = waypoints[(index + 1) % count]
         if math.dist(waypoints[index], following) < MINIMUM_SEGMENT_M:
             raise MissionRejected(
@@ -212,14 +221,24 @@ def validate_mission(
                 f"{MINIMUM_SEGMENT_M} m apart"
             )
 
-    crossing = self_intersecting_pair(waypoints)
-    if crossing is not None:
-        raise MissionRejected(
-            f"segments {crossing[0]} and {crossing[1]} cross: the follower "
-            "cannot tell the branches apart at the crossing"
-        )
+    if not open_line:
+        # A single segment cannot cross itself, and the ambiguity this
+        # refuses -- two branches equidistant from the vehicle -- cannot
+        # arise on a line.
+        crossing = self_intersecting_pair(waypoints)
+        if crossing is not None:
+            raise MissionRejected(
+                f"segments {crossing[0]} and {crossing[1]} cross: the follower "
+                "cannot tell the branches apart at the crossing"
+            )
 
     try:
+        if open_line:
+            return LinearTrajectory(
+                start_enu_m=waypoints[0],
+                end_enu_m=waypoints[1],
+                speed_m_s=speed_m_s,
+            )
         return ClosedPolylineTrajectory(waypoints_enu_m=waypoints, speed_m_s=speed_m_s)
     except ValueError as error:
         raise MissionRejected(str(error)) from error

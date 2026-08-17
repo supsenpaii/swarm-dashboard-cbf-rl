@@ -13,6 +13,7 @@ from mission_plan import (
     review_missions,
     validate_mission,
 )
+from trajectory_controller import ClosedPolylineTrajectory, LinearTrajectory
 from swarm_state import GeodeticOrigin
 
 ORIGIN = GeodeticOrigin(latitude_deg=47.3977508, longitude_deg=8.5456073, altitude_msl_m=488.0)
@@ -85,9 +86,38 @@ def test_waypoint_outside_the_geofence_is_refused():
         validate_mission(mission(waypoints=square(20.0, east_offset_m=250.0)), ORIGIN, LIMITS)
 
 
-def test_a_loop_needs_at_least_three_waypoints():
-    with pytest.raises(MissionRejected, match="3 to"):
-        validate_mission(mission(waypoints=square(20.0)[:2]), ORIGIN, LIMITS)
+def test_two_waypoints_draw_an_open_line_not_a_loop():
+    """A survey leg is a mission too, and it is not a lap.
+
+    This used to demand three waypoints. Two now give a LinearTrajectory,
+    flown once and held at the far end, which is also the trajectory kind the
+    controller follows from measured progress rather than a clock.
+    """
+    trajectory = validate_mission(
+        mission(waypoints=square(20.0)[:2]), ORIGIN, LIMITS
+    )
+
+    assert isinstance(trajectory, LinearTrajectory)
+    assert not isinstance(trajectory, ClosedPolylineTrajectory)
+    # The leg, not a perimeter: no closing edge is counted.
+    assert trajectory.perimeter_m() == pytest.approx(20.0, abs=0.5)
+    assert trajectory.lap_duration_s() == pytest.approx(
+        trajectory.perimeter_m() / trajectory.speed_m_s
+    )
+
+
+def test_one_waypoint_is_still_not_a_mission():
+    with pytest.raises(MissionRejected, match="2 to"):
+        validate_mission(mission(waypoints=square(20.0)[:1]), ORIGIN, LIMITS)
+
+
+def test_an_open_line_still_has_to_be_long_enough_to_fly():
+    close_together = [
+        {"latitude_deg": 47.397971, "longitude_deg": 8.546163},
+        {"latitude_deg": 47.397972, "longitude_deg": 8.546163},
+    ]
+    with pytest.raises(MissionRejected, match="closer than"):
+        validate_mission(mission(waypoints=close_together), ORIGIN, LIMITS)
 
 
 def test_malformed_waypoints_are_refused_rather_than_coerced():
