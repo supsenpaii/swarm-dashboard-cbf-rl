@@ -198,6 +198,36 @@ class AltitudeTrendHoverGate:
         return self.reached(state.get("altitude_m"))
 
 
+# A hold can log clean numbers and still be hollow.  The 15 m/s corridor
+# returned FLIGHT_PASS having touched 2.97 m/s of a commanded 14.76 and never
+# reached its far end -- nothing gated on either number, so the rung went
+# green without flying its case.  Separation on the measured numbers is wide:
+# that hollow run sat at 0.20 of command while the polygon flight reached
+# 1.03 and its parked partner 1.87, so half of command refuses the first
+# without coming near the others.
+HOLLOW_HOLD_SPEED_FRACTION = 0.5
+
+
+def check_hold_was_flown(
+    completed: dict[str, dict[str, Any]], trajectory_env: dict[str, str]
+) -> list[str]:
+    """Reasons the hold did not fly its case.  Empty means it did."""
+    reasons = []
+    for drone_id, flown in sorted(completed.items()):
+        prefix = f"SWARM_TRAJECTORY_{drone_id.replace('-', '_')}"
+        commanded = float(trajectory_env[f"{prefix}_SPEED_M_S"])
+        reached = flown["max_horizontal_speed_m_s"]
+        if reached is None or reached < HOLLOW_HOLD_SPEED_FRACTION * commanded:
+            reasons.append(f"{drone_id} peaked at {reached} of {commanded} m/s")
+        # A closed polyline has no end to reach: it laps until the hold runs
+        # out, so only an open trajectory can be asked to finish.
+        if trajectory_env[f"{prefix}_KIND"] == "linear" and not flown[
+            "reached_trajectory_end"
+        ]:
+            reasons.append(f"{drone_id} never reached its trajectory end")
+    return reasons
+
+
 def initial_error_limit_m() -> float:
     """Operator override for the alignment limit, clamped to a sane band."""
     try:
@@ -689,6 +719,7 @@ class Flight:
                 samples[drone_id].append(state)
             time.sleep(0.5)
 
+        completed: dict[str, dict[str, Any]] = {}
         for drone_id in DRONE_IDS:
             drone_samples = samples[drone_id]
             errors = [
@@ -703,9 +734,7 @@ class Flight:
                 if s["cbf_minimum_margin_m"] is not None
             ]
             interventions = sum(1 for s in drone_samples if s["cbf_intervened"])
-            self.log(
-                "TRAJECTORY_HOLD_COMPLETE",
-                drone_id=drone_id,
+            completed[drone_id] = dict(
                 seconds=self.hold_s,
                 max_tracking_error_m=round(max(errors), 3) if errors else None,
                 final_tracking_error_m=round(errors[-1], 3) if errors else None,
@@ -720,6 +749,12 @@ class Flight:
                     s["nominal_reason"] == "trajectory_reached" for s in drone_samples
                 ),
             )
+            self.log("TRAJECTORY_HOLD_COMPLETE", drone_id=drone_id, **completed[drone_id])
+
+        # Logged first, so the evidence survives whichever way this goes.
+        hollow = check_hold_was_flown(completed, configured_trajectory_env())
+        if hollow:
+            raise FlightAbort("hold_did_not_fly_the_case:" + "; ".join(hollow))
 
         self.commander(UAV_01, "mode", "posctl")
         self.await_vehicle_state(

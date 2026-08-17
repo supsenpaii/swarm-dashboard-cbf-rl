@@ -18,6 +18,7 @@ from two_uav_trajectory_flight import (
     INITIAL_ERROR_LIMIT_DEFAULT_M,
     Flight,
     FlightAbort,
+    check_hold_was_flown,
     check_initial_frame_alignment,
     initial_error_limit_m,
 )
@@ -321,3 +322,63 @@ class GateStopsTheFlightTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+LINEAR_ENV = {
+    "SWARM_TRAJECTORY_UAV_01_KIND": "linear",
+    "SWARM_TRAJECTORY_UAV_01_SPEED_M_S": "14.76",
+    "SWARM_TRAJECTORY_UAV_02_KIND": "linear",
+    "SWARM_TRAJECTORY_UAV_02_SPEED_M_S": "14.76",
+}
+POLYGON_ENV = {
+    "SWARM_TRAJECTORY_UAV_01_KIND": "polyline",
+    "SWARM_TRAJECTORY_UAV_01_SPEED_M_S": "14.76",
+    "SWARM_TRAJECTORY_UAV_02_KIND": "linear",
+    "SWARM_TRAJECTORY_UAV_02_SPEED_M_S": "1",
+}
+
+
+def hold(speed, reached):
+    return {"max_horizontal_speed_m_s": speed, "reached_trajectory_end": reached}
+
+
+class HollowHoldTests(unittest.TestCase):
+    """Numbers here are the recorded ones, not invented.
+
+    The corridor run is artifacts/sparrow_corridor_15ms_flight.json, which
+    returned FLIGHT_PASS; the polygon run is
+    artifacts/sparrow_polygon_15ms_flight_v3.json, which was real.
+    """
+
+    def test_the_corridor_run_that_passed_hollow_is_now_refused(self) -> None:
+        reasons = check_hold_was_flown(
+            {"UAV-01": hold(2.97, False), "UAV-02": hold(2.97, False)}, LINEAR_ENV
+        )
+
+        self.assertEqual(len(reasons), 4)
+        self.assertIn("2.97 of 14.76", reasons[0])
+        self.assertIn("never reached its trajectory end", reasons[1])
+
+    def test_the_polygon_run_that_was_real_still_passes(self) -> None:
+        self.assertEqual(
+            check_hold_was_flown(
+                {"UAV-01": hold(15.27, False), "UAV-02": hold(1.871, True)},
+                POLYGON_ENV,
+            ),
+            [],
+        )
+
+    def test_a_lap_is_not_asked_to_reach_an_end_a_closed_path_has_not(self) -> None:
+        """The whole reason the end check is kind-aware."""
+        self.assertEqual(
+            check_hold_was_flown({"UAV-01": hold(15.27, False)}, POLYGON_ENV), []
+        )
+        self.assertTrue(
+            check_hold_was_flown({"UAV-01": hold(15.27, False)}, LINEAR_ENV)
+        )
+
+    def test_a_hold_with_no_speed_samples_at_all_fails_closed(self) -> None:
+        reasons = check_hold_was_flown({"UAV-01": hold(None, True)}, LINEAR_ENV)
+
+        self.assertEqual(len(reasons), 1)
+        self.assertIn("None of 14.76", reasons[0])
