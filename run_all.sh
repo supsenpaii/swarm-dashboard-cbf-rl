@@ -61,10 +61,12 @@ px4_bin="${PX4_AUTOPILOT_ROOT}/build/px4_sitl_default/bin/px4"
 px4_param_bin="${PX4_AUTOPILOT_ROOT}/build/px4_sitl_default/bin/px4-param"
 gz_env="${PX4_AUTOPILOT_ROOT}/build/px4_sitl_default/rootfs/gz_env.sh"
 gz_world="${SWARM_GZ_WORLD_SDF:-${PX4_AUTOPILOT_ROOT}/Tools/simulation/gz/worlds/default.sdf}"
-# Set SWARM_GZ_GUI_CONFIG to empty to launch Gazebo's own default GUI
-# instead of the stripped-down one, e.g. to inspect the model with the full
-# entity tree and component inspector.
-gz_gui_config="${SWARM_GZ_GUI_CONFIG-${script_dir}/gazebo_gui_light.config}"
+# Stock Gazebo GUI by default: the full entity tree, component inspector and
+# plugin menu are what you actually want when inspecting a model or a spawn,
+# and the stripped-down config hid all of it. Point SWARM_GZ_GUI_CONFIG at
+# gazebo_gui_light.config (or any other .config) to get a lighter one back;
+# start_gazebo_optimized.sh still uses that file directly.
+gz_gui_config="${SWARM_GZ_GUI_CONFIG-}"
 gz_model_root="${SWARM_GZ_MODEL_ROOT:-${PX4_AUTOPILOT_ROOT}/Tools/simulation/gz/models}"
 px4_sys_autostart="${SWARM_PX4_SYS_AUTOSTART:-4020}"
 px4_sim_model="${SWARM_PX4_SIM_MODEL:-gz_sparrow_gimbal}"

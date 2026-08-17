@@ -56,7 +56,7 @@ Các file chạy chính:
 - `isolated_swarm.launch.py`: ROS 2 launch cho telemetry/control.
 - `run_ros_telemetry_local.sh`: chạy ROS stack từ workspace ngoài.
 - `start_gazebo_optimized.sh`: chạy Gazebo server/GUI.
-- `gazebo_gui_light.config`: cấu hình Gazebo GUI nhẹ.
+- `gazebo_gui_light.config`: cấu hình Gazebo GUI nhẹ. Không dùng mặc định — `run_all.sh` chạy GUI gốc của Gazebo; đặt `SWARM_GZ_GUI_CONFIG` trỏ vào file này để quay lại bản nhẹ.
 - `test_*.py`: unit test.
 
 Các thư mục `.venv`, `build`, `install`, `log`, `__pycache__`, file backup và
