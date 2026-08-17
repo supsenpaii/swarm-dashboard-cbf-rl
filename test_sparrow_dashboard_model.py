@@ -17,7 +17,12 @@ def test_native_sparrow_model_chain_and_dashboard_payload_are_present() -> None:
     assert vehicle.count("<motorNumber>") == 4
     assert vehicle.count("<maxRotVelocity>1400.0</maxRotVelocity>") == 4
     assert "model://sparrow_gimbal_core" in wrapper
-    assert "<topic>/sparrow_gimbal/front_lidar</topic>" in wrapper
+    # The front lidar was removed from the airframe on 2026-08-17.  Pinned as
+    # an absence, not simply deleted: the model is assembled from includes, so
+    # a stray lidar could return through sparrow or sparrow_gimbal_core
+    # without anyone editing this wrapper.
+    assert "lidar" not in wrapper.lower()
+    assert "lidar" not in vehicle.lower()
 
 
 def test_sparrow_airframe_pins_rotors_tune_and_acceleration_contract() -> None:

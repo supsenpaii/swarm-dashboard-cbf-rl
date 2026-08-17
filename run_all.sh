@@ -61,7 +61,10 @@ px4_bin="${PX4_AUTOPILOT_ROOT}/build/px4_sitl_default/bin/px4"
 px4_param_bin="${PX4_AUTOPILOT_ROOT}/build/px4_sitl_default/bin/px4-param"
 gz_env="${PX4_AUTOPILOT_ROOT}/build/px4_sitl_default/rootfs/gz_env.sh"
 gz_world="${SWARM_GZ_WORLD_SDF:-${PX4_AUTOPILOT_ROOT}/Tools/simulation/gz/worlds/default.sdf}"
-gz_gui_config="${script_dir}/gazebo_gui_light.config"
+# Set SWARM_GZ_GUI_CONFIG to empty to launch Gazebo's own default GUI
+# instead of the stripped-down one, e.g. to inspect the model with the full
+# entity tree and component inspector.
+gz_gui_config="${SWARM_GZ_GUI_CONFIG-${script_dir}/gazebo_gui_light.config}"
 gz_model_root="${SWARM_GZ_MODEL_ROOT:-${PX4_AUTOPILOT_ROOT}/Tools/simulation/gz/models}"
 px4_sys_autostart="${SWARM_PX4_SYS_AUTOSTART:-4020}"
 px4_sim_model="${SWARM_PX4_SIM_MODEL:-gz_sparrow_gimbal}"
@@ -120,7 +123,7 @@ require_file "${script_dir}/isolated_swarm.launch.py"
 require_file "${script_dir}/bounded_log_writer.py"
 require_file "${gz_env}"
 require_file "${gz_world}"
-require_file "${gz_gui_config}"
+[[ -n "${gz_gui_config}" ]] && require_file "${gz_gui_config}"
 require_file "${gz_model_root}/${gz_model_name}/model.sdf"
 require_file "${px4_airframe}"
 require_file "${SWARM_ROS_SETUP}"
@@ -379,7 +382,8 @@ if [[ ! "${start_gazebo_gui,,}" =~ ^(0|false|no|off)$ ]]; then
   start_process gazebo_gui bash -c '
     set -euo pipefail
     source "$1"
-    exec gz sim -g --gui-config "$2"
+    # No config means Gazebo picks its own default GUI.
+    if [[ -n "$2" ]]; then exec gz sim -g --gui-config "$2"; else exec gz sim -g; fi
   ' _ "${gz_env}" "${gz_gui_config}"
   gazebo_gui_pid="${child_pids[-1]}"
   sleep 1
