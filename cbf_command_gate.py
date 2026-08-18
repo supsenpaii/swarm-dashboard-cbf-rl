@@ -176,6 +176,55 @@ class CbfCommandGate:
         self.drone_id = drone_id
         self.required_peer_ids = tuple(required_peer_ids)
         self.config = config or CbfConfig()
+        # peer_id -> (state_signature, required_margin_m, growth_rate_m_s).
+        # See _required_margin_growth.
+        self._required_history: dict[str, tuple[tuple, float, float]] = {}
+
+    def _required_margin_growth(
+        self,
+        peer_id: str,
+        signature: tuple,
+        required_margin: float,
+        maximum_rate_m_s: float,
+    ) -> float:
+        """How fast this peer's required separation is growing, m/s, floored at 0.
+
+        The barrier is h = d^2 - R^2 and the solver enforces `hdot + alpha*h >= 0`,
+        but `hdot` was written as if R were constant. R is not constant: it
+        carries the closing speed, quadratically. Measured on the 20 m/s
+        corridor breach, R grew at +30 m/s while the pair closed at 20, so the
+        dropped `-2*R*Rdot` term was 5220 m^2/s against the 3760 the constraint
+        did include. The gate was solving a constraint missing its dominant
+        contribution, which is why it braked half a second too late, breached,
+        and then released as R collapsed behind the brake -- twice per
+        encounter.
+
+        Floored at zero deliberately. A shrinking R would make the true
+        constraint easier, and a safety gate does not get to relax itself on
+        the strength of a numerical derivative; this term may only ever tighten.
+
+        Keyed on the state it was computed from so that the RL shadow, which
+        filters a second candidate against the SAME frame, reuses the rate
+        instead of differentiating against a zero time step.
+
+        Capped at `maximum_rate_m_s`, the fastest R can physically grow given
+        the relative braking acceleration it is built from. A numerical
+        difference can exceed that only when the two samples do not belong to
+        the same encounter -- a gate reused across a scenario reset, a peer
+        reappearing after a dropout -- and an uncapped spike there brakes a
+        vehicle to a stop over a discontinuity that never happened.
+        """
+        previous = self._required_history.get(peer_id)
+        if previous is not None and previous[0] == signature:
+            return previous[2]
+        rate = 0.0
+        if previous is not None and self.config.control_period_s > 0.0:
+            rate = min(
+                maximum_rate_m_s,
+                max(0.0, (required_margin - previous[1]) / self.config.control_period_s),
+            )
+        self._required_history[peer_id] = (signature, required_margin, rate)
+        return rate
 
     def filter(self, nominal_velocity_enu_m_s: Any, swarm_state: dict[str, Any]) -> CbfCommand:
         nominal = _vector(nominal_velocity_enu_m_s)
@@ -189,6 +238,7 @@ class CbfCommandGate:
                 return self._hold("peer_state_invalid")
             peer_states[peer_id] = peer
         constraints: list[tuple[Vector3, float]] = []
+        verification: list[tuple[Vector3, float]] = []
         lower = [
             (self.config.geofence_min_enu_m[i] - own[0][i]) / self.config.lookahead_s
             for i in range(3)
@@ -261,36 +311,83 @@ class CbfCommandGate:
                 critical_required_separation_m = required_margin
             required_margin_solve = required_margin + self.config.design_margin_buffer_m
             h = distance * distance - required_margin_solve * required_margin_solve
-            # d/dt h + alpha*h >= 0, where relative = own - peer.
-            required_dot = _dot(relative, peer_velocity) - 0.5 * self.config.barrier_gain_s_inv * h
-            constraints.append((relative, required_dot))
+            # d/dt h + alpha*h >= 0, where relative = own - peer and
+            # h = d^2 - R^2, so hdot = 2*rel.(own_v - peer_v) - 2*R*Rdot. The
+            # R*Rdot term is the requirement outrunning the vehicle; see
+            # _required_margin_growth for what dropping it cost.
+            # dR/dt = dR/dv * dv/dt, and the closing speed cannot change
+            # faster than the relative braking acceleration R is sized
+            # against, so this is R's own physical growth ceiling.
+            maximum_growth_rate_m_s = (
+                (max(own[3], peer_age_ms) / 1000.0 + self.config.command_latency_s)
+                * self.config.relative_braking_acceleration_m_s2
+                + closing_speed
+            )
+            required_growth = self._required_margin_growth(
+                peer_id,
+                (peer_position, peer_velocity, own[0], own[1]),
+                required_margin,
+                maximum_growth_rate_m_s,
+            )
+            required_dot = (
+                _dot(relative, peer_velocity)
+                - 0.5 * self.config.barrier_gain_s_inv * h
+            )
+            # Two targets, deliberately. The solver aims at the anticipatory
+            # constraint so it brakes while the requirement is still growing;
+            # feasibility is judged against the physical one, because "the
+            # barrier cannot be honoured" is the only condition that earns a
+            # fail-closed hold. Verifying against the anticipatory target
+            # instead turns every fast-growing encounter into a refusal: 444
+            # infeasible frames on the crossing sweep, where a vehicle braking
+            # as hard as it can is the correct answer, not a stop.
+            constraints.append(
+                (relative, required_dot + required_margin_solve * required_growth)
+            )
+            verification.append((relative, required_dot))
         reachable_radius_m_s = (
             self.config.maximum_acceleration_m_s2 * self.config.control_period_s
             if self.config.maximum_acceleration_m_s2 > 0.0
             else math.inf
         )
-        candidate = list(_limit_norm(nominal, self.config.maximum_velocity_m_s))
-        for _ in range(12):
-            for axis in range(3):
-                candidate[axis] = min(upper[axis], max(lower[axis], candidate[axis]))
-            candidate[:] = _limit_norm(tuple(candidate), self.config.maximum_velocity_m_s)
-            candidate[:] = _limit_norm_about(
-                tuple(candidate), own[1], reachable_radius_m_s
+        def solve(targets: list[tuple[Vector3, float]]) -> Vector3:
+            candidate = list(_limit_norm(nominal, self.config.maximum_velocity_m_s))
+            for _ in range(12):
+                for axis in range(3):
+                    candidate[axis] = min(upper[axis], max(lower[axis], candidate[axis]))
+                candidate[:] = _limit_norm(tuple(candidate), self.config.maximum_velocity_m_s)
+                candidate[:] = _limit_norm_about(
+                    tuple(candidate), own[1], reachable_radius_m_s
+                )
+                for normal, required_dot in targets:
+                    violation = required_dot - _dot(normal, tuple(candidate))
+                    if violation > 0.0:
+                        scale = violation / max(_dot(normal, normal), 1e-9)
+                        for axis in range(3):
+                            candidate[axis] += scale * normal[axis]
+            return tuple(candidate)  # type: ignore[return-value]
+
+        def admissible(velocity: Vector3) -> bool:
+            return not (
+                any(velocity[i] < lower[i] - 1e-5 or velocity[i] > upper[i] + 1e-5 for i in range(3))
+                or _norm(velocity) > self.config.maximum_velocity_m_s + 1e-5
+                or _norm(tuple(velocity[i] - own[1][i] for i in range(3)))
+                > reachable_radius_m_s + 1e-5
+                or any(
+                    _dot(normal, velocity) < required_dot - 1e-4
+                    for normal, required_dot in verification
+                )
             )
-            for normal, required_dot in constraints:
-                violation = required_dot - _dot(normal, tuple(candidate))
-                if violation > 0.0:
-                    scale = violation / max(_dot(normal, normal), 1e-9)
-                    for axis in range(3):
-                        candidate[axis] += scale * normal[axis]
-        velocity = tuple(candidate)
-        if (
-            any(velocity[i] < lower[i] - 1e-5 or velocity[i] > upper[i] + 1e-5 for i in range(3))
-            or _norm(velocity) > self.config.maximum_velocity_m_s + 1e-5
-            or _norm(tuple(velocity[i] - own[1][i] for i in range(3)))
-            > reachable_radius_m_s + 1e-5
-            or any(_dot(normal, velocity) < required_dot - 1e-4 for normal, required_dot in constraints)
-        ):
+
+        # Aim at the anticipatory target first. When it is out of reach the
+        # alternating projection can land somewhere that satisfies neither it
+        # nor the physical constraint, so a failure to verify falls back to
+        # solving the physical one -- byte for byte the pre-anticipation
+        # behaviour, which is why this can brake earlier but never worse.
+        velocity = solve(constraints)
+        if not admissible(velocity):
+            velocity = solve(verification)
+        if not admissible(velocity):
             return self._hold(
                 "cbf_constraints_infeasible",
                 min(margin_values, default=None),

@@ -74,8 +74,16 @@ class FlightTraceReplayTests(unittest.TestCase):
         # step change to cruise gave the pair closing speeds no real vehicle
         # reaches, and required_margin is quadratic in closing speed -- so the
         # old edge was pessimistic for a reason that was an artifact of the
-        # simulation, not a property of the barrier. It now sits between 1.50
-        # and 1.60.
+        # simulation, not a property of the barrier. It moved to 1.50/1.60.
+        #
+        # Second correction, 2026-08-18: the scenario now also carries the
+        # airframe's response lag and acceleration limit, where before its
+        # vehicle changed velocity in one 20 ms step. The edge stays at
+        # 1.50/1.60 -- but what happens AT the edge is no longer a refused
+        # frame. The barrier remains satisfiable there and the pair stalls
+        # instead; `first_infeasible_s` is None all the way to sigma 3.0. An
+        # assertion that the edge is marked by infeasibility was really an
+        # assertion about the instant vehicle.
         results = {
             sigma: simulate(scenario, sigma, covariance_frames=measured_max).as_dict()
             for sigma in (0.10, 1.50, 1.60)
@@ -85,7 +93,8 @@ class FlightTraceReplayTests(unittest.TestCase):
         self.assertEqual(_feasible(results[0.10], completers), (True, True))
         self.assertEqual(_feasible(results[1.50], completers), (True, True))
         self.assertEqual(_feasible(results[1.60], completers), (False, False))
-        self.assertIsNotNone(results[1.60]["first_infeasible_s"])
+        self.assertIsNone(results[1.60]["first_infeasible_s"])
+        self.assertGreater(results[1.60]["longest_deadlock_s"], 3.0)
 
     def test_the_sweep_answers_the_same_whatever_ran_before_it(self) -> None:
         """The coordinator's encounter ledger is a module global.

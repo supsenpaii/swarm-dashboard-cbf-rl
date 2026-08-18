@@ -155,6 +155,12 @@ class Scenario:
     peer_age_ms: float = 25.0
     # (start_s, end_s, peer_age_ms) -- models a degraded window inside a run.
     degraded_window: tuple[float, float, float] | None = None
+    # The vehicle this scenario is meant to be about. Zero means the historical
+    # default: no lag and no acceleration limit, i.e. velocity changes
+    # instantaneously. Fine for a question purely about uncertainty, wrong for
+    # any question about braking -- see the limiter in the integration loop.
+    response_time_constant_s: float = 0.0
+    maximum_acceleration_m_s2: float = 0.0
     completion_reasons: tuple[str, ...] = ("trajectory_reached", "slot_reached")
 
 
@@ -197,6 +203,12 @@ def scenarios() -> tuple[Scenario, ...]:
             design_margin_buffer_m=float(
                 CROSSING_CBF_ENV["SWARM_CBF_DESIGN_MARGIN_BUFFER_M"]
             ),
+            # Measured on the 2026-08-15 Sparrow flight (0.860 s horizontal)
+            # and the airframe's own MPC_ACC_HOR_MAX. Without them this
+            # scenario's vehicle stops dead in one 20 ms step, which flatters
+            # every result that depends on how fast it can slow down.
+            response_time_constant_s=0.860,
+            maximum_acceleration_m_s2=4.0,
         ),
         Scenario(
             name="stale_peer_crossing_450ms",
@@ -212,6 +224,9 @@ def scenarios() -> tuple[Scenario, ...]:
                 CROSSING_CBF_ENV["SWARM_CBF_DESIGN_MARGIN_BUFFER_M"]
             ),
             peer_age_ms=450.0,
+            # Same airframe as crossing_validated; only the age moves.
+            response_time_constant_s=0.860,
+            maximum_acceleration_m_s2=4.0,
         ),
         Scenario(
             name="stale_peer_crossing_150ms",
@@ -227,6 +242,9 @@ def scenarios() -> tuple[Scenario, ...]:
                 CROSSING_CBF_ENV["SWARM_CBF_DESIGN_MARGIN_BUFFER_M"]
             ),
             peer_age_ms=150.0,
+            # Same airframe as crossing_validated; only the age moves.
+            response_time_constant_s=0.860,
+            maximum_acceleration_m_s2=4.0,
         ),
         Scenario(
             name="server_loss_station_keeping",
@@ -318,14 +336,21 @@ def simulate(
     ] | None = None,
     covariance_sample_period_s: float = DT_S,
     command_delay_s: float = 0.0,
-    velocity_time_constant_s: float = 0.0,
+    velocity_time_constant_s: float | None = None,
+    maximum_acceleration_m_s2: float | None = None,
 ) -> Run:
     """One kinematic replay. `with_covariance=False` is the feature-off flight
     baseline: no covariance published anywhere, gate not requiring one."""
+    if velocity_time_constant_s is None:
+        velocity_time_constant_s = scenario.response_time_constant_s
+    if maximum_acceleration_m_s2 is None:
+        maximum_acceleration_m_s2 = scenario.maximum_acceleration_m_s2
     if not math.isfinite(command_delay_s) or command_delay_s < 0.0:
         raise ValueError("command delay must be finite and nonnegative")
     if not math.isfinite(velocity_time_constant_s) or velocity_time_constant_s < 0.0:
         raise ValueError("velocity time constant must be finite and nonnegative")
+    if not math.isfinite(maximum_acceleration_m_s2) or maximum_acceleration_m_s2 < 0.0:
+        raise ValueError("maximum acceleration must be finite and nonnegative")
 
     drones = tuple(scenario.spawn)
     # The coordinator keys its encounter ledger by drone pair in a module
@@ -476,6 +501,27 @@ def simulate(
                 )
             else:
                 applied_velocity = target_velocity
+            # Zero means unlimited, which is what this sweep has always used:
+            # with the lag also defaulting to zero, its vehicle changes
+            # velocity instantaneously. That is a defensible simplification
+            # for a question about uncertainty and a disqualifying one for any
+            # question about braking dynamics -- an aircraft that can already
+            # stop instantly gains nothing from stopping sooner.
+            if maximum_acceleration_m_s2 > 0.0:
+                change = math.sqrt(
+                    sum(
+                        (applied_velocity[axis] - velocity[drone][axis]) ** 2
+                        for axis in range(3)
+                    )
+                )
+                allowed = maximum_acceleration_m_s2 * DT_S
+                if change > allowed:
+                    scale = allowed / change
+                    applied_velocity = tuple(
+                        velocity[drone][axis]
+                        + (applied_velocity[axis] - velocity[drone][axis]) * scale
+                        for axis in range(3)
+                    )
             for axis in range(3):
                 position[drone][axis] += applied_velocity[axis] * DT_S
             velocity[drone] = list(applied_velocity)

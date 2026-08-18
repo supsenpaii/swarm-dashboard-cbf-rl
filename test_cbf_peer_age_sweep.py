@@ -20,9 +20,24 @@ class PeerAgeCrossingRegressionTests(unittest.TestCase):
         self.assertGreater(row["min_margin_reported_m"], 0.0)
 
     def test_unbounded_peer_age_remains_hard_infeasible(self) -> None:
-        row = _run_at_age(1000.0)
+        """Re-measured 2026-08-18 at 4000 ms, and NOT an argument for 4000 ms.
+
+        This pin used to sit at 1000 ms. It moved because the scenario stopped
+        modelling a vehicle that changes velocity in one 20 ms step: an instant
+        vehicle acts on a stale peer by putting itself somewhere a rate-limited
+        one physically cannot reach, so staleness hurt it far sooner. Honestly
+        modelled, the crossing survives 2000 ms and breaks at 4000 ms.
+
+        Production stays at 100 ms. A simulation getting less pessimistic is
+        not evidence about the link, and this file exists to say so.
+        """
+        survivable = _run_at_age(2000.0)
+        row = _run_at_age(4000.0)
+
+        self.assertTrue(survivable["hard_feasible"])
         self.assertFalse(row["hard_feasible"])
         self.assertGreater(row["infeasible_frames"], 0)
+        self.assertLess(row["min_margin_reported_m"], 0.0)
 
 
 if __name__ == "__main__":
