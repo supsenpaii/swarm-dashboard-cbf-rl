@@ -106,7 +106,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from two_uav_active_readiness import FlightEnvelope, PX4_FACTS, WarmupContract
+from two_uav_active_readiness import (
+    FlightEnvelope,
+    PX4_FACTS,
+    WarmupContract,
+    extrema_minimum_margin_m,
+)
 
 API_URL = "http://127.0.0.1:8000/api/drones"
 COMMANDER = (
@@ -262,6 +267,7 @@ class Flight:
         safety = stream.get("companion_safety") or {}
         local = drone.get("local_position") or {}
         cbf = safety.get("cbf") or {}
+        extrema = safety.get("cbf_margin_extrema") or {}
         return {
             "drone_id": drone_id,
             "companion_drone_id": safety.get("drone_id"),
@@ -298,6 +304,13 @@ class Flight:
             "cbf_intervened": safety.get("intervened"),
             "cbf_intervention_norm_m_s": cbf.get("intervention_norm_m_s"),
             "cbf_minimum_margin_m": cbf.get("minimum_margin_m"),
+            # The line above is one 20 Hz frame sampled at the poll rate; the
+            # two below are every frame, accumulated by the companion itself.
+            # Guard and report from these -- see companion_safety's
+            # _accumulate_margin for the flights that proved why.
+            "cbf_extrema_minimum_margin_m": extrema.get("minimum_margin_m"),
+            "cbf_extrema_breach_frames": extrema.get("breach_frames") or 0,
+            "cbf_extrema_frames": extrema.get("frames") or 0,
         }
 
     def snapshot(self) -> dict[str, dict[str, Any]]:
@@ -391,6 +404,16 @@ class Flight:
         ]
         if margins and min(margins) < 0.0:
             raise FlightAbort(f"cbf_separation_violated:{min(margins):.2f}")
+        breached = {
+            drone_id: state["cbf_extrema_minimum_margin_m"]
+            for drone_id, state in snapshot.items()
+            if state["cbf_extrema_breach_frames"] > 0
+        }
+        if breached:
+            worst = min(breached.items(), key=lambda item: item[1])
+            raise FlightAbort(
+                f"cbf_separation_violated_between_samples:{worst[0]}:{worst[1]:.2f}"
+            )
 
     def verify_initial_frame_alignment(self, snapshot: dict[str, dict[str, Any]]) -> None:
         limit_m = initial_error_limit_m()
@@ -532,7 +555,8 @@ class Flight:
                 drone_id=drone_id,
                 seconds=self.hold_s,
                 max_horizontal_speed_m_s=round(max(speeds), 3) if speeds else None,
-                min_cbf_margin_m=round(min(margins), 3) if margins else None,
+                min_cbf_margin_m=extrema_minimum_margin_m(drone_samples),
+                min_cbf_margin_sampled_m=round(min(margins), 3) if margins else None,
                 cbf_intervention_rate=(
                     round(interventions / len(drone_samples), 3) if drone_samples else None
                 ),

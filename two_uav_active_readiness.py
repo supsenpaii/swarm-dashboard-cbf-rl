@@ -23,6 +23,9 @@ identity check, because that is what a first-flight safety margin should be.
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
+from typing import Any
+
 from offboard_authority import ACTIVE_FLIGHT_AUTHORIZED_VEHICLES
 from one_uav_active_readiness import (
     ABORT_MATRIX,
@@ -78,3 +81,21 @@ def is_authorized_for_two_uav_active_flight(
     if not explicit_opt_in:
         return False, "explicit_opt_in_absent"
     return True, ""
+
+
+def extrema_minimum_margin_m(samples: Iterable[Mapping[str, Any]]) -> float | None:
+    """The true minimum CBF margin over a hold, not the sampled one.
+
+    Each sample carries `cbf_extrema_minimum_margin_m`, the companion's own
+    running minimum accumulated at the rate the barrier runs. The smallest of
+    those is therefore the smallest the barrier ever saw, including the nine
+    frames in ten a 1.9 Hz poller never asked about. Reporting
+    `min(cbf_minimum_margin_m)` instead reports the smallest *sample*, which
+    on 2026-08-18 was +2.740 m against a true -1.332 m.
+    """
+    values = [
+        sample["cbf_extrema_minimum_margin_m"]
+        for sample in samples
+        if sample.get("cbf_extrema_minimum_margin_m") is not None
+    ]
+    return round(min(values), 3) if values else None

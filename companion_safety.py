@@ -235,6 +235,13 @@ def validate_command(velocity: Vector3, maximum_velocity_m_s: float) -> tuple[bo
     return True, velocity
 
 
+_EMPTY_MARGIN_EXTREMA: dict[str, Any] = {
+    "minimum_margin_m": None,
+    "frames": 0,
+    "breach_frames": 0,
+}
+
+
 @dataclass(frozen=True)
 class CompanionSafetyStatus:
     drone_id: str
@@ -249,6 +256,9 @@ class CompanionSafetyStatus:
     peer_ids_used: tuple[str, ...]
     peer_ids_missing: tuple[str, ...]
     cbf_rl_shadow: dict[str, Any] | None = None
+    # Extrema of minimum_margin_m accumulated at the companion's own rate.
+    # The per-frame value below is a sample; this is the whole population.
+    cbf_margin_extrema: dict[str, Any] | None = None
 
     @property
     def intervened(self) -> bool:
@@ -268,6 +278,12 @@ class CompanionSafetyStatus:
                 else None
             ),
             "cbf": self.command.as_dict(),
+            # A consumer polling this payload sees one frame in ten or worse;
+            # the barrier is evaluated every frame. Anything that must not be
+            # missed -- a breach, the true minimum -- has to be accumulated
+            # here, where every frame is seen, and read from this field. See
+            # `_accumulate_margin`.
+            "cbf_margin_extrema": self.cbf_margin_extrema or _EMPTY_MARGIN_EXTREMA,
             "emergency": self.emergency.as_dict(),
             "output_velocity_enu_m_s": list(self.output_velocity_enu_m_s),
             "output_valid": self.output_valid,
@@ -387,6 +403,47 @@ class CompanionSafetyMonitor:
             altitude_arrival_radius_m=self.formation.config.arrival_radius_m,
             config=emergency_config,
         )
+        self._margin_minimum_m: float | None = None
+        self._margin_frames = 0
+        self._margin_breach_frames = 0
+
+    def _accumulate_margin(
+        self, margin_m: float | None, station_keeping: bool
+    ) -> dict[str, Any]:
+        """Running extrema of the CBF margin, at the rate it is evaluated.
+
+        A poller reads this payload every ~0.5 s while the barrier runs at
+        20 Hz, so it sees roughly one frame in ten. Measured 2026-08-18 on the
+        signed corridor ladder: the 20 m/s rung's true minimum was -1.332 m
+        and the poller reported +2.740 -- a breach, invisible in 6 of 10
+        sampling phases, on three consecutive flights that all signed
+        FLIGHT_PASS. Sampling faster only thins the odds; the extremum has to
+        be accumulated where every frame is seen, which is here.
+
+        Only while station-keeping: off-authority the vehicle is parked or
+        hand-flown, and its margin is not this system's claim to make. The
+        counters reset on the falling edge so each authority period reports
+        its own numbers rather than a previous flight's floor.
+        """
+        if not station_keeping:
+            self._margin_minimum_m = None
+            self._margin_frames = 0
+            self._margin_breach_frames = 0
+        elif margin_m is not None:
+            self._margin_frames += 1
+            if self._margin_minimum_m is None or margin_m < self._margin_minimum_m:
+                self._margin_minimum_m = margin_m
+            if margin_m < 0.0:
+                self._margin_breach_frames += 1
+        return {
+            "minimum_margin_m": (
+                None
+                if self._margin_minimum_m is None
+                else round(self._margin_minimum_m, 3)
+            ),
+            "frames": self._margin_frames,
+            "breach_frames": self._margin_breach_frames,
+        }
 
     def _enter_trajectory(
         self, swarm_state: dict[str, Any], now: float
@@ -767,4 +824,7 @@ class CompanionSafetyMonitor:
                 peer_id for peer_id in self.peer_ids if peer_id not in used
             ),
             cbf_rl_shadow=cbf_rl_shadow,
+            cbf_margin_extrema=self._accumulate_margin(
+                command.minimum_margin_m, station_keeping
+            ),
         )

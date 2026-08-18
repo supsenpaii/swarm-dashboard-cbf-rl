@@ -224,6 +224,7 @@ def fetch_states() -> dict[str, dict[str, Any]]:
             "sender": safety.get("active_offboard_sender") or {},
             "conditions": safety.get("active_offboard_conditions") or [],
             "cbf": safety.get("cbf") or {},
+            "cbf_margin_extrema": safety.get("cbf_margin_extrema") or {},
             "cbf_rl": safety.get("cbf_rl_shadow") or {},
             "tracking_error_m": safety.get("nominal_position_error_m"),
             "intervened": safety.get("intervened"),
@@ -279,6 +280,15 @@ class Flight:
             cbf_margin = state["cbf"].get("minimum_margin_m")
             if cbf_margin is not None and cbf_margin < 0.0:
                 raise FlightAbort(f"cbf_margin:{drone_id}:{cbf_margin}")
+            # The line above only sees the frames this poller asked about.
+            # `cbf_margin_extrema` is accumulated at 20 Hz by the companion
+            # and catches the breaches that fall between two polls.
+            extrema = state["cbf_margin_extrema"]
+            if (extrema.get("breach_frames") or 0) > 0:
+                raise FlightAbort(
+                    f"cbf_margin_between_samples:{drone_id}:"
+                    f"{extrema.get('minimum_margin_m')}"
+                )
             if not mission_running:
                 continue
             if state["nav_state"] != OFFBOARD_NAV_STATE:
@@ -512,7 +522,9 @@ class Flight:
                     if separation is not None:
                         minimum_separation = min(minimum_separation, separation)
                     for drone_id, state in states.items():
-                        margin = state["cbf"].get("minimum_margin_m")
+                        margin = state["cbf_margin_extrema"].get("minimum_margin_m")
+                        if margin is None:
+                            margin = state["cbf"].get("minimum_margin_m")
                         if margin is not None:
                             minimum_cbf_margin = min(minimum_cbf_margin, margin)
                         rl_margin = (state["cbf_rl"].get("cbf") or {}).get(

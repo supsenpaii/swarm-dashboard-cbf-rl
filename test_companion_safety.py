@@ -133,6 +133,57 @@ class CompanionSafetyMonitorTests(unittest.TestCase):
         self.assertEqual(payload["cbf"]["authority"], "shadow_safety_gate_only")
 
 
+class CbfMarginExtremaTests(unittest.TestCase):
+    """The reason this exists: on 2026-08-18 three signed FLIGHT_PASS runs of
+    the 20 m/s corridor had a true minimum margin of -1.332 m and reported
+    +2.740, because the driver polls at 1.9 Hz and the barrier runs at 20 Hz.
+    A running extremum is only useful if it survives the frame it happened on.
+    """
+
+    def sweep(self, monitor_: CompanionSafetyMonitor, offsets, **kwargs) -> dict:
+        for offset in offsets:
+            result = monitor_.evaluate(
+                {
+                    "UAV-01": state((0.0, 0.0, 10.0)),
+                    "UAV-02": state((offset, 0.0, 10.0)),
+                },
+                **kwargs,
+            )
+        return result.as_dict()["cbf_margin_extrema"]
+
+    def test_a_breach_between_two_polls_is_still_reported(self) -> None:
+        subject = monitor()
+        # One frame deep inside the barrier, then back out. A poller that saw
+        # only the first and last frame would report the last one's margin.
+        extrema = self.sweep(subject, (-20.0, -1.0, -20.0), station_keeping=True)
+
+        self.assertGreater(extrema["breach_frames"], 0)
+        self.assertLess(extrema["minimum_margin_m"], 0.0)
+        self.assertEqual(extrema["frames"], 3)
+
+    def test_a_clean_sweep_reports_no_breach(self) -> None:
+        extrema = self.sweep(monitor(), (-20.0, -18.0, -20.0), station_keeping=True)
+
+        self.assertEqual(extrema["breach_frames"], 0)
+        self.assertGreater(extrema["minimum_margin_m"], 0.0)
+
+    def test_losing_authority_clears_the_previous_period(self) -> None:
+        subject = monitor()
+        self.sweep(subject, (-1.0,), station_keeping=True)
+        extrema = self.sweep(subject, (-20.0,), station_keeping=False)
+
+        self.assertEqual(
+            extrema,
+            {"minimum_margin_m": None, "frames": 0, "breach_frames": 0},
+        )
+
+    def test_off_authority_frames_are_not_counted(self) -> None:
+        """A parked vehicle's margin is not this system's claim to make."""
+        extrema = self.sweep(monitor(), (-1.0, -1.0), station_keeping=False)
+
+        self.assertEqual(extrema["frames"], 0)
+
+
 class CompanionSafetyTrajectoryTests(unittest.TestCase):
     def _monitor(self) -> CompanionSafetyMonitor:
         return CompanionSafetyMonitor(

@@ -86,7 +86,12 @@ from companion_server_loss_fault import (
     summarise,
 )
 from one_uav_active_readiness import abort_rule_for
-from two_uav_active_readiness import FlightEnvelope, PX4_FACTS, WarmupContract
+from two_uav_active_readiness import (
+    FlightEnvelope,
+    PX4_FACTS,
+    WarmupContract,
+    extrema_minimum_margin_m,
+)
 
 API_URL = "http://127.0.0.1:8000/api/drones"
 COMMANDER = (
@@ -189,6 +194,7 @@ class Flight:
         safety = stream.get("companion_safety") or {}
         local = drone.get("local_position") or {}
         cbf = safety.get("cbf") or {}
+        extrema = safety.get("cbf_margin_extrema") or {}
         return {
             "drone_id": drone_id,
             "armed": drone["status"].get("armed"),
@@ -217,6 +223,13 @@ class Flight:
             "cbf_active": cbf.get("active"),
             "cbf_reason": cbf.get("reason"),
             "cbf_minimum_margin_m": cbf.get("minimum_margin_m"),
+            # The line above is one 20 Hz frame sampled at the poll rate; the
+            # two below are every frame, accumulated by the companion itself.
+            # Guard and report from these -- see companion_safety's
+            # _accumulate_margin for the flights that proved why.
+            "cbf_extrema_minimum_margin_m": extrema.get("minimum_margin_m"),
+            "cbf_extrema_breach_frames": extrema.get("breach_frames") or 0,
+            "cbf_extrema_frames": extrema.get("frames") or 0,
         }
 
     def snapshot(self) -> dict[str, dict[str, Any]]:
@@ -316,6 +329,16 @@ class Flight:
         ]
         if margins and min(margins) < 0.0:
             raise FlightAbort(f"cbf_separation_violated:{min(margins):.2f}")
+        breached = {
+            drone_id: state["cbf_extrema_minimum_margin_m"]
+            for drone_id, state in snapshot.items()
+            if state["cbf_extrema_breach_frames"] > 0
+        }
+        if breached:
+            worst = min(breached.items(), key=lambda item: item[1])
+            raise FlightAbort(
+                f"cbf_separation_violated_between_samples:{worst[0]}:{worst[1]:.2f}"
+            )
 
     # -- continuous safety, trace-sourced (outage window only) ------------
 
@@ -361,7 +384,8 @@ class Flight:
             phase,
             seconds=duration_s,
             samples=len(samples),
-            min_cbf_margin_m=round(min(margins), 3) if margins else None,
+            min_cbf_margin_m=extrema_minimum_margin_m(samples),
+            min_cbf_margin_sampled_m=round(min(margins), 3) if margins else None,
         )
         return samples
 
