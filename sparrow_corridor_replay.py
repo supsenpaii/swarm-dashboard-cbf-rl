@@ -79,12 +79,44 @@ class _Vehicle:
     position_enu_m: list[float]
     velocity_enu_m_s: list[float] = field(default_factory=lambda: [0.0, 0.0, 0.0])
 
-    def step(self, command_enu_m_s: Vector3, dt_s: float, tau_s: float) -> None:
+    def step(
+        self,
+        command_enu_m_s: Vector3,
+        dt_s: float,
+        tau_s: float,
+        maximum_horizontal_acceleration_m_s2: float,
+    ) -> None:
+        """First-order lag, then the airframe's horizontal acceleration limit.
+
+        The lag alone is not the whole plant. A first-order chase of a large
+        step asks for `error / tau` of acceleration on the first frame, and
+        the yield lane change IS a large step: measured 2026-08-18 on the
+        20 m/s corridor, this model peaked at 25.5 m/s^2 horizontal against an
+        MPC_ACC_HOR_MAX of 4. That let the replay's UAV-02 begin its turn
+        earlier and harder than the aircraft can, which drops the closing
+        speed early, which shrinks `required_separation` -- and is why the
+        replay reported +10.77 m of margin on a flight whose 20 Hz log says
+        -1.33 m. Vertical is left alone: it has its own limit and its own
+        0.275 s tau, and no corridor swap is bound by it.
+        """
         blend = min(1.0, dt_s / tau_s)
+        target = [
+            self.velocity_enu_m_s[axis]
+            + (command_enu_m_s[axis] - self.velocity_enu_m_s[axis]) * blend
+            for axis in range(3)
+        ]
+        change = math.sqrt(
+            sum((target[axis] - self.velocity_enu_m_s[axis]) ** 2 for axis in range(2))
+        )
+        allowed = maximum_horizontal_acceleration_m_s2 * dt_s
+        if change > allowed > 0.0:
+            scale = allowed / change
+            for axis in range(2):
+                target[axis] = self.velocity_enu_m_s[axis] + (
+                    target[axis] - self.velocity_enu_m_s[axis]
+                ) * scale
         for axis in range(3):
-            self.velocity_enu_m_s[axis] += (
-                command_enu_m_s[axis] - self.velocity_enu_m_s[axis]
-            ) * blend
+            self.velocity_enu_m_s[axis] = target[axis]
             self.position_enu_m[axis] += self.velocity_enu_m_s[axis] * dt_s
 
 
@@ -127,6 +159,12 @@ def replay(
         # one rather than described in an env file that has no syntax for it.
         for drone_id, mission in (missions or {}).items():
             monitors[drone_id].set_trajectory(mission)
+        # Read off the monitor, not re-parsed from the environment, so the
+        # plant is limited by the same number the command path is limited by
+        # and the two cannot drift apart per profile.
+        maximum_horizontal_acceleration_m_s2 = max(
+            monitor.mission_maximum_acceleration_m_s2 for monitor in monitors.values()
+        )
     finally:
         os.environ.clear()
         os.environ.update(saved_environment)
@@ -247,7 +285,12 @@ def replay(
 
         for drone_id, status in outputs.items():
             vehicle = vehicles[drone_id]
-            vehicle.step(status.output_velocity_enu_m_s, dt_s, tau_s)
+            vehicle.step(
+                status.output_velocity_enu_m_s,
+                dt_s,
+                tau_s,
+                maximum_horizontal_acceleration_m_s2,
+            )
             maximum_speed_m_s[drone_id] = max(
                 maximum_speed_m_s[drone_id],
                 math.sqrt(sum(v * v for v in vehicle.velocity_enu_m_s)),
@@ -306,6 +349,9 @@ def replay(
         "model": Path(profile.get("SWARM_CBF_RL_MODEL", "")).name,
         "command_latency_s": float(profile.get("SWARM_CBF_COMMAND_LATENCY_S", 0.0)),
         "response_tau_s": tau_s,
+        "plant_maximum_horizontal_acceleration_m_s2": round(
+            maximum_horizontal_acceleration_m_s2, 3
+        ),
         "duration_s": duration_s,
         "verdict": (
             "REPLAY_FAIL_SEPARATION"
