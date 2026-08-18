@@ -1,5 +1,9 @@
 from dataclasses import replace
 import math
+import os
+from unittest import mock
+
+import pytest
 
 from conflict_coordinator import (
     ConflictCoordinator,
@@ -506,3 +510,67 @@ def test_a_release_is_still_not_undone_on_unchanged_geometry() -> None:
     )
     assert immediate["encounter"] == 1, immediate
     assert not immediate["active"], immediate
+
+
+# -- engagement lead ---------------------------------------------------------
+#
+# The coordinator has to finish a lane change before the barrier runs out of
+# room, so what it needs from its trigger is TIME. Measured 2026-08-18 against
+# the 20 Hz flight logs: the fixed 25 m that used to be added on top of the CBF
+# boundary bought 2.69 s of lead at 10 m/s, 0.83 s at 15 and 0.62 s at 20 --
+# because the boundary it sits on top of grows with the square of speed. The
+# true minimum margins followed exactly: +4.965, +0.502, -0.596.
+
+
+def sparrow_cbf_boundary_m(maximum_velocity_m_s: float) -> float:
+    relative = 2.0 * maximum_velocity_m_s
+    return 20.0 + 2.0 + relative * 0.96 + relative * relative / 16.0
+
+
+@pytest.mark.parametrize("speed_m_s", (10.0, 15.0, 20.0))
+def test_every_sparrow_rung_gets_the_same_engagement_lead(speed_m_s) -> None:
+    config = sparrow_20m_conflict_config(speed_m_s)
+    relative = 2.0 * speed_m_s
+    lead_s = (config.trigger_distance_m - sparrow_cbf_boundary_m(speed_m_s)) / relative
+
+    assert lead_s == pytest.approx(2.7, abs=0.05)
+
+
+@pytest.mark.parametrize("speed_m_s", (10.0, 15.0, 20.0))
+def test_the_coordinator_still_engages_before_the_barrier(speed_m_s) -> None:
+    assert sparrow_20m_conflict_config(speed_m_s).trigger_distance_m > (
+        sparrow_cbf_boundary_m(speed_m_s)
+    )
+
+
+def test_the_rung_that_already_flew_is_left_where_it_was() -> None:
+    """10 m/s had real lead by accident, off the 120 m floor.
+
+    Same number now, chosen rather than inherited -- so this change cannot be
+    the explanation for anything that moves at that rung.
+    """
+    assert sparrow_20m_conflict_config(10.0).trigger_distance_m == pytest.approx(
+        120.2, abs=0.5
+    )
+
+
+def test_a_lead_the_horizon_cannot_see_is_refused() -> None:
+    """Both conditions gate the threat test.
+
+    A trigger further out than `prediction_horizon_s` reaches makes the horizon
+    the real trigger and the configured lead a fiction, silently. Fail loudly.
+    """
+    with mock.patch.dict(os.environ, {"SWARM_CONFLICT_ENGAGEMENT_LEAD_S": "5.0"}):
+        with pytest.raises(ValueError, match="prediction horizon"):
+            sparrow_20m_conflict_config(20.0)
+
+
+def test_x500_keeps_the_fixed_distance_it_was_certified_with() -> None:
+    relative = 30.0
+    boundary = (
+        20.0 + 2.0 + relative * (0.65 + 0.15) + relative * relative / 12.0 + 5.0
+    )
+
+    assert x500_20m_conflict_config(15.0).trigger_distance_m == pytest.approx(
+        max(120.0, boundary + 25.0), abs=0.5
+    )

@@ -4,11 +4,27 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import math
+import os
 import threading
 from typing import Any, Mapping, Sequence
 
 
 Vector3 = tuple[float, float, float]
+
+
+def _float_env(name: str, default: float) -> float:
+    """An override knob for measuring this value, not for tuning it in flight.
+
+    Every certified rung is pinned to the default; a profile that sets this is
+    running an experiment, and its results are not a certification.
+    """
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    value = float(raw)
+    if not math.isfinite(value) or value < 0.0:
+        raise ValueError(f"{name} must be finite and nonnegative")
+    return value
 
 
 @dataclass
@@ -139,12 +155,51 @@ def sparrow_20m_conflict_config(
         + relative_speed_m_s * (0.86 + 0.10)
         + relative_speed_m_s * relative_speed_m_s / (2.0 * 8.0)
     )
+    # The coordinator has to finish a lane change before the barrier runs out
+    # of room, so what it needs is LEAD TIME, and a fixed 25 m of extra
+    # distance is not that: `dynamic_boundary_m` grows with the square of
+    # speed, so the same 25 m buys less and less time as the rung rises.
+    # Measured 2026-08-18 against the 20 Hz flight logs:
+    #
+    #   rung   trigger   boundary   slack    lead     TRUE margin
+    #   10     120.0 m     66.2 m   53.8 m   2.69 s     +4.965
+    #   15     132.1 m    107.0 m   25.0 m   0.83 s     +0.502
+    #   20     185.4 m    160.4 m   25.0 m   0.62 s     -0.596
+    #
+    # The margin tracks the lead time, not the distance. Rung 10 is the only
+    # one with real lead, and it has that by accident -- the 120 m floor
+    # happened to be generous there. Nothing chose 2.69 s.
+    #
+    # So choose it. 2.7 s is what rung 10 already flies on, which makes this a
+    # no-op at the rung that works and an extension at the two that do not:
+    # 132 -> 188 m at 15 m/s, 185 -> 268 m at 20 m/s. The floor stays for the
+    # low-speed end, where lead time is cheap and geometry is not. x500 keeps
+    # the fixed 25 m: its rungs are signed off against that number.
+    engagement_lead_s = _float_env("SWARM_CONFLICT_ENGAGEMENT_LEAD_S", 2.7)
+    trigger_distance_m = max(
+        120.0, dynamic_boundary_m + relative_speed_m_s * engagement_lead_s
+    )
+    prediction_horizon_s = 8.0
+    # The threat test needs BOTH `distance < trigger_distance_m` AND
+    # `time_to_closest < prediction_horizon_s`. Push the trigger past what the
+    # horizon can see and the second condition quietly becomes the real
+    # trigger: the coordinator engages later than configured and reports
+    # nothing. At 2.7 s of lead the trigger sits 6.0 to 6.7 s out, so the
+    # horizon still covers it -- but only just, and this refusal is here so
+    # that raising the lead fails loudly instead of silently doing nothing.
+    if trigger_distance_m > relative_speed_m_s * prediction_horizon_s:
+        raise ValueError(
+            "engagement lead exceeds the prediction horizon: trigger "
+            f"{trigger_distance_m:.1f} m is "
+            f"{trigger_distance_m / relative_speed_m_s:.2f} s out against a "
+            f"{prediction_horizon_s:.1f} s horizon"
+        )
     return ConflictCoordinatorConfig(
-        trigger_distance_m=max(120.0, dynamic_boundary_m + 25.0),
+        trigger_distance_m=trigger_distance_m,
         release_distance_m=80.0,
         encounter_reset_distance_m=100.0,
         predicted_miss_distance_m=20.0,
-        prediction_horizon_s=8.0,
+        prediction_horizon_s=prediction_horizon_s,
         reserve_separation_m=20.0,
         yield_gain_s_inv=0.6,
         release_frames=10,

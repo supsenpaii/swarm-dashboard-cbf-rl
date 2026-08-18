@@ -124,21 +124,25 @@ def test_corner_slowdown_and_avoidance_hold_on_the_same_frames():
     )
     # Off-path excursions belong to avoidance; once rejoined the vehicle is
     # back inside the re-entry band rather than trailing the reference. The
-    # yielding vehicle rejoins less tightly than the one holding its line,
-    # which is what a 4 m/s^2 airframe recovering from a 45 m detour looks
-    # like -- this read 3.99/4.91 against a plant that could pull 25 m/s^2.
-    assert report["maximum_cross_track_clear_of_conflict_m"]["UAV-01"] < 1.5
-    assert report["maximum_cross_track_clear_of_conflict_m"]["UAV-02"] < 6.0
-    # NOT A PASS. PINNED SO IT CANNOT BE FORGOTTEN. Under the airframe's own
-    # acceleration limit this square is held apart by the barrier and nothing
-    # else: the coordinator leaves 0.0 m of margin -- exactly the constraint
-    # boundary a minimally-invasive CBF converges onto -- while intervening on
-    # more than half of every frame flown. The same run against the unphysical
-    # plant read 7.70 m and 12%. The corridor rungs above are certified
-    # geometry; this is a drawn mission that needs the coordinator fixed
-    # before anyone flies it at 15 m/s.
+    # this read 3.99/4.91 against a plant that could pull 25 m/s^2, then 0.95
+    # and 5.13 once the plant was honest -- and now both sit near 4, because a
+    # 2.7 s engagement lead brings the vehicle holding its line into the
+    # resolution too instead of leaving all of it to the one that yields.
+    assert all(
+        value < 6.0
+        for value in report["maximum_cross_track_clear_of_conflict_m"].values()
+    )
+    # STILL NOT A PASS, PINNED SO IT CANNOT BE FORGOTTEN. The coordinator
+    # leaves this square on the constraint boundary -- 0.0 m, exactly where a
+    # minimally-invasive CBF converges -- so the barrier is what is keeping
+    # the pair apart. What the engagement lead bought is how OFTEN it has to:
+    # 51.5% of frames before, 21.6% after (12.3% against the unphysical
+    # plant, which is the number that made this look fine). The corridor rungs
+    # above are certified geometry; this is a drawn mission, and it is not
+    # ready to be flown at 15 m/s until the coordinator resolves it.
     assert report["minimum_dynamic_margin_m"] == pytest.approx(0.0, abs=0.05)
-    assert report["cbf_intervention_rate"] > 0.5
+    assert 0.15 < report["cbf_intervention_rate"] < 0.30
+    assert report["coordinated_rate"] > 0.10
 
 
 def test_corner_accuracy_without_a_conflict_is_sub_metre():
