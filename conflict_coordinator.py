@@ -166,16 +166,33 @@ def sparrow_20m_conflict_config(
     #   15     132.1 m    107.0 m   25.0 m   0.83 s     +0.502
     #   20     185.4 m    160.4 m   25.0 m   0.62 s     -0.596
     #
+    # Trigger now 136 / 212 / 300 m at 3.5 s of lead.
+    #
     # The margin tracks the lead time, not the distance. Rung 10 is the only
     # one with real lead, and it has that by accident -- the 120 m floor
     # happened to be generous there. Nothing chose 2.69 s.
     #
-    # So choose it. 2.7 s is what rung 10 already flies on, which makes this a
-    # no-op at the rung that works and an extension at the two that do not:
-    # 132 -> 188 m at 15 m/s, 185 -> 268 m at 20 m/s. The floor stays for the
-    # low-speed end, where lead time is cheap and geometry is not. x500 keeps
-    # the fixed 25 m: its rungs are signed off against that number.
-    engagement_lead_s = _float_env("SWARM_CONFLICT_ENGAGEMENT_LEAD_S", 2.7)
+    # So choose it. 2.7 s was the first choice, because it is what rung 10
+    # already flew on; swept 2026-08-18 it turned out to be the low end of a
+    # monotone gain with no liveness cost at any rung (corridor replay):
+    #
+    #   lead    10 m/s          15 m/s          20 m/s
+    #   2.7 s   5.238 / 2.62%   8.938 / 2.75%  12.483 / 2.80%
+    #   3.0 s   5.622 / 2.52%   9.435 / 2.70%  12.935 / 2.77%
+    #   3.5 s   6.192 / 2.39%  10.135 / 2.61%  13.796 / 2.68%
+    #   3.9 s   8.798 / 2.55%  10.823 / 2.52%  14.020 / 2.64%
+    #
+    # 3.5 s, not 3.9: at 3.9 the trigger sits 7.91 s out at 20 m/s against an
+    # 8 s horizon, and a design pressed against its own limit has nowhere to
+    # go when the next thing moves. 3.5 keeps half a second of it.
+    #
+    # Raising `yield_lateral_speed_m_s` was swept alongside and changes NOTHING
+    # -- 9.5, 12 and 15 m/s give the same margin to three decimals. The yield
+    # stopped saturating on lateral authority when it got the time to use it,
+    # so that knob is spent and this one is not.
+    #
+    # x500 keeps the fixed 25 m: its rungs are signed off against that number.
+    engagement_lead_s = _float_env("SWARM_CONFLICT_ENGAGEMENT_LEAD_S", 3.5)
     trigger_distance_m = max(
         120.0, dynamic_boundary_m + relative_speed_m_s * engagement_lead_s
     )

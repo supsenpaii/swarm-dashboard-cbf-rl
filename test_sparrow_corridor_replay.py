@@ -132,15 +132,17 @@ def test_corner_slowdown_and_avoidance_hold_on_the_same_frames():
         value < 6.0
         for value in report["maximum_cross_track_clear_of_conflict_m"].values()
     )
-    # STILL NOT A PASS, PINNED SO IT CANNOT BE FORGOTTEN. The coordinator
-    # leaves this square on the constraint boundary -- 0.0 m, exactly where a
-    # minimally-invasive CBF converges -- so the barrier is what is keeping
-    # the pair apart. What the engagement lead bought is how OFTEN it has to:
-    # 51.5% of frames before, 21.6% after (12.3% against the unphysical
-    # plant, which is the number that made this look fine). The corridor rungs
-    # above are certified geometry; this is a drawn mission, and it is not
-    # ready to be flown at 15 m/s until the coordinator resolves it.
+    # 0.0 m of margin here is NOT a near miss, and reading it as one sent this
+    # comment the wrong way once already. At the worst frame the pair is
+    # 22.31 m apart with ZERO closing speed, against a required separation of
+    # 22.31 m -- which at zero closing speed is just the static floor:
+    # minimum_separation 20 + tracking_reserve 2 + 0.31 of uncertainty. They
+    # are 2.3 m clear of the hard minimum and the barrier is holding them
+    # exactly where a minimally-invasive filter is supposed to, while both
+    # crawl through a corner. What the engagement lead bought is how often it
+    # has to act: 51.5% of frames at the old fixed trigger, 21.6% now.
     assert report["minimum_dynamic_margin_m"] == pytest.approx(0.0, abs=0.05)
+    assert report["minimum_distance_m"] > 22.0
     assert 0.15 < report["cbf_intervention_rate"] < 0.30
     assert report["coordinated_rate"] > 0.10
 
@@ -151,6 +153,14 @@ def test_corner_accuracy_without_a_conflict_is_sub_metre():
     Separated deliberately: the conflict run's cross-track is dominated by
     deliberate detours, so it can neither confirm nor refute how tightly the
     tracker holds a 90 degree corner at speed.
+
+    It is also the control for how SLOW the square is. Measured 2026-08-18,
+    one vehicle with nothing whatsoever to avoid spends 29% of its flight
+    below 5 m/s; the conflicting pair spends 36-39%. So most of that square's
+    slowness is its own corners -- 90 degrees, 1 m of tracking tolerance,
+    4 m/s^2 -- and only about eight points of it belong to the encounter.
+    Attributing the whole thing to avoidance would send the next investigation
+    into the coordinator, which is not where it is.
     """
     import math
     import os
