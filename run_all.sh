@@ -5,14 +5,18 @@
 # Usage:
 #   ./run_all.sh          Start everything and keep supervising it.
 #   ./run_all.sh --check  Validate the local installation without starting it.
+#   ./run_all.sh --reap   Stop a previous stack, then exit.  Deliberately not
+#                         automatic: a stale process and a running flight look
+#                         identical from here, and only one of them is safe to
+#                         kill.  A refusal to start is the safe default.
 
 set -Eeuo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 mode="${1:-start}"
 
-if [[ "${mode}" != "start" && "${mode}" != "--check" ]]; then
-  echo "Usage: $0 [--check]" >&2
+if [[ "${mode}" != "start" && "${mode}" != "--check" && "${mode}" != "--reap" ]]; then
+  echo "Usage: $0 [--check|--reap]" >&2
   exit 2
 fi
 
@@ -115,6 +119,49 @@ require_executable() {
   fi
 }
 
+# Refuse to create duplicate flight-control/backend processes.  A system MQTT
+# broker is safe to reuse, but the rest of this stack must have one owner.
+declare -a duplicate_patterns=(
+  'MicroXRCEAgent.*udp4.*8888'
+  '^gz sim'
+  'px4 -i [01]'
+  'mavlink_manual_bridge.py'
+  'uvicorn main:app'
+  'ros2 launch.*(two_uav_nodes|isolated_swarm)'
+)
+
+if [[ "${mode}" == "--reap" ]]; then
+  # SIGTERM, then SIGKILL for what ignores it -- Gazebo routinely does, and a
+  # surviving gz sim is enough to make the next start refuse.  Verify every
+  # pattern afterwards rather than probing one port: an orphaned uvicorn keeps
+  # :8000 answering with the previous stack's last payload, and a readiness
+  # check against that corpse reads healthy.
+  for pattern in "${duplicate_patterns[@]}"; do
+    pkill -f "${pattern}" 2>/dev/null || true
+  done
+  sleep 3
+  for pattern in "${duplicate_patterns[@]}"; do
+    pkill -9 -f "${pattern}" 2>/dev/null || true
+  done
+  sleep 2
+  reap_failed=0
+  for pattern in "${duplicate_patterns[@]}"; do
+    if pgrep -af "${pattern}" >/dev/null 2>&1; then
+      echo "Still running after SIGKILL (pattern: ${pattern}):" >&2
+      pgrep -af "${pattern}" >&2 || true
+      reap_failed=1
+    fi
+  done
+  if curl -sf -m 2 "http://127.0.0.1:8000/api/telemetry" >/dev/null 2>&1; then
+    echo "Port 8000 is still serving; something outside these patterns owns it." >&2
+    reap_failed=1
+  fi
+  [[ "${reap_failed}" -eq 0 ]] && echo "Stack reaped; port 8000 is dead."
+  exit "${reap_failed}"
+fi
+
+# The refusal below stays where the runtime check can precede it: a stack
+# that is already running is not a reason to skip validating the install.
 echo "Checking Swarm Dashboard runtime..."
 require_command pgrep
 require_command setsid
@@ -148,22 +195,11 @@ if [[ "${mode}" == "--check" ]]; then
   exit 0
 fi
 
-# Refuse to create duplicate flight-control/backend processes.  A system MQTT
-# broker is safe to reuse, but the rest of this stack must have one owner.
-declare -a duplicate_patterns=(
-  'MicroXRCEAgent.*udp4.*8888'
-  '^gz sim'
-  'px4 -i [01]'
-  'mavlink_manual_bridge.py'
-  'uvicorn main:app'
-  'ros2 launch.*(two_uav_nodes|isolated_swarm)'
-)
-
 for pattern in "${duplicate_patterns[@]}"; do
   if pgrep -af "${pattern}" >/dev/null 2>&1; then
     echo "A stack process is already running (pattern: ${pattern}):" >&2
     pgrep -af "${pattern}" >&2 || true
-    echo "Stop the old stack before running $0." >&2
+    echo "Stop the old stack before running $0, or run '$0 --reap'." >&2
     exit 1
   fi
 done
