@@ -68,6 +68,11 @@ class ConflictCoordinatorConfig:
     yield_gain_s_inv: float = 0.6
     release_frames: int = 10
     release_at_reserve_when_nonclosing: bool = False
+    # Require the predicted encounter to have cleared before releasing, not
+    # merely the instantaneous radial rate to have reached zero. Off by default
+    # because the x500 rungs are signed off against the older semantics; see
+    # the release block in `filter` for what it fixes and why Sparrow needs it.
+    release_needs_threat_cleared: bool = False
     clear_uses_mission_velocity: bool = False
     yield_lateral_speed_m_s: float = 0.0
     # A fixed prediction horizon is a distance that shrinks with closing
@@ -221,6 +226,7 @@ def sparrow_20m_conflict_config(
         yield_gain_s_inv=0.6,
         release_frames=10,
         release_at_reserve_when_nonclosing=True,
+        release_needs_threat_cleared=True,
         clear_uses_mission_velocity=True,
         # Continuous, unlike the x500 line this was copied from, which holds
         # 3.0 at and below 10 m/s to preserve an authenticated x500 rung.
@@ -453,7 +459,32 @@ class ConflictCoordinator:
                     if self.config.release_at_reserve_when_nonclosing
                     else closing_speed < 0.0
                 )
-                if distance >= release_distance and nonclosing:
+                # Releasing needs the encounter to be OVER, not merely
+                # momentarily non-closing. `closing_speed` is the instantaneous
+                # radial rate, and a lane change drives it through zero while
+                # the pair is still converging -- which is every frame of a
+                # geometry where both vehicles are routed to the same point.
+                # `threat` is the predicted version of the same question and is
+                # already computed above, so requiring it to have cleared costs
+                # nothing and closes the hole: release used to fire mid-approach
+                # and then `released_until_clear` could never lift, because
+                # lifting it needs frames that are NOT a threat and the pair
+                # went on converging. The coordinator switched itself off for
+                # the rest of the encounter.
+                #
+                # Measured on diagonal_cross, where both missions share a
+                # waypoint: latched at 91.2 m, yielded 9.5 s, released at
+                # 25.3 m while still closing, held role "clear" through the
+                # convergence, and the barrier was left alone to take it to
+                # -0.091 m. With this, the yield holds until the priority
+                # vehicle is predicted to miss, which is the sequencing a
+                # shared waypoint requires and cannot get any other way.
+                threat_cleared = (
+                    not threat
+                    if self.config.release_needs_threat_cleared
+                    else True
+                )
+                if distance >= release_distance and nonclosing and threat_cleared:
                     self._state.release_count += 1
                 else:
                     self._state.release_count = 0
@@ -571,9 +602,28 @@ class ConflictCoordinator:
                         # Stepping sideways is free here for the same reason
                         # the horizontal lane change spends forward speed:
                         # the mission has no horizontal component to give up.
+                        # Never spend the WHOLE speed budget sideways. At and
+                        # below yield_lateral_speed_m_s the old `min` returned
+                        # the mission speed itself, leaving `remaining` at zero:
+                        # the yielding vehicle stepped across forever and never
+                        # advanced along its mission again. That was invisible
+                        # while release fired on the instantaneous radial rate,
+                        # because the yield ended before the stall could be
+                        # seen; gating release on the predicted encounter
+                        # exposed it as seven vertical head-on cases at 1-4 m/s
+                        # running 15,520 steps without arriving -- safe the
+                        # whole time at 22.06 m, and never finishing.
+                        #
+                        # Capping the lane change at 70% of the budget keeps
+                        # ~71% of it as forward speed by Pythagoras, so the step
+                        # across still separates the pair and the vehicle still
+                        # closes on its goal. Above the cap the min is unchanged
+                        # and every faster rung sees the maneuver it was
+                        # certified with.
                         vertical_speed = abs(mission[2])
                         lateral_speed = min(
-                            self.config.yield_lateral_speed_m_s, vertical_speed
+                            self.config.yield_lateral_speed_m_s,
+                            0.7 * vertical_speed,
                         )
                         remaining = math.sqrt(
                             max(0.0, vertical_speed * vertical_speed

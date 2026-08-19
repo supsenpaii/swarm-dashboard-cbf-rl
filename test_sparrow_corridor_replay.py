@@ -132,19 +132,25 @@ def test_corner_slowdown_and_avoidance_hold_on_the_same_frames():
         value < 6.0
         for value in report["maximum_cross_track_clear_of_conflict_m"].values()
     )
-    # 0.0 m of margin here is NOT a near miss, and reading it as one sent this
-    # comment the wrong way once already. At the worst frame the pair is
-    # 22.31 m apart with ZERO closing speed, against a required separation of
-    # 22.31 m -- which at zero closing speed is just the static floor:
-    # minimum_separation 20 + tracking_reserve 2 + 0.31 of uncertainty. They
-    # are 2.3 m clear of the hard minimum and the barrier is holding them
-    # exactly where a minimally-invasive filter is supposed to, while both
-    # crawl through a corner. What the engagement lead bought is how often it
-    # has to act: 51.5% of frames at the old fixed trigger, 21.6% now.
-    assert report["minimum_dynamic_margin_m"] == pytest.approx(0.0, abs=0.05)
-    assert report["minimum_distance_m"] > 22.0
-    assert 0.15 < report["cbf_intervention_rate"] < 0.30
-    assert report["coordinated_rate"] > 0.10
+    # This square used to sit at exactly 0.0 m of dynamic margin -- 22.31 m
+    # apart at zero closing speed against a 22.31 m static floor. That was not
+    # a near miss (and reading it as one sent this comment the wrong way once
+    # already), but it was the barrier holding the pair on its own boundary for
+    # the whole corner while the coordinator had switched itself off: release
+    # fired on the instantaneous radial rate, which a lane change drives
+    # through zero mid-approach, and `released_until_clear` could then never
+    # lift because lifting it needs frames that are not a threat.
+    #
+    # With release gated on the PREDICTED encounter instead, the yield holds
+    # through the corner and the two halves of the product swap effort in the
+    # right direction: coordination up to 24.6% of frames, barrier
+    # intervention DOWN from 21.6% to 14.1%, and the pair never closer than
+    # 27.4 m. A shield that acts less because the planner acted sooner is the
+    # whole design, and it is now visible in one number.
+    assert report["minimum_dynamic_margin_m"] > 2.0
+    assert report["minimum_distance_m"] > 27.0
+    assert 0.10 < report["cbf_intervention_rate"] < 0.20
+    assert report["coordinated_rate"] > 0.20
 
 
 def test_corner_accuracy_without_a_conflict_is_sub_metre():
