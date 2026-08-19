@@ -99,21 +99,55 @@ class PeerPayloadFreshnessTests(unittest.TestCase):
             cache.peer_payload("UAV-01", stale_query, self.origin(), 0, healthy=True)
         )
 
-    def test_own_swarm_state_matches_that_freshness_rule(self) -> None:
+    def test_own_swarm_state_has_its_own_freshness_budget(self) -> None:
+        """Own state is deliberately NOT held to the peer budget.
+
+        A peer sample ages continuously across a network. Own state is read
+        from the local stream at a fixed rate, so its age only ever lands on
+        whole sample periods -- which means the peer budget, reused unchanged,
+        allowed it exactly zero periods of its own.
+        """
         cache = self.cache()
         cache.local_received_monotonic_s = 100.004
         cache.global_received_monotonic_s = 100.003
 
         fresh = cache.own_swarm_state(100.0, self.origin(), healthy=True)
         stale = cache.own_swarm_state(
-            100.0 + bridge.PEER_STATE_MAX_AGE_S + 0.1, self.origin(), healthy=True
+            100.0 + bridge.OWN_STATE_MAX_AGE_S + 0.1, self.origin(), healthy=True
         )
 
+        self.assertGreater(bridge.OWN_STATE_MAX_AGE_S, bridge.PEER_STATE_MAX_AGE_S)
         self.assertTrue(fresh["valid"])
         self.assertEqual(fresh["reason"], "ok")
         self.assertEqual(fresh["message_age_ms"], 0.0)
         self.assertFalse(stale["valid"])
         self.assertEqual(stale["reason"], "telemetry_stale")
+
+    def test_one_dropped_message_survives_and_two_do_not(self) -> None:
+        """The 2026-08-19 rung-20 abort, in two assertions.
+
+        Own-state age peaked at 100.1 ms against a 100 ms limit -- one dropped
+        MAVLink message, two sample periods out -- and latched a four-minute
+        flight. Headless the same flight peaked at 99.8 ms and passed, so 0.2 ms
+        decided it. One period of allowance has to absorb that; two consecutive
+        losses are a dead stream and must still fail closed.
+        """
+        cache = self.cache()
+        cache.local_received_monotonic_s = 100.0
+        cache.global_received_monotonic_s = 100.0
+        period = bridge.PEER_STATE_PERIOD_S
+
+        one_drop = cache.own_swarm_state(
+            100.0 + 2 * period, self.origin(), healthy=True
+        )
+        two_drops = cache.own_swarm_state(
+            100.0 + 3 * period, self.origin(), healthy=True
+        )
+
+        self.assertTrue(one_drop["valid"], one_drop)
+        self.assertEqual(one_drop["reason"], "ok")
+        self.assertFalse(two_drops["valid"], two_drops)
+        self.assertEqual(two_drops["reason"], "telemetry_stale")
 
     def test_unhealthy_vehicle_is_invalid_even_when_fresh(self) -> None:
         cache = self.cache()

@@ -61,6 +61,28 @@ try:
 except ValueError:
     PEER_STATE_MAX_AGE_S = 0.1
 
+# Own state gets its own budget because it is a different measurement.
+# PEER_STATE_MAX_AGE_S bounds a *peer* sample: network plus processing, an age
+# that varies continuously. Own state is read from the local MAVLink stream at
+# PEER_STATE_RATE_HZ, so its age is quantised to whole sample periods -- 0, one
+# period, two periods, nothing in between. Reusing the peer budget unchanged
+# therefore gave own state no allowance for its own sampling at all, and at
+# 20 Hz the limit landed exactly two periods out: one dropped message reads as
+# 100.1 ms against 100 ms and latches the flight.
+#
+# Measured 2026-08-19 on the 20 m/s corridor: 100.1/100.2 ms peak own-state age
+# with the Gazebo GUI running (flight aborted twice), 99.8 ms headless (flight
+# passed). 0.2 ms of headroom decided whether a four-minute flight completed.
+# One period of allowance absorbs a single dropped message and still fails on
+# two consecutive ones, which is a real loss of the stream rather than a hiccup.
+#
+# This does not spend the safety argument, because the barrier already prices
+# whatever age it is handed: cbf_command_gate's `age_latency` term multiplies
+# max(own_age, peer_age) by the reserve speed inside required_margin, so a
+# state that is one period older simply demands proportionally more separation.
+# The latch is the cruder second guard, not the reasoning.
+OWN_STATE_MAX_AGE_S = PEER_STATE_MAX_AGE_S + PEER_STATE_PERIOD_S
+
 # Liveness is a different question from freshness and needs its own budget.
 # PEER_STATE_MAX_AGE_S bounds how old a *position sample* may be. The validated
 # crossing is strict-feasible only through 165 ms and first hard-fails at
@@ -883,7 +905,7 @@ class FastPoseCache:
             velocity_enu_m_s = ned_to_enu(self.velocity_ned_m_s)
         except ValueError:
             return {"valid": False, "reason": "enu_transform_failed", "message_age_ms": round(age_ms, 2)}
-        stale = age_ms > PEER_STATE_MAX_AGE_S * 1000.0
+        stale = age_ms > OWN_STATE_MAX_AGE_S * 1000.0
         return {
             "drone_id": None,
             "frame": "ENU",
