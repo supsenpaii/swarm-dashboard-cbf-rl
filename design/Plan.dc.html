@@ -7,125 +7,122 @@
 <body>
 <x-dc>
 <helmet>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap">
   <style>
-    body { margin: 0; background: #0b1120; }
-    a { color: #38bdf8; } a:hover { color: #7dd3fc; }
+    body { margin: 0; background: #08090d; }
+    a { color: #4cc9f0; } a:hover { color: #90e0ef; }
     * { box-sizing: border-box; }
   </style>
 </helmet>
 
-<div style="width: 1440px; height: 900px; background: #0b1120; font-family: 'Be Vietnam Pro', system-ui, sans-serif; color: #e2e8f0; display: flex; flex-direction: column;">
+<div style="width: 1440px; height: 900px; background: #08090d; font-family: 'Be Vietnam Pro', system-ui, sans-serif; color: #edf0f4; display: flex; flex-direction: column;">
 
-  <div style="height: 52px; flex-shrink: 0; display: flex; align-items: center; gap: 20px; padding: 0 18px; background: #0e1626; border-bottom: 1px solid #1e2b44;">
-    <div style="display: flex; align-items: baseline; gap: 9px;">
-      <span style="font-size: 14px; font-weight: 700;">Swarm UAV</span>
-      <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #64748b; letter-spacing: 0.08em;">VẼ NHIỆM VỤ</span>
+  <div style="height: 54px; flex-shrink: 0; display: flex; align-items: center; gap: 22px; padding: 0 22px; background: #0c0e13; border-bottom: 1px solid #191d26;">
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <div style="width: 22px; height: 22px; border-radius: 5px; background: {{accent}}; display: flex; align-items: center; justify-content: center;">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#08090d" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v6c0 4.2-2.9 7.6-7 9-4.1-1.4-7-4.8-7-9V6z"/></svg>
+      </div>
+      <span style="font-size: 15px; font-weight: 700; letter-spacing: -.015em;">Sparrow</span>
+      <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #5d6675; letter-spacing: .1em;">VẼ NHIỆM VỤ</span>
     </div>
     <div style="flex-grow: 1;"></div>
-    <div style="display: flex; align-items: center; gap: 9px; height: 32px; padding: 0 12px; border-radius: 6px; background: #16233b; border: 1px solid {{accent}};">
-      <span style="width: 6px; height: 6px; border-radius: 50%; background: #22c55e;"></span>
-      <span style="font-size: 12px; font-weight: 600;">UAV-01</span>
+    <div style="display: flex; align-items: center; gap: 9px; height: 30px; padding: 0 13px; border-radius: 15px; background: rgba(76,201,240,.1); border: 1px solid {{accent}};">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="{{accent}}" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      <span style="font-size: 11px; font-weight: 600; color: {{accent}};">Bản đồ mở rộng để vẽ</span>
     </div>
   </div>
 
   <div style="flex-grow: 1; display: flex; min-height: 0;">
 
-    <div style="width: 62px; flex-shrink: 0; display: flex; flex-direction: column; padding: 10px 0; gap: 2px; background: #0e1626; border-right: 1px solid #1e2b44;">
-      <sc-for list="{{rail}}" as="item" hint-placeholder-count="4">
-        <div style="display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 11px 0; cursor: pointer; border-left: 2px solid {{item.edge}}; background: {{item.bg}};">
-          <div style="width: 19px; height: 19px; border-radius: 3px; background: {{item.fg}}; opacity: 0.85;"></div>
-          <span style="font-size: 8px; font-weight: 700; letter-spacing: 0.07em; color: {{item.fg}};">{{item.label}}</span>
+    <div style="width: 68px; flex-shrink: 0; display: flex; flex-direction: column; padding: 12px 0; gap: 3px; background: #0c0e13; border-right: 1px solid #191d26;">
+      <sc-for list="{{rail}}" as="r" hint-placeholder-count="4">
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 13px 0; cursor: pointer; border-left: 2px solid {{r.edge}}; background: {{r.bg}};">
+          <div style="width: 21px; height: 21px; border-radius: 4px; background: {{r.fg}}; opacity: .8;"></div>
+          <span style="font-size: 8px; font-weight: 700; letter-spacing: .08em; color: {{r.fg}};">{{r.label}}</span>
         </div>
       </sc-for>
     </div>
 
-    <!-- drawing canvas -->
-    <div style="flex-grow: 1; position: relative; min-width: 0; background: #101a2c; overflow: hidden;">
-      <div style="position: absolute; inset: 0; opacity: 0.5;">
-        <svg width="100%" height="100%">
-          <defs>
-            <pattern id="g2" width="46" height="46" patternUnits="userSpaceOnUse">
-              <path d="M46 0H0v46" fill="none" stroke="#18253d" stroke-width="1"/>
-            </pattern>
-          </defs>
-          <rect width="100%" height="100%" fill="url(#g2)"/>
-        </svg>
-      </div>
-
+    <!-- bản đồ chiếm gần hết: kích thước đi theo công việc -->
+    <div style="flex-grow: 1; position: relative; min-width: 0; background: #0d1119; overflow: hidden;">
       <svg style="position: absolute; inset: 0;" width="100%" height="100%">
-        <path d="M240 240 L620 240 L620 560 L240 560 Z" fill="{{accent}}" fill-opacity="0.05" stroke="{{accent}}" stroke-width="2"/>
-        <circle cx="240" cy="240" r="8" fill="{{accent}}"/>
-        <circle cx="620" cy="240" r="8" fill="{{accent}}"/>
-        <circle cx="620" cy="560" r="8" fill="{{accent}}"/>
-        <circle cx="240" cy="560" r="8" fill="{{accent}}"/>
-        <text x="252" y="234" font-family="IBM Plex Mono, monospace" font-size="11" fill="#94a3b8">1</text>
-        <text x="632" y="234" font-family="IBM Plex Mono, monospace" font-size="11" fill="#94a3b8">2</text>
-        <text x="632" y="578" font-family="IBM Plex Mono, monospace" font-size="11" fill="#94a3b8">3</text>
-        <text x="252" y="578" font-family="IBM Plex Mono, monospace" font-size="11" fill="#94a3b8">4</text>
+        <defs><pattern id="pg" width="46" height="46" patternUnits="userSpaceOnUse"><path d="M46 0H0v46" fill="none" stroke="#151b25" stroke-width="1"/></pattern></defs>
+        <rect width="100%" height="100%" fill="url(#pg)"/>
+        <path d="M250 220 L700 220 L700 570 L250 570 Z" fill="{{accent}}" fill-opacity=".05" stroke="{{accent}}" stroke-width="2.2"/>
+        <circle cx="250" cy="220" r="9" fill="{{accent}}"/><text x="264" y="214" font-family="IBM Plex Mono, monospace" font-size="12" fill="#8b95a5">1</text>
+        <circle cx="700" cy="220" r="9" fill="{{accent}}"/><text x="714" y="214" font-family="IBM Plex Mono, monospace" font-size="12" fill="#8b95a5">2</text>
+        <circle cx="700" cy="570" r="9" fill="{{accent}}"/><text x="714" y="592" font-family="IBM Plex Mono, monospace" font-size="12" fill="#8b95a5">3</text>
+        <circle cx="250" cy="570" r="9" fill="{{accent}}"/><text x="264" y="592" font-family="IBM Plex Mono, monospace" font-size="12" fill="#8b95a5">4</text>
       </svg>
 
-      <div style="position: absolute; top: 14px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 9px; height: 32px; padding: 0 14px; border-radius: 16px; background: rgba(14,22,38,.94); border: 1px solid {{accent}};">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="{{accent}}" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
-        <span style="font-size: 11px; font-weight: 600;">Click bản đồ = thêm waypoint</span>
+      <div style="position: absolute; top: 18px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; height: 38px; padding: 0 18px; border-radius: 19px; background: rgba(8,9,13,.94); border: 1px solid {{accent}};">
+        <span style="width: 7px; height: 7px; border-radius: 50%; background: {{accent}};"></span>
+        <span style="font-size: 12px; font-weight: 600;">Click bản đồ = thêm waypoint · đã có 4</span>
       </div>
 
-      <div style="position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; padding: 10px 15px; border-radius: 7px; background: rgba(14,22,38,.94); border: 1px solid #b45309;">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="1.8" stroke-linecap="round"><path d="M12 8v5M12 17h.01"/><circle cx="12" cy="12" r="9"/></svg>
-        <span style="font-size: 11px; color: #fde68a;">Click các góc <strong style="color: #fef3c7;">đi vòng quanh</strong> — click chéo sẽ tạo đường tự cắt và bị từ chối.</span>
+      <div style="position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 11px; padding: 12px 18px; border-radius: 9px; background: rgba(8,9,13,.94); border: 1px solid #7a5216;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ffb454" stroke-width="1.9" stroke-linecap="round"><path d="M12 8v5M12 17h.01"/><circle cx="12" cy="12" r="9"/></svg>
+        <span style="font-size: 12px; color: #ffd9a0;">Click các góc <strong style="color: #ffe9c7;">đi vòng quanh</strong> — click chéo tạo đường tự cắt và bị từ chối.</span>
+      </div>
+
+      <div style="position: absolute; top: 18px; right: 18px; display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 13px; border-radius: 8px; background: rgba(8,9,13,.9); border: 1px solid #212734; cursor: pointer;">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#8b95a5" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3H3v6M15 21h6v-6M3 3l7 7M21 21l-7-7"/></svg>
+        <span style="font-size: 11px; font-weight: 600; color: #8b95a5;">THU NHỎ</span>
       </div>
     </div>
 
-    <!-- right column -->
-    <div style="width: 372px; flex-shrink: 0; display: flex; flex-direction: column; border-left: 1px solid #1e2b44; overflow: hidden;">
+    <!-- bảng vẽ -->
+    <div style="width: 376px; flex-shrink: 0; padding: 22px; overflow: hidden; background: #0c0e13; border-left: 1px solid #191d26; display: flex; flex-direction: column; gap: 20px;">
 
-      <div style="padding: 15px 16px 14px; border-bottom: 1px solid #1e2b44;">
-        <div style="font-size: 9px; font-weight: 700; letter-spacing: 0.14em; color: #64748b; margin-bottom: 11px;">CÔNG CỤ</div>
-        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;">
+      <div>
+        <div style="font-size: 10px; font-weight: 700; letter-spacing: .16em; color: #6b7484; margin-bottom: 12px;">CÔNG CỤ</div>
+        <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px;">
           <sc-for list="{{tools}}" as="t" hint-placeholder-count="4">
-            <div style="height: 54px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; border-radius: 6px; background: {{t.bg}}; border: 1px solid {{t.bd}}; cursor: pointer;">
-              <div style="width: 17px; height: 17px; border-radius: 3px; border: 1.5px solid {{t.fg}};"></div>
-              <span style="font-size: 9px; font-weight: 700; letter-spacing: 0.05em; color: {{t.fg}};">{{t.label}}</span>
+            <div style="height: 66px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; border-radius: 9px; background: {{t.bg}}; border: 1px solid {{t.bd}}; cursor: pointer;">
+              <div style="width: 19px; height: 19px; border-radius: 4px; border: 1.6px solid {{t.fg}};"></div>
+              <span style="font-size: 10px; font-weight: 700; letter-spacing: .05em; color: {{t.fg}};">{{t.label}}</span>
             </div>
           </sc-for>
         </div>
       </div>
 
-      <div style="padding: 15px 16px 14px; border-bottom: 1px solid #1e2b44;">
-        <div style="font-size: 9px; font-weight: 700; letter-spacing: 0.14em; color: #64748b; margin-bottom: 12px;">THÔNG SỐ</div>
-        <div style="display: flex; flex-direction: column; gap: 12px;">
+      <div>
+        <div style="font-size: 10px; font-weight: 700; letter-spacing: .16em; color: #6b7484; margin-bottom: 13px;">THÔNG SỐ</div>
+        <div style="display: flex; flex-direction: column; gap: 14px;">
           <sc-for list="{{fields}}" as="f" hint-placeholder-count="3">
-            <div style="display: flex; flex-direction: column; gap: 6px;">
+            <div style="display: flex; flex-direction: column; gap: 7px;">
               <div style="display: flex; align-items: baseline; justify-content: space-between;">
-                <span style="font-size: 11px; color: #94a3b8;">{{f.label}}</span>
-                <span style="font-family: 'IBM Plex Mono', monospace; font-size: 9px; color: #475569;">{{f.range}}</span>
+                <span style="font-size: 12px; color: #8b95a5;">{{f.label}}</span>
+                <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #4a525f;">{{f.range}}</span>
               </div>
-              <div style="display: flex; align-items: center; gap: 9px; height: 36px; padding: 0 12px; border-radius: 5px; background: #0d1524; border: 1px solid #22304a;">
-                <span style="flex-grow: 1; font-family: 'IBM Plex Mono', monospace; font-size: 15px; font-weight: 500; color: #e2e8f0;">{{f.value}}</span>
-                <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #64748b;">{{f.unit}}</span>
+              <div style="display: flex; align-items: center; gap: 10px; height: 46px; padding: 0 15px; border-radius: 8px; background: #0d1119; border: 1px solid #212734;">
+                <span style="flex-grow: 1; font-family: 'IBM Plex Mono', monospace; font-size: 19px; font-weight: 500; letter-spacing: -.02em;">{{f.value}}</span>
+                <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5d6675;">{{f.unit}}</span>
               </div>
             </div>
           </sc-for>
         </div>
       </div>
 
-      <div style="padding: 15px 16px 14px; border-bottom: 1px solid #1e2b44;">
-        <div style="font-size: 9px; font-weight: 700; letter-spacing: 0.14em; color: #64748b; margin-bottom: 11px;">XEM TRƯỚC</div>
-        <div style="display: flex; flex-direction: column; gap: 9px;">
+      <div>
+        <div style="font-size: 10px; font-weight: 700; letter-spacing: .16em; color: #6b7484; margin-bottom: 12px;">XEM TRƯỚC</div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 9px;">
           <sc-for list="{{preview}}" as="p" hint-placeholder-count="4">
-            <div style="display: flex; align-items: baseline; justify-content: space-between; padding-bottom: 8px; border-bottom: 1px solid #17223a;">
-              <span style="font-size: 11px; color: #8496b0;">{{p.k}}</span>
-              <span style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; font-weight: 500; color: {{p.c}};">{{p.v}}</span>
+            <div style="padding: 12px 14px; border-radius: 8px; background: #0f1218;">
+              <div style="font-size: 9px; letter-spacing: .09em; color: #5d6675; margin-bottom: 6px;">{{p.k}}</div>
+              <div style="font-family: 'IBM Plex Mono', monospace; font-size: 19px; font-weight: 500; color: {{p.c}};">{{p.v}}</div>
             </div>
           </sc-for>
         </div>
       </div>
 
-      <div style="padding: 15px 16px;">
-        <div style="height: 42px; display: flex; align-items: center; justify-content: center; border-radius: 6px; background: #164e33; border: 1px solid #22c55e; font-size: 12px; font-weight: 700; letter-spacing: 0.05em; color: #bbf7d0; cursor: pointer;">GỬI NHIỆM VỤ</div>
-        <div style="margin-top: 9px; display: flex; align-items: center; gap: 8px;">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
-          <span style="font-size: 10px; color: #4ade80;">Đường khép kín hợp lệ · không tự cắt</span>
+      <div style="flex-grow: 1;"></div>
+
+      <div>
+        <div style="height: 52px; display: flex; align-items: center; justify-content: center; border-radius: 9px; background: #0e3a2c; border: 1px solid #2ee6a8; font-size: 13px; font-weight: 700; letter-spacing: .05em; color: #7df5cc; cursor: pointer;">GỬI NHIỆM VỤ</div>
+        <div style="margin-top: 11px; display: flex; align-items: center; gap: 9px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2ee6a8" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+          <span style="font-size: 11px; color: #2ee6a8;">Đường khép kín hợp lệ · không tự cắt</span>
         </div>
       </div>
     </div>
@@ -134,39 +131,34 @@
 </x-dc>
 
 <script data-dc-script data-props='{
-  "accent": {"editor": "color", "default": "#38bdf8", "options": ["#38bdf8", "#22d3ee", "#a78bfa", "#f472b6"]}
+  "accent": {"editor": "color", "default": "#4cc9f0", "options": ["#4cc9f0", "#2ee6a8", "#a78bfa", "#ffb454"]}
 }'>
 class Component extends DCLogic {
   renderVals() {
-    const accent = this.props.accent ?? '#38bdf8';
-
+    const accent = this.props.accent ?? '#4cc9f0';
     const rail = [
-      { label: 'BAY',     fg: '#64748b', bg: 'transparent', edge: 'transparent' },
-      { label: 'VẼ',      fg: '#e2e8f0', bg: '#16233b',     edge: accent },
-      { label: 'THEO',    fg: '#64748b', bg: 'transparent', edge: 'transparent' },
-      { label: 'AN TOÀN', fg: '#64748b', bg: 'transparent', edge: 'transparent' },
+      { label: 'BAY',     fg: '#5d6675', bg: 'transparent', edge: 'transparent' },
+      { label: 'VẼ',      fg: '#edf0f4', bg: '#111722',     edge: accent },
+      { label: 'THEO',    fg: '#5d6675', bg: 'transparent', edge: 'transparent' },
+      { label: 'AN TOÀN', fg: '#5d6675', bg: 'transparent', edge: 'transparent' },
     ];
-
     const tools = [
-      { label: 'VẼ TAY', bg: '#16233b', bd: accent,    fg: '#e2e8f0' },
-      { label: 'VUÔNG',  bg: '#141e33', bd: '#22304a', fg: '#94a3b8' },
-      { label: 'TRÒN',   bg: '#141e33', bd: '#22304a', fg: '#94a3b8' },
-      { label: 'XOÁ',    bg: '#141e33', bd: '#22304a', fg: '#94a3b8' },
+      { label: 'VẼ TAY', bg: '#111722', bd: accent,    fg: '#edf0f4' },
+      { label: 'VUÔNG',  bg: '#141922', bd: '#212734', fg: '#8b95a5' },
+      { label: 'TRÒN',   bg: '#141922', bd: '#212734', fg: '#8b95a5' },
+      { label: 'XOÁ',    bg: '#141922', bd: '#212734', fg: '#8b95a5' },
     ];
-
     const fields = [
-      { label: 'Cao độ',        value: '15.0', unit: 'm',   range: '2 – 200' },
-      { label: 'Tốc độ bay',    value: '14.8', unit: 'm/s', range: '0.2 – 19.2' },
-      { label: 'Cạnh preset',   value: '240',  unit: 'm',   range: '5 – 600' },
+      { label: 'Cao độ',      value: '15.0', unit: 'm',   range: '2 – 200' },
+      { label: 'Tốc độ bay',  value: '14.8', unit: 'm/s', range: '0.2 – 19.2' },
+      { label: 'Cạnh preset', value: '240',  unit: 'm',   range: '5 – 600' },
     ];
-
     const preview = [
-      { k: 'Waypoint',            v: '4',       c: '#e2e8f0' },
-      { k: 'Chu vi',              v: '960.0 m', c: '#e2e8f0' },
-      { k: 'Một vòng',            v: '64.9 s',  c: '#e2e8f0' },
-      { k: 'Góc chậm nhất',       v: '9.1 m/s', c: '#f59e0b' },
+      { k: 'WAYPOINT',      v: '4',    c: '#edf0f4' },
+      { k: 'CHU VI',        v: '960 m', c: '#edf0f4' },
+      { k: 'MỘT VÒNG',      v: '64.9 s', c: '#edf0f4' },
+      { k: 'GÓC CHẬM NHẤT', v: '9.1 m/s', c: '#ffb454' },
     ];
-
     return { accent, rail, tools, fields, preview };
   }
 }

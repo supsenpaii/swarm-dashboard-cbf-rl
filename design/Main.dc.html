@@ -7,273 +7,234 @@
 <body>
 <x-dc>
 <helmet>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap">
   <style>
-    body { margin: 0; background: #0b1120; }
-    a { color: #38bdf8; } a:hover { color: #7dd3fc; }
+    body { margin: 0; background: #08090d; }
+    a { color: #4cc9f0; } a:hover { color: #90e0ef; }
     * { box-sizing: border-box; }
   </style>
 </helmet>
 
-<div style="width: 1440px; height: 900px; background: #0b1120; font-family: 'Be Vietnam Pro', system-ui, sans-serif; color: #e2e8f0; display: flex; flex-direction: column;">
+<div style="width: 1440px; height: 900px; background: #08090d; font-family: 'Be Vietnam Pro', system-ui, sans-serif; color: #edf0f4; display: flex; flex-direction: column;">
 
-  <!-- ── top bar ─────────────────────────────────────────── -->
-  <div style="height: 52px; flex-shrink: 0; display: flex; align-items: center; gap: 20px; padding: 0 18px; background: #0e1626; border-bottom: 1px solid #1e2b44;">
-    <div style="display: flex; align-items: baseline; gap: 9px;">
-      <span style="font-size: 14px; font-weight: 700; letter-spacing: -0.01em;">Swarm UAV</span>
-      <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #64748b; letter-spacing: 0.08em;">SPARROW · SITL</span>
-    </div>
-
-    <div style="display: flex; gap: 8px;">
-      <div style="display: flex; align-items: center; gap: 9px; height: 32px; padding: 0 12px; border-radius: 6px; background: #16233b; border: 1px solid {{accent}};">
-        <span style="width: 6px; height: 6px; border-radius: 50%; background: #22c55e; box-shadow: 0 0 7px #22c55e;"></span>
-        <span style="font-size: 12px; font-weight: 600;">UAV-01</span>
-        <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #94a3b8;">OFFBOARD</span>
-        <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #e2e8f0;">12.4 m</span>
+  <!-- top bar -->
+  <div style="height: 54px; flex-shrink: 0; display: flex; align-items: center; gap: 22px; padding: 0 22px; background: #0c0e13; border-bottom: 1px solid #191d26;">
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <div style="width: 22px; height: 22px; border-radius: 5px; background: {{accent}}; display: flex; align-items: center; justify-content: center;">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#08090d" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v6c0 4.2-2.9 7.6-7 9-4.1-1.4-7-4.8-7-9V6z"/></svg>
       </div>
-      <div style="display: flex; align-items: center; gap: 9px; height: 32px; padding: 0 12px; border-radius: 6px; background: #111c30; border: 1px solid #22314c;">
-        <span style="width: 6px; height: 6px; border-radius: 50%; background: #22c55e; box-shadow: 0 0 7px #22c55e;"></span>
-        <span style="font-size: 12px; font-weight: 600; color: #94a3b8;">UAV-02</span>
-        <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #64748b;">POSITION</span>
-        <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #94a3b8;">0.9 m</span>
-      </div>
+      <span style="font-size: 15px; font-weight: 700; letter-spacing: -.015em;">Sparrow</span>
+      <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #5d6675; letter-spacing: .1em; padding-left: 2px;">SWARM CONSOLE</span>
     </div>
 
     <div style="flex-grow: 1;"></div>
 
-    <div style="display: flex; align-items: center; gap: 7px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #94a3b8;">
-      <span style="width: 6px; height: 6px; border-radius: 50%; background: #22c55e;"></span>
-      <span>MQTT</span>
-      <span style="color: #334155;">·</span>
-      <span>20 Hz</span>
+    <sc-for list="{{chips}}" as="c" hint-placeholder-count="2">
+      <div style="display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 13px; border-radius: 8px; background: {{c.bg}}; border: 1px solid {{c.bd}};">
+        <span style="width: 7px; height: 7px; border-radius: 50%; background: {{c.dot}}; box-shadow: 0 0 8px {{c.dot}};"></span>
+        <span style="font-size: 12px; font-weight: 600; color: {{c.fg}};">{{c.id}}</span>
+        <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #8b95a5;">{{c.mode}}</span>
+      </div>
+    </sc-for>
+
+    <div style="width: 1px; height: 22px; background: #202632;"></div>
+    <div style="display: flex; align-items: center; gap: 8px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #8b95a5;">
+      <span style="width: 6px; height: 6px; border-radius: 50%; background: #2ee6a8;"></span>
+      <span>LIVE 20 Hz</span>
     </div>
   </div>
 
-  <!-- ── safety strip ────────────────────────────────────── -->
-  <div style="flex-shrink: 0; padding: 13px 18px 15px; background: #0e1728; border-bottom: 1px solid #1e2b44;">
-    <div style="display: flex; align-items: flex-end; gap: 36px;">
-
-      <div style="display: flex; flex-direction: column; gap: 3px; width: 150px;">
-        <span style="font-size: 9px; font-weight: 600; letter-spacing: 0.14em; color: #64748b;">KHOẢNG CÁCH</span>
-        <div style="display: flex; align-items: baseline; gap: 4px;">
-          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 30px; font-weight: 500; letter-spacing: -0.02em; color: #e2e8f0;">{{separation}}</span>
-          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #64748b;">m</span>
-        </div>
-      </div>
-
-      <div style="display: flex; flex-direction: column; gap: 3px; width: 150px;">
-        <span style="font-size: 9px; font-weight: 600; letter-spacing: 0.14em; color: #64748b;">BIÊN CBF</span>
-        <div style="display: flex; align-items: baseline; gap: 4px;">
-          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 30px; font-weight: 600; letter-spacing: -0.02em; color: {{marginColor}};">{{marginText}}</span>
-          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #64748b;">m</span>
-        </div>
-      </div>
-
-      <div style="display: flex; flex-direction: column; gap: 3px; width: 150px;">
-        <span style="font-size: 9px; font-weight: 600; letter-spacing: 0.14em; color: #64748b;">RÀO CHẮN ĐÒI</span>
-        <div style="display: flex; align-items: baseline; gap: 4px;">
-          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 30px; font-weight: 400; letter-spacing: -0.02em; color: #94a3b8;">{{required}}</span>
-          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #64748b;">m</span>
-        </div>
-      </div>
-
-      <div style="display: flex; flex-direction: column; gap: 5px; width: 180px;">
-        <span style="font-size: 9px; font-weight: 600; letter-spacing: 0.14em; color: #64748b;">ĐIỀU PHỐI</span>
-        <div style="display: flex; flex-direction: column; gap: 3px;">
-          <div style="display: flex; align-items: center; gap: 7px;">
-            <span style="width: 3px; height: 12px; border-radius: 2px; background: {{accent}};"></span>
-            <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #cbd5e1;">UAV-01</span>
-            <span style="font-size: 10px; font-weight: 700; letter-spacing: 0.08em; color: {{accent}};">ƯU TIÊN</span>
-          </div>
-          <div style="display: flex; align-items: center; gap: 7px;">
-            <span style="width: 3px; height: 12px; border-radius: 2px; background: #f59e0b;"></span>
-            <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #cbd5e1;">UAV-02</span>
-            <span style="font-size: 10px; font-weight: 700; letter-spacing: 0.08em; color: #f59e0b;">NHƯỜNG</span>
-          </div>
-        </div>
-      </div>
-
-      <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 6px; padding-bottom: 3px;">
-        <div style="position: relative; height: 22px;">
-          <div style="position: absolute; inset: 8px 0 auto 0; height: 6px; border-radius: 3px; background: #16223a;"></div>
-          <div style="position: absolute; top: 8px; left: 0; width: 16.7%; height: 6px; border-radius: 3px 0 0 3px; background: #7f1d1d;"></div>
-          <div style="position: absolute; top: 8px; left: 16.7%; width: {{barRequired}}; height: 6px; background: #1e3a5f;"></div>
-          <div style="position: absolute; top: 3px; left: {{barActual}}; width: 2px; height: 16px; border-radius: 1px; background: {{marginColor}}; box-shadow: 0 0 8px {{marginColor}};"></div>
-          <div style="position: absolute; top: 4px; left: 16.7%; width: 1px; height: 14px; background: #ef4444;"></div>
-        </div>
-        <div style="display: flex; justify-content: space-between; font-family: 'IBM Plex Mono', monospace; font-size: 9px; color: #475569;">
-          <span>0</span>
-          <span style="color: #b91c1c;">20 · SÀN CỨNG</span>
-          <span>60</span>
-          <span>120 m</span>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ── body ────────────────────────────────────────────── -->
   <div style="flex-grow: 1; display: flex; min-height: 0;">
 
     <!-- rail -->
-    <div style="width: 62px; flex-shrink: 0; display: flex; flex-direction: column; padding: 10px 0; gap: 2px; background: #0e1626; border-right: 1px solid #1e2b44;">
-      <sc-for list="{{rail}}" as="item" hint-placeholder-count="4">
-        <div style="display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 11px 0; cursor: pointer; border-left: 2px solid {{item.edge}}; background: {{item.bg}};">
-          <div style="color: {{item.fg}};" data-icon="{{item.icon}}">
-            <sc-if value="{{item.isFly}}" hint-placeholder-val="{{true}}">
-              <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 4 20l8-4 8 4z"/></svg>
-            </sc-if>
-            <sc-if value="{{item.isPlan}}" hint-placeholder-val="{{false}}">
-              <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 18 9 7l6 8 5-9"/><circle cx="4" cy="18" r="1.6"/><circle cx="20" cy="6" r="1.6"/></svg>
-            </sc-if>
-            <sc-if value="{{item.isTrack}}" hint-placeholder-val="{{false}}">
-              <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="7"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
-            </sc-if>
-            <sc-if value="{{item.isSafe}}" hint-placeholder-val="{{false}}">
-              <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v6c0 4.2-2.9 7.6-7 9-4.1-1.4-7-4.8-7-9V6z"/></svg>
-            </sc-if>
+    <div style="width: 68px; flex-shrink: 0; display: flex; flex-direction: column; padding: 12px 0; gap: 3px; background: #0c0e13; border-right: 1px solid #191d26;">
+      <sc-for list="{{rail}}" as="r" hint-placeholder-count="4">
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 13px 0; cursor: pointer; border-left: 2px solid {{r.edge}}; background: {{r.bg}};">
+          <div style="color: {{r.fg}};">
+            <sc-if value="{{r.a}}" hint-placeholder-val="{{true}}"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 4 20l8-4 8 4z"/></svg></sc-if>
+            <sc-if value="{{r.b}}" hint-placeholder-val="{{false}}"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 18 9 7l6 8 5-9"/><circle cx="4" cy="18" r="1.7"/><circle cx="20" cy="6" r="1.7"/></svg></sc-if>
+            <sc-if value="{{r.c}}" hint-placeholder-val="{{false}}"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="7"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></sc-if>
+            <sc-if value="{{r.d}}" hint-placeholder-val="{{false}}"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg></sc-if>
           </div>
-          <span style="font-size: 8px; font-weight: 700; letter-spacing: 0.07em; color: {{item.fg}};">{{item.label}}</span>
+          <span style="font-size: 8px; font-weight: 700; letter-spacing: .08em; color: {{r.fg}};">{{r.label}}</span>
         </div>
       </sc-for>
     </div>
 
-    <!-- left column -->
-    <div style="width: 318px; flex-shrink: 0; display: flex; flex-direction: column; gap: 0; border-right: 1px solid #1e2b44; overflow: hidden;">
+    <!-- canvas -->
+    <div style="flex-grow: 1; min-width: 0; padding: 22px; display: flex; gap: 20px;">
 
-      <div style="padding: 14px 15px 13px; border-bottom: 1px solid #1e2b44;">
-        <div style="font-size: 9px; font-weight: 700; letter-spacing: 0.14em; color: #64748b; margin-bottom: 11px;">UAV-01 · TELEMETRY</div>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 11px 14px;">
-          <sc-for list="{{telemetry}}" as="row" hint-placeholder-count="6">
-            <div style="display: flex; flex-direction: column; gap: 2px;">
-              <span style="font-size: 9px; letter-spacing: 0.06em; color: #64748b;">{{row.k}}</span>
-              <span style="font-family: 'IBM Plex Mono', monospace; font-size: 14px; font-weight: 500; color: {{row.c}};">{{row.v}}</span>
-            </div>
-          </sc-for>
-        </div>
-      </div>
+      <!-- left stack -->
+      <div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 20px;">
 
-      <div style="padding: 14px 15px 13px; border-bottom: 1px solid #1e2b44;">
-        <div style="font-size: 9px; font-weight: 700; letter-spacing: 0.14em; color: #64748b; margin-bottom: 10px;">CHẾ ĐỘ BAY</div>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
-          <sc-for list="{{modes}}" as="m" hint-placeholder-count="4">
-            <div style="height: 36px; display: flex; align-items: center; justify-content: center; border-radius: 5px; border: 1px solid {{m.bd}}; background: {{m.bg}}; color: {{m.fg}}; font-size: 11px; font-weight: 600; letter-spacing: 0.02em; cursor: pointer;">{{m.label}}</div>
-          </sc-for>
-        </div>
-      </div>
+        <!-- SAFETY HERO -->
+        <div style="height: 212px; flex-shrink: 0; padding: 20px 24px; border-radius: 12px; background: #0f1218; border: 1px solid #1c212c;">
+          <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 18px;">
+            <span style="font-size: 10px; font-weight: 700; letter-spacing: .16em; color: #6b7484;">LỚP AN TOÀN</span>
+            <span style="height: 20px; display: flex; align-items: center; padding: 0 8px; border-radius: 5px; background: rgba(46,230,168,.1); font-family: 'IBM Plex Mono', monospace; font-size: 9px; font-weight: 600; letter-spacing: .06em; color: #2ee6a8;">RÀO CHẮN ĐANG GIỮ</span>
+          </div>
 
-      <div style="padding: 14px 15px 13px; border-bottom: 1px solid #1e2b44;">
-        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
-          <span style="font-size: 9px; font-weight: 700; letter-spacing: 0.14em; color: #64748b;">BÀN PHÍM</span>
-          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 9px; padding: 2px 6px; border-radius: 3px; background: #1a2438; color: #64748b; letter-spacing: 0.06em;">DISABLED</span>
-        </div>
-        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px;">
-          <sc-for list="{{keys}}" as="k" hint-placeholder-count="9">
-            <div style="height: 30px; display: flex; align-items: center; justify-content: center; border-radius: 4px; background: #141e33; border: 1px solid #22304a; font-family: 'IBM Plex Mono', monospace; font-size: 10px; font-weight: 500; color: #8496b0;">{{k}}</div>
-          </sc-for>
-        </div>
-      </div>
-
-      <div style="padding: 14px 15px;">
-        <div style="font-size: 9px; font-weight: 700; letter-spacing: 0.14em; color: #64748b; margin-bottom: 10px;">GIMBAL</div>
-        <div style="display: flex; flex-direction: column; gap: 6px;">
-          <sc-for list="{{gimbal}}" as="g" hint-placeholder-count="3">
-            <div style="display: flex; align-items: center; gap: 8px;">
-              <span style="width: 38px; font-size: 10px; color: #8496b0;">{{g.axis}}</span>
-              <div style="width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; border-radius: 4px; background: #141e33; border: 1px solid #22304a; font-size: 13px; color: #94a3b8; cursor: pointer;">−</div>
-              <span style="flex-grow: 1; text-align: center; font-family: 'IBM Plex Mono', monospace; font-size: 13px; font-weight: 500;">{{g.value}}</span>
-              <div style="width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; border-radius: 4px; background: #141e33; border: 1px solid #22304a; font-size: 13px; color: #94a3b8; cursor: pointer;">+</div>
-            </div>
-          </sc-for>
-          <div style="height: 32px; margin-top: 3px; display: flex; align-items: center; justify-content: center; border-radius: 5px; background: #141e33; border: 1px solid #22304a; font-size: 10px; font-weight: 600; letter-spacing: 0.06em; color: #94a3b8; cursor: pointer;">GIMBAL HOME · 0° / 0° / 0°</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- map -->
-    <div style="flex-grow: 1; position: relative; min-width: 0; background: #0d1524; overflow: hidden;">
-      <div style="position: absolute; inset: 0; background: #101a2c;"></div>
-      <div style="position: absolute; inset: 0; opacity: 0.5;">
-        <svg width="100%" height="100%">
-          <defs>
-            <pattern id="grid" width="46" height="46" patternUnits="userSpaceOnUse">
-              <path d="M46 0H0v46" fill="none" stroke="#18253d" stroke-width="1"/>
-            </pattern>
-          </defs>
-          <rect width="100%" height="100%" fill="url(#grid)"/>
-        </svg>
-      </div>
-
-      <svg style="position: absolute; inset: 0;" width="100%" height="100%">
-        <path d="M120 430 L300 250 L470 300 L560 150" fill="none" stroke="{{accent}}" stroke-width="2" stroke-dasharray="1 7" stroke-linecap="round" opacity="0.75"/>
-        <path d="M150 130 L330 210 L420 400 L560 430" fill="none" stroke="#f59e0b" stroke-width="2" stroke-dasharray="1 7" stroke-linecap="round" opacity="0.6"/>
-        <circle cx="300" cy="250" r="20" fill="none" stroke="{{accent}}" stroke-width="1" opacity="0.28"/>
-        <circle cx="300" cy="250" r="7" fill="{{accent}}"/>
-        <circle cx="330" cy="210" r="20" fill="none" stroke="#f59e0b" stroke-width="1" opacity="0.28"/>
-        <circle cx="330" cy="210" r="7" fill="#f59e0b"/>
-        <line x1="300" y1="250" x2="330" y2="210" stroke="{{marginColor}}" stroke-width="1.4" stroke-dasharray="4 3"/>
-      </svg>
-
-      <div style="position: absolute; top: 14px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 9px; height: 32px; padding: 0 14px; border-radius: 16px; background: rgba(14,22,38,.94); border: 1px solid {{accent}};">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="{{accent}}" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
-        <span style="font-size: 11px; font-weight: 600; color: #e2e8f0;">Click bản đồ = thêm waypoint</span>
-      </div>
-
-      <div style="position: absolute; bottom: 14px; left: 14px; display: flex; align-items: center; gap: 8px; height: 27px; padding: 0 11px; border-radius: 5px; background: rgba(14,22,38,.9); border: 1px solid #22314c;">
-        <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #64748b;">© OpenStreetMap</span>
-      </div>
-
-      <div style="position: absolute; bottom: 14px; right: 14px; display: flex; flex-direction: column; gap: 3px;">
-        <div style="width: 29px; height: 29px; display: flex; align-items: center; justify-content: center; border-radius: 4px; background: rgba(14,22,38,.9); border: 1px solid #22314c; color: #94a3b8; font-size: 15px;">+</div>
-        <div style="width: 29px; height: 29px; display: flex; align-items: center; justify-content: center; border-radius: 4px; background: rgba(14,22,38,.9); border: 1px solid #22314c; color: #94a3b8; font-size: 15px;">−</div>
-      </div>
-    </div>
-
-    <!-- right column -->
-    <div style="width: 344px; flex-shrink: 0; display: flex; flex-direction: column; border-left: 1px solid #1e2b44; overflow: hidden;">
-
-      <div style="padding: 14px 15px 15px; border-bottom: 1px solid #1e2b44;">
-        <div style="font-size: 9px; font-weight: 700; letter-spacing: 0.14em; color: #64748b; margin-bottom: 12px;">NHIỆM VỤ · UAV-01</div>
-        <div style="display: flex; flex-direction: column; gap: 0;">
-          <sc-for list="{{steps}}" as="s" hint-placeholder-count="5">
-            <div style="display: flex; align-items: flex-start; gap: 11px; padding: 8px 0;">
-              <div style="position: relative; display: flex; flex-direction: column; align-items: center; flex-shrink: 0;">
-                <div style="width: 21px; height: 21px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: {{s.dotBg}}; border: 1.5px solid {{s.dotBd}}; font-family: 'IBM Plex Mono', monospace; font-size: 10px; font-weight: 600; color: {{s.dotFg}};">{{s.n}}</div>
-                <sc-if value="{{s.hasLine}}" hint-placeholder-val="{{true}}">
-                  <div style="width: 1.5px; height: 17px; margin-top: 3px; background: {{s.lineColor}};"></div>
-                </sc-if>
+          <div style="display: flex; align-items: flex-start; gap: 46px;">
+            <sc-for list="{{hero}}" as="h" hint-placeholder-count="3">
+              <div style="display: flex; flex-direction: column; gap: 7px;">
+                <span style="font-size: 10px; font-weight: 600; letter-spacing: .13em; color: #6b7484;">{{h.k}}</span>
+                <div style="display: flex; align-items: baseline; gap: 6px;">
+                  <span style="font-family: 'IBM Plex Mono', monospace; font-size: 46px; font-weight: {{h.w}}; letter-spacing: -.03em; line-height: 1; color: {{h.c}};">{{h.v}}</span>
+                  <span style="font-family: 'IBM Plex Mono', monospace; font-size: 15px; color: #5d6675;">{{h.u}}</span>
+                </div>
+                <span style="font-size: 10px; color: #5d6675;">{{h.note}}</span>
               </div>
-              <div style="display: flex; flex-direction: column; gap: 2px; padding-top: 1px; min-width: 0;">
-                <span style="font-size: 12px; font-weight: 600; color: {{s.titleColor}};">{{s.title}}</span>
-                <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: {{s.noteColor}};">{{s.note}}</span>
+            </sc-for>
+
+            <div style="width: 1px; align-self: stretch; background: #1c212c;"></div>
+
+            <div style="display: flex; flex-direction: column; gap: 9px;">
+              <span style="font-size: 10px; font-weight: 600; letter-spacing: .13em; color: #6b7484;">ĐIỀU PHỐI</span>
+              <sc-for list="{{roles}}" as="r" hint-placeholder-count="2">
+                <div style="display: flex; align-items: center; gap: 10px; height: 32px; padding: 0 12px; border-radius: 7px; background: {{r.bg}};">
+                  <span style="width: 3px; height: 15px; border-radius: 2px; background: {{r.c}};"></span>
+                  <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #c3cad6;">{{r.id}}</span>
+                  <span style="font-size: 11px; font-weight: 700; letter-spacing: .07em; color: {{r.c}};">{{r.role}}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="margin-top: 20px;">
+            <div style="position: relative; height: 12px;">
+              <div style="position: absolute; inset: 4px 0 auto 0; height: 8px; border-radius: 4px; background: #161b24;"></div>
+              <div style="position: absolute; top: 4px; left: 0; width: 16.7%; height: 8px; border-radius: 4px 0 0 4px; background: #3d1620;"></div>
+              <div style="position: absolute; top: 4px; left: 16.7%; width: {{barRequired}}; height: 8px; background: #17303f;"></div>
+              <div style="position: absolute; top: 0; left: {{barActual}}; width: 3px; height: 16px; border-radius: 2px; background: {{marginColor}}; box-shadow: 0 0 12px {{marginColor}};"></div>
+              <div style="position: absolute; top: 1px; left: 16.7%; width: 1px; height: 14px; background: #ff5470;"></div>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-top: 7px; font-family: 'IBM Plex Mono', monospace; font-size: 9px; color: #4a525f;">
+              <span>0</span><span style="color: #ff5470;">20 · SÀN CỨNG</span><span>60</span><span>120 m</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- vehicle cards -->
+        <div style="height: 186px; flex-shrink: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px;">
+          <sc-for list="{{vehicles}}" as="v" hint-placeholder-count="2">
+            <div style="padding: 17px 20px; border-radius: 12px; background: #0f1218; border: 1px solid {{v.bd}};">
+              <div style="display: flex; align-items: center; gap: 9px; margin-bottom: 15px;">
+                <span style="width: 7px; height: 7px; border-radius: 50%; background: #2ee6a8;"></span>
+                <span style="font-size: 14px; font-weight: 700;">{{v.id}}</span>
+                <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; padding: 3px 7px; border-radius: 4px; background: {{v.stateBg}}; color: {{v.stateFg}}; letter-spacing: .05em;">{{v.state}}</span>
+                <div style="flex-grow: 1;"></div>
+                <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5d6675;">{{v.batt}}</span>
+              </div>
+              <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px;">
+                <sc-for list="{{v.stats}}" as="s" hint-placeholder-count="4">
+                  <div style="display: flex; flex-direction: column; gap: 4px;">
+                    <span style="font-size: 9px; letter-spacing: .09em; color: #5d6675;">{{s.k}}</span>
+                    <span style="font-family: 'IBM Plex Mono', monospace; font-size: 21px; font-weight: 500; letter-spacing: -.02em; color: {{s.c}};">{{s.v}}</span>
+                    <span style="font-family: 'IBM Plex Mono', monospace; font-size: 9px; color: #4a525f;">{{s.u}}</span>
+                  </div>
+                </sc-for>
               </div>
             </div>
           </sc-for>
         </div>
-        <div style="display: flex; gap: 7px; margin-top: 11px;">
-          <div style="flex-grow: 1; height: 38px; display: flex; align-items: center; justify-content: center; border-radius: 5px; background: #164e33; border: 1px solid #22c55e; font-size: 11px; font-weight: 700; letter-spacing: 0.05em; color: #bbf7d0; cursor: pointer;">BẮT ĐẦU MISSION</div>
-          <div style="width: 116px; height: 38px; display: flex; align-items: center; justify-content: center; border-radius: 5px; background: #1a2438; border: 1px solid #2c3a54; font-size: 11px; font-weight: 600; color: #64748b;">DỪNG</div>
-        </div>
-      </div>
 
-      <div style="padding: 14px 15px 15px; border-bottom: 1px solid #1e2b44;">
-        <div style="font-size: 9px; font-weight: 700; letter-spacing: 0.14em; color: #64748b; margin-bottom: 10px;">ĐIỀU KHIỂN</div>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
-          <sc-for list="{{actions}}" as="a" hint-placeholder-count="4">
-            <div style="height: 38px; display: flex; align-items: center; justify-content: center; border-radius: 5px; background: {{a.bg}}; border: 1px solid {{a.bd}}; font-size: 11px; font-weight: 700; letter-spacing: 0.05em; color: {{a.fg}}; cursor: pointer;">{{a.label}}</div>
-          </sc-for>
-        </div>
-        <div style="height: 34px; margin-top: 6px; display: flex; align-items: center; justify-content: center; border-radius: 5px; background: #141e33; border: 1px solid #22304a; font-size: 11px; font-weight: 600; color: #94a3b8; cursor: pointer;">GIỮ VỊ TRÍ HIỆN TẠI</div>
-      </div>
+        <!-- control bar -->
+        <div style="flex-grow: 1; min-height: 0; padding: 18px 20px; border-radius: 12px; background: #0f1218; border: 1px solid #1c212c; display: flex; gap: 26px;">
 
-      <div style="flex-grow: 1; padding: 13px 15px; min-height: 0; display: flex; flex-direction: column;">
-        <div style="font-size: 9px; font-weight: 700; letter-spacing: 0.14em; color: #64748b; margin-bottom: 9px;">NHẬT KÝ</div>
-        <div style="display: flex; flex-direction: column; gap: 6px;">
-          <sc-for list="{{log}}" as="l" hint-placeholder-count="4">
-            <div style="display: flex; gap: 9px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; line-height: 1.5;">
-              <span style="color: #475569; flex-shrink: 0;">{{l.t}}</span>
-              <span style="color: {{l.c}};">{{l.m}}</span>
+          <div style="width: 300px; flex-shrink: 0; display: flex; flex-direction: column; gap: 11px;">
+            <span style="font-size: 10px; font-weight: 700; letter-spacing: .16em; color: #6b7484;">CHẾ ĐỘ BAY</span>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+              <sc-for list="{{modes}}" as="m" hint-placeholder-count="4">
+                <div style="height: 46px; display: flex; align-items: center; justify-content: center; border-radius: 8px; background: {{m.bg}}; border: 1px solid {{m.bd}}; color: {{m.fg}}; font-size: 12px; font-weight: 600; cursor: pointer;">{{m.label}}</div>
+              </sc-for>
             </div>
-          </sc-for>
+          </div>
+
+          <div style="width: 1px; align-self: stretch; background: #1c212c;"></div>
+
+          <div style="width: 214px; flex-shrink: 0; display: flex; flex-direction: column; gap: 11px;">
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+              <span style="font-size: 10px; font-weight: 700; letter-spacing: .16em; color: #6b7484;">BÀN PHÍM</span>
+              <span style="font-family: 'IBM Plex Mono', monospace; font-size: 9px; padding: 3px 7px; border-radius: 4px; background: #161b24; color: #5d6675;">TẮT</span>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px;">
+              <sc-for list="{{keys}}" as="k" hint-placeholder-count="9">
+                <div style="height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 6px; background: #141922; border: 1px solid #212734; font-family: 'IBM Plex Mono', monospace; font-size: 12px; font-weight: 500; color: #8b95a5;">{{k}}</div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="width: 1px; align-self: stretch; background: #1c212c;"></div>
+
+          <div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 11px;">
+            <span style="font-size: 10px; font-weight: 700; letter-spacing: .16em; color: #6b7484;">ĐIỀU KHIỂN</span>
+            <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px;">
+              <sc-for list="{{actions}}" as="a" hint-placeholder-count="4">
+                <div style="height: 46px; display: flex; align-items: center; justify-content: center; border-radius: 8px; background: {{a.bg}}; border: 1px solid {{a.bd}}; color: {{a.fg}}; font-size: 12px; font-weight: 700; letter-spacing: .05em; cursor: pointer;">{{a.label}}</div>
+              </sc-for>
+            </div>
+            <div style="height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 8px; background: #141922; border: 1px solid #212734; color: #8b95a5; font-size: 12px; font-weight: 600; cursor: pointer;">GIỮ VỊ TRÍ HIỆN TẠI</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- right stack: minimap + mission -->
+      <div style="width: 324px; flex-shrink: 0; display: flex; flex-direction: column; gap: 20px;">
+
+        <!-- MINIMAP: ô vuông 324 -->
+        <div style="width: 324px; height: 324px; flex-shrink: 0; position: relative; border-radius: 12px; overflow: hidden; background: #0d1119; border: 1px solid #1c212c;">
+          <svg style="position: absolute; inset: 0;" width="324" height="324">
+            <defs><pattern id="mg" width="36" height="36" patternUnits="userSpaceOnUse"><path d="M36 0H0v36" fill="none" stroke="#151b25" stroke-width="1"/></pattern></defs>
+            <rect width="324" height="324" fill="url(#mg)"/>
+            <path d="M40 250 L130 170 L215 190 L280 96" fill="none" stroke="{{accent}}" stroke-width="1.8" stroke-dasharray="1 6" stroke-linecap="round" opacity=".7"/>
+            <path d="M60 70 L150 130 L200 240 L280 250" fill="none" stroke="#ffb454" stroke-width="1.8" stroke-dasharray="1 6" stroke-linecap="round" opacity=".55"/>
+            <circle cx="130" cy="170" r="17" fill="none" stroke="{{accent}}" stroke-width="1" opacity=".25"/>
+            <circle cx="130" cy="170" r="6" fill="{{accent}}"/>
+            <circle cx="150" cy="130" r="17" fill="none" stroke="#ffb454" stroke-width="1" opacity=".25"/>
+            <circle cx="150" cy="130" r="6" fill="#ffb454"/>
+            <line x1="130" y1="170" x2="150" y2="130" stroke="{{marginColor}}" stroke-width="1.3" stroke-dasharray="3 3"/>
+          </svg>
+
+          <div style="position: absolute; top: 11px; left: 11px; display: flex; align-items: center; gap: 7px; height: 26px; padding: 0 10px; border-radius: 13px; background: rgba(8,9,13,.86); border: 1px solid #212734;">
+            <span style="width: 6px; height: 6px; border-radius: 50%; background: #4a525f;"></span>
+            <span style="font-size: 10px; font-weight: 600; color: #8b95a5;">Click không làm gì</span>
+          </div>
+
+          <div style="position: absolute; bottom: 11px; left: 11px; font-family: 'IBM Plex Mono', monospace; font-size: 9px; color: #4a525f;">© OpenStreetMap</div>
+
+          <div style="position: absolute; bottom: 11px; right: 11px; display: flex; align-items: center; gap: 7px; height: 28px; padding: 0 11px; border-radius: 7px; background: rgba(8,9,13,.9); border: 1px solid {{accent}}; cursor: pointer;">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="{{accent}}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+            <span style="font-size: 10px; font-weight: 600; color: {{accent}};">MỞ RỘNG</span>
+          </div>
+        </div>
+
+        <!-- mission -->
+        <div style="flex-grow: 1; min-height: 0; padding: 18px 20px; border-radius: 12px; background: #0f1218; border: 1px solid #1c212c; display: flex; flex-direction: column;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px;">
+            <span style="font-size: 10px; font-weight: 700; letter-spacing: .16em; color: #6b7484;">NHIỆM VỤ</span>
+            <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #5d6675;">UAV-01</span>
+          </div>
+
+          <div style="display: flex; flex-direction: column;">
+            <sc-for list="{{steps}}" as="s" hint-placeholder-count="5">
+              <div style="display: flex; align-items: flex-start; gap: 13px; padding: 7px 0;">
+                <div style="display: flex; flex-direction: column; align-items: center; flex-shrink: 0;">
+                  <div style="width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: {{s.bg}}; border: 1.5px solid {{s.bd}}; font-family: 'IBM Plex Mono', monospace; font-size: 11px; font-weight: 600; color: {{s.fg}};">{{s.n}}</div>
+                  <sc-if value="{{s.line}}" hint-placeholder-val="{{true}}"><div style="width: 1.5px; height: 16px; margin-top: 3px; background: {{s.lc}};"></div></sc-if>
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 2px; padding-top: 2px; min-width: 0;">
+                  <span style="font-size: 13px; font-weight: 600; color: {{s.tc}};">{{s.title}}</span>
+                  <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: {{s.nc}};">{{s.note}}</span>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="flex-grow: 1;"></div>
+          <div style="display: flex; gap: 8px;">
+            <div style="flex-grow: 1; height: 46px; display: flex; align-items: center; justify-content: center; border-radius: 8px; background: #0e3a2c; border: 1px solid #2ee6a8; font-size: 12px; font-weight: 700; letter-spacing: .05em; color: #7df5cc; cursor: pointer;">BẮT ĐẦU</div>
+            <div style="width: 96px; height: 46px; display: flex; align-items: center; justify-content: center; border-radius: 8px; background: #141922; border: 1px solid #212734; font-size: 12px; font-weight: 600; color: #5d6675;">DỪNG</div>
+          </div>
         </div>
       </div>
     </div>
@@ -282,91 +243,88 @@
 </x-dc>
 
 <script data-dc-script data-props='{
-  "accent": {"editor": "color", "default": "#38bdf8", "options": ["#38bdf8", "#22d3ee", "#a78bfa", "#f472b6"]},
-  "cbfMargin": {"editor": "range", "default": 12.1, "min": -3, "max": 30, "step": 0.1, "unit": "m", "section": "An toàn"}
+  "accent": {"editor": "color", "default": "#4cc9f0", "options": ["#4cc9f0", "#2ee6a8", "#a78bfa", "#ffb454"]},
+  "cbfMargin": {"editor": "range", "default": 13.5, "min": -3, "max": 30, "step": 0.1, "unit": "m", "section": "An toàn"}
 }'>
 class Component extends DCLogic {
   renderVals() {
-    const accent = this.props.accent ?? '#38bdf8';
-    const margin = this.props.cbfMargin ?? 12.1;
-    const required = 36.2;
+    const accent = this.props.accent ?? '#4cc9f0';
+    const margin = this.props.cbfMargin ?? 13.5;
+    const required = 55.4;
     const separation = required + margin;
+    const marginColor = margin < 0 ? '#ff5470' : margin < 4 ? '#ffb454' : '#2ee6a8';
+    const pct = v => `${Math.max(0, Math.min(100, (v / 120) * 100))}%`;
 
-    const marginColor = margin < 0 ? '#ef4444' : margin < 4 ? '#f59e0b' : '#22c55e';
-    const pct = (v) => `${Math.max(0, Math.min(100, (v / 120) * 100))}%`;
-
-    const rail = [
-      { label: 'BAY',  icon: 'fly',   isFly: true,  isPlan: false, isTrack: false, isSafe: false,
-        fg: '#e2e8f0', bg: '#16233b', edge: accent },
-      { label: 'VẼ',   icon: 'plan',  isFly: false, isPlan: true,  isTrack: false, isSafe: false,
-        fg: '#64748b', bg: 'transparent', edge: 'transparent' },
-      { label: 'THEO', icon: 'track', isFly: false, isPlan: false, isTrack: true,  isSafe: false,
-        fg: '#64748b', bg: 'transparent', edge: 'transparent' },
-      { label: 'AN TOÀN', icon: 'safe', isFly: false, isPlan: false, isTrack: false, isSafe: true,
-        fg: '#64748b', bg: 'transparent', edge: 'transparent' },
+    const chips = [
+      { id: 'UAV-01', mode: 'OFFBOARD', dot: '#2ee6a8', bg: '#111722', bd: accent, fg: '#edf0f4' },
+      { id: 'UAV-02', mode: 'OFFBOARD', dot: '#2ee6a8', bg: '#0f1218', bd: '#1c212c', fg: '#8b95a5' },
     ];
 
-    const telemetry = [
-      { k: 'CAO ĐỘ',     v: '12.4 m',   c: '#e2e8f0' },
-      { k: 'TỐC ĐỘ',     v: '14.8 m/s', c: '#e2e8f0' },
-      { k: 'PIN',        v: '96 %',     c: '#22c55e' },
-      { k: 'GPS',        v: '10 sat',   c: '#e2e8f0' },
-      { k: 'SAI SỐ BÁM', v: '0.27 m',   c: '#e2e8f0' },
-      { k: 'TRẠNG THÁI', v: 'ARMED',    c: '#22c55e' },
+    const rail = [
+      { label: 'BAY',     a: true,  b: false, c: false, d: false, fg: '#edf0f4', bg: '#111722', edge: accent },
+      { label: 'VẼ',      a: false, b: true,  c: false, d: false, fg: '#5d6675', bg: 'transparent', edge: 'transparent' },
+      { label: 'THEO',    a: false, b: false, c: true,  d: false, fg: '#5d6675', bg: 'transparent', edge: 'transparent' },
+      { label: 'AN TOÀN', a: false, b: false, c: false, d: true,  fg: '#5d6675', bg: 'transparent', edge: 'transparent' },
+    ];
+
+    const hero = [
+      { k: 'KHOẢNG CÁCH', v: separation.toFixed(1), u: 'm', c: '#edf0f4', w: 500, note: 'sàn cứng 20 m' },
+      { k: 'BIÊN CBF', v: (margin >= 0 ? '+' : '') + margin.toFixed(1), u: 'm', c: marginColor, w: 700, note: 'nhỏ nhất trong 120 s' },
+      { k: 'RÀO CHẮN ĐÒI', v: required.toFixed(1), u: 'm', c: '#8b95a5', w: 400, note: 'ở tốc độ khép hiện tại' },
+    ];
+
+    const roles = [
+      { id: 'UAV-01', role: 'ƯU TIÊN', c: accent,    bg: '#111722' },
+      { id: 'UAV-02', role: 'NHƯỜNG',  c: '#ffb454', bg: '#1a1610' },
+    ];
+
+    const stats = (alt, spd, err, sep) => [
+      { k: 'CAO ĐỘ', v: alt, u: 'm',   c: '#edf0f4' },
+      { k: 'TỐC ĐỘ', v: spd, u: 'm/s', c: '#edf0f4' },
+      { k: 'SAI SỐ BÁM', v: err, u: 'm', c: '#edf0f4' },
+      { k: 'CBF', v: sep, u: '%', c: '#8b95a5' },
+    ];
+
+    const vehicles = [
+      { id: 'UAV-01', bd: accent, batt: '96%', state: 'ARMED', stateBg: '#0e3a2c', stateFg: '#7df5cc',
+        stats: stats('12.4', '19.8', '0.31', '0.0') },
+      { id: 'UAV-02', bd: '#1c212c', batt: '94%', state: 'ARMED', stateBg: '#0e3a2c', stateFg: '#7df5cc',
+        stats: stats('11.9', '20.1', '0.19', '5.6') },
     ];
 
     const modes = [
-      { label: 'POSITION',   bg: '#16233b', bd: accent,     fg: '#e2e8f0' },
-      { label: 'TAKE OFF',   bg: '#141e33', bd: '#22304a',  fg: '#94a3b8' },
-      { label: 'RETURN HOME',bg: '#141e33', bd: '#22304a',  fg: '#94a3b8' },
-      { label: 'MAP POINT',  bg: '#141e33', bd: '#22304a',  fg: '#64748b' },
+      { label: 'POSITION',    bg: '#111722', bd: accent,    fg: '#edf0f4' },
+      { label: 'TAKE OFF',    bg: '#141922', bd: '#212734', fg: '#8b95a5' },
+      { label: 'RETURN HOME', bg: '#141922', bd: '#212734', fg: '#8b95a5' },
+      { label: 'MAP POINT',   bg: '#141922', bd: '#212734', fg: '#5d6675' },
     ];
 
     const keys = ['Q', 'W', 'E', 'A', 'S', 'D', 'R ↑', '␣', 'F ↓'];
 
-    const gimbal = [
-      { axis: 'ROLL',  value: '0.0°' },
-      { axis: 'PITCH', value: '−15.0°' },
-      { axis: 'YAW',   value: '0.0°' },
+    const actions = [
+      { label: 'ARM',    bg: '#0e3a2c', bd: '#2ee6a8', fg: '#7df5cc' },
+      { label: 'HOLD',   bg: '#141922', bd: '#212734', fg: '#8b95a5' },
+      { label: 'LAND',   bg: '#3a2410', bd: '#ffb454', fg: '#ffd9a0' },
+      { label: 'DISARM', bg: '#3a1520', bd: '#ff5470', fg: '#ffb3c0' },
     ];
 
-    const done = { dotBg: '#164e33', dotBd: '#22c55e', dotFg: '#bbf7d0',
-                   titleColor: '#e2e8f0', noteColor: '#4ade80', lineColor: '#22c55e' };
-    const next = { dotBg: '#16233b', dotBd: accent, dotFg: accent,
-                   titleColor: '#e2e8f0', noteColor: accent, lineColor: '#22304a' };
-    const idle = { dotBg: '#141e33', dotBd: '#2c3a54', dotFg: '#64748b',
-                   titleColor: '#64748b', noteColor: '#475569', lineColor: '#22304a' };
+    const done = { bg: '#0e3a2c', bd: '#2ee6a8', fg: '#7df5cc', tc: '#edf0f4', nc: '#2ee6a8', lc: '#2ee6a8' };
+    const next = { bg: '#111722', bd: accent, fg: accent, tc: '#edf0f4', nc: accent, lc: '#212734' };
+    const idle = { bg: '#141922', bd: '#212734', fg: '#5d6675', tc: '#5d6675', nc: '#4a525f', lc: '#212734' };
 
     const steps = [
-      { n: '1', title: 'Vẽ đường bay',  note: '4 waypoint · 402 m', hasLine: true,  ...done },
-      { n: '2', title: 'Gửi nhiệm vụ',  note: 'đã nạp · 80.5 s/vòng', hasLine: true, ...done },
-      { n: '3', title: 'Arm',           note: 'sẵn sàng',            hasLine: true,  ...next },
-      { n: '4', title: 'Cất cánh',      note: 'chờ arm',             hasLine: true,  ...idle },
-      { n: '5', title: 'Bắt đầu bay',   note: 'chờ cất cánh',        hasLine: false, ...idle },
-    ];
-
-    const actions = [
-      { label: 'ARM',    bg: '#164e33', bd: '#22c55e', fg: '#bbf7d0' },
-      { label: 'HOLD',   bg: '#141e33', bd: '#22304a', fg: '#94a3b8' },
-      { label: 'LAND',   bg: '#3d2410', bd: '#c2410c', fg: '#fed7aa' },
-      { label: 'DISARM', bg: '#3d1414', bd: '#b91c1c', fg: '#fecaca' },
-    ];
-
-    const log = [
-      { t: '14:32:07', m: 'UAV-01 đã nạp 4 waypoint', c: '#94a3b8' },
-      { t: '14:31:55', m: 'UAV-02 nhận vai NHƯỜNG',   c: '#f59e0b' },
-      { t: '14:31:54', m: 'Điều phối vào cuộc · 91.2 m', c: '#94a3b8' },
-      { t: '14:31:02', m: 'Cả hai UAV online',        c: '#4ade80' },
+      { n: '✓', title: 'Vẽ đường bay', note: '4 waypoint · 960 m', line: true, ...done },
+      { n: '✓', title: 'Gửi nhiệm vụ', note: 'đã nạp · 64.9 s/vòng', line: true, ...done },
+      { n: '✓', title: 'Arm',          note: 'đã arm',             line: true, ...done },
+      { n: '4', title: 'Cất cánh',     note: 'sẵn sàng',           line: true, ...next },
+      { n: '5', title: 'Bắt đầu bay',  note: 'chờ cất cánh',       line: false, ...idle },
     ];
 
     return {
       accent, marginColor,
-      separation: separation.toFixed(1),
-      required: required.toFixed(1),
-      marginText: (margin >= 0 ? '+' : '') + margin.toFixed(1),
       barRequired: `${Math.max(0, (required / 120) * 100 - 16.7)}%`,
       barActual: pct(separation),
-      rail, telemetry, modes, keys, gimbal, steps, actions, log,
+      chips, rail, hero, roles, vehicles, modes, keys, actions, steps,
     };
   }
 }

@@ -9,71 +9,71 @@
 <helmet>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
   <style>
-    body { margin: 0; background: #0b1120; }
-    a { color: #38bdf8; } a:hover { color: #7dd3fc; }
+    body { margin: 0; background: #08090d; }
+    a { color: #4cc9f0; } a:hover { color: #7dd3fc; }
     * { box-sizing: border-box; }
   </style>
 </helmet>
 
-<div style="width: 1000px; height: 900px; background: #0b1120; font-family: 'Be Vietnam Pro', system-ui, sans-serif; color: #e2e8f0; padding: 30px 32px; display: flex; flex-direction: column; gap: 26px;">
+<div style="width: 1000px; height: 900px; background: #08090d; font-family: 'Be Vietnam Pro', system-ui, sans-serif; color: #edf0f4; padding: 30px 32px; display: flex; flex-direction: column; gap: 26px;">
 
   <div style="display: flex; flex-direction: column; gap: 5px;">
     <span style="font-size: 17px; font-weight: 700;">Bảng thành phần</span>
-    <span style="font-size: 11px; color: #64748b;">Palette slate giữ nguyên từ bản hiện tại. Thay đổi: Arial → Be Vietnam Pro, bỏ viền panel, số liệu dùng font đơn cách.</span>
+    <span style="font-size: 11px; color: #5d6675;">Nền trung tính sâu thay cho slate xanh, accent lạnh hơn, thang chữ và nút to hơn một bậc. Bản đồ hạ xuống thành minimap.</span>
   </div>
 
   <div style="display: flex; flex-direction: column; gap: 11px;">
-    <span style="font-size: 9px; font-weight: 700; letter-spacing: 0.14em; color: #64748b;">NỀN &amp; ĐƯỜNG VIỀN</span>
+    <span style="font-size: 9px; font-weight: 700; letter-spacing: 0.14em; color: #5d6675;">NỀN &amp; ĐƯỜNG VIỀN</span>
     <div style="display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 9px;">
       <sc-for list="{{surfaces}}" as="s" hint-placeholder-count="6">
         <div style="display: flex; flex-direction: column; gap: 6px;">
-          <div style="height: 50px; border-radius: 6px; background: {{s.hex}}; border: 1px solid #22304a;"></div>
-          <span style="font-size: 10px; color: #94a3b8;">{{s.name}}</span>
-          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 9px; color: #475569;">{{s.hex}}</span>
+          <div style="height: 50px; border-radius: 6px; background: {{s.hex}}; border: 1px solid #212734;"></div>
+          <span style="font-size: 10px; color: #8b95a5;">{{s.name}}</span>
+          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 9px; color: #4a525f;">{{s.hex}}</span>
         </div>
       </sc-for>
     </div>
   </div>
 
   <div style="display: flex; flex-direction: column; gap: 11px;">
-    <span style="font-size: 9px; font-weight: 700; letter-spacing: 0.14em; color: #64748b;">TRẠNG THÁI — MÀU LÀ THÔNG TIN, KHÔNG TRANG TRÍ</span>
+    <span style="font-size: 9px; font-weight: 700; letter-spacing: 0.14em; color: #5d6675;">TRẠNG THÁI — MÀU LÀ THÔNG TIN, KHÔNG TRANG TRÍ</span>
     <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 9px;">
       <sc-for list="{{states}}" as="s" hint-placeholder-count="4">
-        <div style="padding: 13px 14px; border-radius: 6px; background: #0e1728; border-left: 3px solid {{s.hex}};">
+        <div style="padding: 13px 14px; border-radius: 6px; background: #0f1218; border-left: 3px solid {{s.hex}};">
           <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 7px;">
             <span style="width: 8px; height: 8px; border-radius: 50%; background: {{s.hex}};"></span>
-            <span style="font-size: 11px; font-weight: 600; color: #e2e8f0;">{{s.name}}</span>
+            <span style="font-size: 11px; font-weight: 600; color: #edf0f4;">{{s.name}}</span>
           </div>
-          <span style="font-size: 10px; color: #64748b;">{{s.use}}</span>
+          <span style="font-size: 10px; color: #5d6675;">{{s.use}}</span>
         </div>
       </sc-for>
     </div>
   </div>
 
   <div style="display: flex; flex-direction: column; gap: 11px;">
-    <span style="font-size: 9px; font-weight: 700; letter-spacing: 0.14em; color: #64748b;">KIỂU CHỮ</span>
-    <div style="display: flex; flex-direction: column; gap: 10px; padding: 16px 18px; border-radius: 7px; background: #0e1728;">
+    <span style="font-size: 9px; font-weight: 700; letter-spacing: 0.14em; color: #5d6675;">KIỂU CHỮ</span>
+    <div style="display: flex; flex-direction: column; gap: 10px; padding: 16px 18px; border-radius: 7px; background: #0f1218;">
       <div style="display: flex; align-items: baseline; gap: 16px;">
-        <span style="width: 108px; font-family: 'IBM Plex Mono', monospace; font-size: 9px; color: #475569;">30 / 600 / mono</span>
+        <span style="width: 108px; font-family: 'IBM Plex Mono', monospace; font-size: 9px; color: #4a525f;">30 / 600 / mono</span>
         <span style="font-family: 'IBM Plex Mono', monospace; font-size: 30px; font-weight: 600; letter-spacing: -0.02em;">+13.5</span>
       </div>
       <div style="display: flex; align-items: baseline; gap: 16px;">
-        <span style="width: 108px; font-family: 'IBM Plex Mono', monospace; font-size: 9px; color: #475569;">14 / 700</span>
+        <span style="width: 108px; font-family: 'IBM Plex Mono', monospace; font-size: 9px; color: #4a525f;">14 / 700</span>
         <span style="font-size: 14px; font-weight: 700;">Điều khiển đàn bay</span>
       </div>
       <div style="display: flex; align-items: baseline; gap: 16px;">
-        <span style="width: 108px; font-family: 'IBM Plex Mono', monospace; font-size: 9px; color: #475569;">12 / 600</span>
+        <span style="width: 108px; font-family: 'IBM Plex Mono', monospace; font-size: 9px; color: #4a525f;">12 / 600</span>
         <span style="font-size: 12px; font-weight: 600;">Nhãn nút và tiêu đề nhỏ</span>
       </div>
       <div style="display: flex; align-items: baseline; gap: 16px;">
-        <span style="width: 108px; font-family: 'IBM Plex Mono', monospace; font-size: 9px; color: #475569;">9 / 700 / 0.14em</span>
-        <span style="font-size: 9px; font-weight: 700; letter-spacing: 0.14em; color: #64748b;">TIÊU ĐỀ MỤC</span>
+        <span style="width: 108px; font-family: 'IBM Plex Mono', monospace; font-size: 9px; color: #4a525f;">9 / 700 / 0.14em</span>
+        <span style="font-size: 9px; font-weight: 700; letter-spacing: 0.14em; color: #5d6675;">TIÊU ĐỀ MỤC</span>
       </div>
     </div>
   </div>
 
   <div style="display: flex; flex-direction: column; gap: 11px;">
-    <span style="font-size: 9px; font-weight: 700; letter-spacing: 0.14em; color: #64748b;">NÚT</span>
+    <span style="font-size: 9px; font-weight: 700; letter-spacing: 0.14em; color: #5d6675;">NÚT</span>
     <div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px;">
       <sc-for list="{{buttons}}" as="b" hint-placeholder-count="5">
         <div style="height: 38px; display: flex; align-items: center; justify-content: center; border-radius: 5px; background: {{b.bg}}; border: 1px solid {{b.bd}}; font-size: 11px; font-weight: 700; letter-spacing: 0.05em; color: {{b.fg}};">{{b.label}}</div>
@@ -82,7 +82,7 @@
   </div>
 
   <div style="display: flex; flex-direction: column; gap: 11px;">
-    <span style="font-size: 9px; font-weight: 700; letter-spacing: 0.14em; color: #64748b;">HUY HIỆU CLICK BẢN ĐỒ — BA TRẠNG THÁI</span>
+    <span style="font-size: 9px; font-weight: 700; letter-spacing: 0.14em; color: #5d6675;">HUY HIỆU CLICK BẢN ĐỒ — BA TRẠNG THÁI</span>
     <div style="display: flex; flex-direction: column; gap: 8px;">
       <sc-for list="{{badges}}" as="b" hint-placeholder-count="3">
         <div style="display: flex; align-items: center; gap: 9px; align-self: flex-start; height: 32px; padding: 0 14px; border-radius: 16px; background: rgba(14,22,38,.94); border: 1px solid {{b.bd}};">
@@ -94,7 +94,7 @@
   </div>
 
   <div style="display: flex; flex-direction: column; gap: 11px;">
-    <span style="font-size: 9px; font-weight: 700; letter-spacing: 0.14em; color: #64748b;">BƯỚC NHIỆM VỤ — BỐN TRẠNG THÁI</span>
+    <span style="font-size: 9px; font-weight: 700; letter-spacing: 0.14em; color: #5d6675;">BƯỚC NHIỆM VỤ — BỐN TRẠNG THÁI</span>
     <div style="display: flex; gap: 22px;">
       <sc-for list="{{stepStates}}" as="s" hint-placeholder-count="4">
         <div style="display: flex; align-items: center; gap: 10px;">
@@ -108,47 +108,47 @@
 </x-dc>
 
 <script data-dc-script data-props='{
-  "accent": {"editor": "color", "default": "#38bdf8", "options": ["#38bdf8", "#22d3ee", "#a78bfa", "#f472b6"]}
+  "accent": {"editor": "color", "default": "#4cc9f0", "options": ["#4cc9f0", "#22d3ee", "#a78bfa", "#f472b6"]}
 }'>
 class Component extends DCLogic {
   renderVals() {
-    const accent = this.props.accent ?? '#38bdf8';
+    const accent = this.props.accent ?? '#4cc9f0';
 
     const surfaces = [
-      { name: 'Nền ứng dụng', hex: '#0b1120' },
-      { name: 'Thanh / rail', hex: '#0e1626' },
-      { name: 'Mặt nổi',      hex: '#0e1728' },
-      { name: 'Mặt nổi 2',    hex: '#111c30' },
-      { name: 'Ô nhập',       hex: '#0d1524' },
-      { name: 'Viền mảnh',    hex: '#1e2b44' },
+      { name: 'Nền ứng dụng', hex: '#08090d' },
+      { name: 'Thanh / rail', hex: '#0c0e13' },
+      { name: 'Mặt nổi',      hex: '#0f1218' },
+      { name: 'Mặt nổi 2',    hex: '#141922' },
+      { name: 'Ô nhập',       hex: '#0d1119' },
+      { name: 'Viền mảnh',    hex: '#1c212c' },
     ];
 
     const states = [
-      { name: 'An toàn',  hex: '#22c55e', use: 'Biên ≥ 4 m · online · đã xong' },
-      { name: 'Cảnh báo', hex: '#f59e0b', use: 'Biên 0–4 m · vai NHƯỜNG' },
-      { name: 'Nguy hiểm',hex: '#ef4444', use: 'Biên âm · sàn cứng 20 m' },
+      { name: 'An toàn',  hex: '#2ee6a8', use: 'Biên ≥ 4 m · online · đã xong' },
+      { name: 'Cảnh báo', hex: '#ffb454', use: 'Biên 0–4 m · vai NHƯỜNG' },
+      { name: 'Nguy hiểm',hex: '#ff5470', use: 'Biên âm · sàn cứng 20 m' },
       { name: 'Nhấn',     hex: accent,    use: 'Lựa chọn hiện tại · UAV-01' },
     ];
 
     const buttons = [
-      { label: 'ARM',      bg: '#164e33', bd: '#22c55e', fg: '#bbf7d0' },
-      { label: 'HOLD',     bg: '#141e33', bd: '#22304a', fg: '#94a3b8' },
+      { label: 'ARM',      bg: '#0e3a2c', bd: '#2ee6a8', fg: '#7df5cc' },
+      { label: 'HOLD',     bg: '#141e33', bd: '#212734', fg: '#8b95a5' },
       { label: 'LAND',     bg: '#3d2410', bd: '#c2410c', fg: '#fed7aa' },
-      { label: 'DISARM',   bg: '#3d1414', bd: '#b91c1c', fg: '#fecaca' },
-      { label: 'VÔ HIỆU',  bg: '#131b2c', bd: '#1e2b44', fg: '#3f4d66' },
+      { label: 'DISARM',   bg: '#3a1520', bd: '#a8203a', fg: '#ffb3c0' },
+      { label: 'VÔ HIỆU',  bg: '#131b2c', bd: '#1c212c', fg: '#3f4d66' },
     ];
 
     const badges = [
-      { label: 'Click bản đồ = thêm waypoint', bd: accent,    fg: '#e2e8f0' },
-      { label: 'Click bản đồ = chọn điểm bay tới', bd: '#f59e0b', fg: '#fde68a' },
-      { label: 'Click bản đồ không làm gì',    bd: '#2c3a54', fg: '#64748b' },
+      { label: 'Click bản đồ = thêm waypoint', bd: accent,    fg: '#edf0f4' },
+      { label: 'Click bản đồ = chọn điểm bay tới', bd: '#ffb454', fg: '#ffd9a0' },
+      { label: 'Click bản đồ không làm gì',    bd: '#212734', fg: '#5d6675' },
     ];
 
     const stepStates = [
-      { n: '✓', label: 'Đã xong',   bg: '#164e33', bd: '#22c55e', fg: '#bbf7d0', tf: '#e2e8f0' },
-      { n: '3', label: 'Kế tiếp',   bg: '#16233b', bd: accent,    fg: accent,    tf: '#e2e8f0' },
-      { n: '4', label: 'Chưa tới',  bg: '#141e33', bd: '#2c3a54', fg: '#64748b', tf: '#64748b' },
-      { n: '!', label: 'Bị chặn',   bg: '#3d1414', bd: '#b91c1c', fg: '#fecaca', tf: '#fca5a5' },
+      { n: '✓', label: 'Đã xong',   bg: '#0e3a2c', bd: '#2ee6a8', fg: '#7df5cc', tf: '#edf0f4' },
+      { n: '3', label: 'Kế tiếp',   bg: '#111722', bd: accent,    fg: accent,    tf: '#edf0f4' },
+      { n: '4', label: 'Chưa tới',  bg: '#141e33', bd: '#212734', fg: '#5d6675', tf: '#5d6675' },
+      { n: '!', label: 'Bị chặn',   bg: '#3a1520', bd: '#a8203a', fg: '#ffb3c0', tf: '#fca5a5' },
     ];
 
     return { accent, surfaces, states, buttons, badges, stepStates };

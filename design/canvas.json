@@ -1,31 +1,31 @@
 {
   "artboards": [
-    { "file": "Main.dc.html",   "x": 0,    "y": 0,    "w": 1440, "h": 900, "title": "BAY · workspace chính" },
-    { "file": "Plan.dc.html",   "x": 1540, "y": 0,    "w": 1440, "h": 900, "title": "VẼ · dựng nhiệm vụ" },
-    { "file": "Safety.dc.html", "x": 0,    "y": 1000, "w": 1440, "h": 900, "title": "AN TOÀN · chi tiết" },
+    { "file": "Main.dc.html",   "x": 0,    "y": 0,    "w": 1440, "h": 900, "title": "BAY · bản đồ thành minimap góc" },
+    { "file": "Plan.dc.html",   "x": 1540, "y": 0,    "w": 1440, "h": 900, "title": "VẼ · bản đồ tự mở rộng" },
+    { "file": "Safety.dc.html", "x": 0,    "y": 1000, "w": 1440, "h": 900, "title": "AN TOÀN · phân tích" },
     { "file": "Tokens.dc.html", "x": 1540, "y": 1000, "w": 1000, "h": 900, "title": "Bảng thành phần" }
   ],
   "annotations": [
     {
-      "id": "safety-strip",
+      "id": "map-follows-task",
       "x": 0,
-      "y": -190,
-      "w": 460,
-      "text": "Dải an toàn luôn hiện là thay đổi lớn nhất.\n\nKhoảng cách thật, biên CBF, khoảng cách rào chắn ĐANG đòi, và vai điều phối — bốn con số hiện không hiển thị ở đâu cả, dù chúng là thứ giữ hai chiếc không đâm nhau.\n\nKéo thanh \"cbfMargin\" phía trên khung BAY để xem dải đổi màu xanh → hổ phách → đỏ."
+      "y": -230,
+      "w": 500,
+      "text": "Ý tưởng chính: KÍCH THƯỚC BẢN ĐỒ ĐI THEO CÔNG VIỆC.\n\nKhi bay, bản đồ là ô vuông 324 px ở góc phải trên — hai chấm trên tile nói ít hơn con số \"cách nhau 68.9 m\". Chỗ dôi ra trả về cho lớp an toàn và thẻ từng chiếc.\n\nKhi vẽ (khung bên phải), bản đồ tự mở rộng chiếm gần hết màn hình, vì vẽ mới thật sự cần bản đồ to. Nút MỞ RỘNG / THU NHỎ ở góc minimap cho phép ép thủ công.\n\nĐây là thứ giải quyết mâu thuẫn \"muốn nhỏ nhưng vẫn quan sát tốt\"."
     },
     {
-      "id": "stepper",
+      "id": "bigger-controls",
       "x": 1540,
-      "y": -190,
-      "w": 460,
-      "text": "Bước nhiệm vụ thay cho câu hướng dẫn.\n\nBản hiện tại phải viết thứ tự bằng chữ: \"vẽ → GỬI → ARM/TAKEOFF → BẮT ĐẦU MISSION\". Server đã gửi sẵn start_ready và start_block_reason — giao diện chỉ đang không hiển thị chúng thành chuỗi.\n\nCảnh báo dưới khung vẽ là chỗ đã làm bạn mất thời gian: click chéo tạo đường tự cắt."
+      "y": -230,
+      "w": 500,
+      "text": "Mọi thứ to lên một bậc:\n\n· Số chính 28 → 46 px\n· Nút 36 → 46 px cao\n· Phím bàn phím 30 → 40 px\n· Thẻ mỗi chiếc: 4 số liệu ở 21 px thay vì danh sách 14 px\n\nMàu cũng đổi: nền trung tính sâu (#08090d) thay slate xanh, accent lạnh #4cc9f0, an toàn #2ee6a8. Bớt cảm giác \"bootstrap tối\", gần cảm giác thiết bị hơn."
     },
     {
-      "id": "not-decided",
+      "id": "open-questions",
       "x": 0,
       "y": 1960,
-      "w": 460,
-      "text": "Chưa quyết, cần bạn chọn:\n\n· Font Be Vietnam Pro (thiết kế riêng cho tiếng Việt) thay Arial — hay bạn muốn hướng khác?\n· Màu nhấn hiện là xanh trời #38bdf8, lấy từ nút tracking sẵn có. Có ba lựa chọn khác trong chip phía trên mỗi khung.\n· Bảng thành phần dùng số liệu thật từ chuyến bay nấc 20 hôm nay (biên +13.5 m, rào chắn đòi 36.2 m)."
+      "w": 500,
+      "text": "Chưa quyết, cần bạn chọn:\n\n· Minimap 324 px vuông — đủ quan sát chưa, hay muốn 380?\n· Bốn màu accent trong chip phía trên mỗi khung: xanh lam, xanh lục, tím, cam.\n· Thẻ hai chiếc đang nằm cạnh nhau. Nếu bạn thường chỉ nhìn một chiếc, có thể gộp thành một thẻ lớn kèm tab.\n· Tên sản phẩm đang để \"Sparrow · Swarm Console\" — đổi được."
     }
   ],
   "launch": { "view": "canvas" }
