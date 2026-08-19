@@ -61,7 +61,8 @@ try:
 except ValueError:
     PEER_STATE_MAX_AGE_S = 0.1
 
-# Own state gets its own budget because it is a different measurement.
+# Locally-clocked quantities get their own budget, because they are a
+# different measurement from a peer sample.
 # PEER_STATE_MAX_AGE_S bounds a *peer* sample: network plus processing, an age
 # that varies continuously. Own state is read from the local MAVLink stream at
 # PEER_STATE_RATE_HZ, so its age is quantised to whole sample periods -- 0, one
@@ -81,7 +82,16 @@ except ValueError:
 # max(own_age, peer_age) by the reserve speed inside required_margin, so a
 # state that is one period older simply demands proportionally more separation.
 # The latch is the cruder second guard, not the reasoning.
-OWN_STATE_MAX_AGE_S = PEER_STATE_MAX_AGE_S + PEER_STATE_PERIOD_S
+#
+# The companion-safety loop's own stall detector needs the same budget for the
+# same reason, and had the same off-by-one-period: it compares consecutive
+# evaluations of a 20 Hz loop against `maximum_command_age_s`. Measured on the
+# opposite_orbit mission, 4413 iterations: median 50.0 ms, p99 51.0 ms, and
+# ONE at 145 ms, which aborted the flight 8.7 s in. One slow iteration is not a
+# stalled loop. 150 ms is also far inside what the gate already assumes --
+# command_latency_s is 0.86 s -- so a loop that genuinely stops is still caught
+# long before the barrier is surprised.
+LOCAL_SAMPLE_MAX_AGE_S = PEER_STATE_MAX_AGE_S + PEER_STATE_PERIOD_S
 
 # Liveness is a different question from freshness and needs its own budget.
 # PEER_STATE_MAX_AGE_S bounds how old a *position sample* may be. The validated
@@ -422,7 +432,7 @@ def build_offboard_setpoint_sender(
             maximum_velocity_m_s=float(
                 os.environ.get("SWARM_CBF_MAXIMUM_VELOCITY_M_S", "2.0")
             ),
-            maximum_command_age_s=PEER_STATE_MAX_AGE_S,
+            maximum_command_age_s=LOCAL_SAMPLE_MAX_AGE_S,
         )
     except (TypeError, ValueError) as error:
         LOGGER.error("Offboard setpoint preview disabled for %s: %s", drone_id, error)
@@ -905,7 +915,7 @@ class FastPoseCache:
             velocity_enu_m_s = ned_to_enu(self.velocity_ned_m_s)
         except ValueError:
             return {"valid": False, "reason": "enu_transform_failed", "message_age_ms": round(age_ms, 2)}
-        stale = age_ms > OWN_STATE_MAX_AGE_S * 1000.0
+        stale = age_ms > LOCAL_SAMPLE_MAX_AGE_S * 1000.0
         return {
             "drone_id": None,
             "frame": "ENU",
@@ -2873,7 +2883,7 @@ class MavlinkWorker(threading.Thread):
             offboard_mode_ack_result=self.last_offboard_mode_ack_result,
             accepted_ack_results=OFFBOARD_ACCEPTED_ACK_RESULTS,
             previous_evaluation_monotonic_s=self.last_companion_evaluation_monotonic,
-            maximum_command_age_s=PEER_STATE_MAX_AGE_S,
+            maximum_command_age_s=LOCAL_SAMPLE_MAX_AGE_S,
         )
         # Evaluated after the conditions, so a latch only clears once its
         # cause is actually gone.

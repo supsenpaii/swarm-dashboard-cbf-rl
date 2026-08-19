@@ -113,15 +113,46 @@ class PeerPayloadFreshnessTests(unittest.TestCase):
 
         fresh = cache.own_swarm_state(100.0, self.origin(), healthy=True)
         stale = cache.own_swarm_state(
-            100.0 + bridge.OWN_STATE_MAX_AGE_S + 0.1, self.origin(), healthy=True
+            100.0 + bridge.LOCAL_SAMPLE_MAX_AGE_S + 0.1, self.origin(), healthy=True
         )
 
-        self.assertGreater(bridge.OWN_STATE_MAX_AGE_S, bridge.PEER_STATE_MAX_AGE_S)
+        self.assertGreater(bridge.LOCAL_SAMPLE_MAX_AGE_S, bridge.PEER_STATE_MAX_AGE_S)
         self.assertTrue(fresh["valid"])
         self.assertEqual(fresh["reason"], "ok")
         self.assertEqual(fresh["message_age_ms"], 0.0)
         self.assertFalse(stale["valid"])
         self.assertEqual(stale["reason"], "telemetry_stale")
+
+    def test_one_slow_loop_iteration_is_not_a_stalled_loop(self) -> None:
+        """The 2026-08-19 opposite_orbit abort.
+
+        `companion_safety_loop_stops` compares consecutive evaluations of a
+        20 Hz loop against the same budget, so it too sat at exactly two
+        periods. Measured over 4413 iterations of that mission: median 50.0 ms,
+        p99 51.0 ms, and ONE at 145 ms -- which ended the flight 8.7 seconds in.
+        """
+        from offboard_abort_conditions import derive_reported_conditions
+
+        def stalled_after(gap_s: float) -> bool:
+            return "companion_safety_loop_stops" in derive_reported_conditions(
+                now_monotonic_s=100.0 + gap_s,
+                self_state_valid=True,
+                cbf_active=True,
+                cbf_reason="ok",
+                last_heartbeat_monotonic_s=100.0 + gap_s,
+                heartbeat_timeout_s=bridge.VEHICLE_HEARTBEAT_TIMEOUT_S,
+                px4_main_mode=None,
+                px4_offboard_main_mode=6,
+                offboard_expected=False,
+                offboard_mode_ack_result=None,
+                previous_evaluation_monotonic_s=100.0,
+                maximum_command_age_s=bridge.LOCAL_SAMPLE_MAX_AGE_S,
+            )
+
+        period = bridge.PEER_STATE_PERIOD_S
+        self.assertFalse(stalled_after(2 * period), "one slow iteration")
+        self.assertFalse(stalled_after(0.145), "the measured 145 ms hiccup")
+        self.assertTrue(stalled_after(4 * period), "a loop that really stopped")
 
     def test_one_dropped_message_survives_and_two_do_not(self) -> None:
         """The 2026-08-19 rung-20 abort, in two assertions.
