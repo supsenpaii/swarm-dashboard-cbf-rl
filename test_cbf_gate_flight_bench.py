@@ -4,11 +4,22 @@ A tool that re-runs the gate against recorded states is only worth trusting to
 the extent its rebuilt inputs match the ones the aircraft's gate actually had.
 So the number that matters here is not the margin -- it is the error between
 the bench's margin and the one the flight wrote down on the same frame.
+
+The fixture is a frozen copy of one historical run rather than the live
+companion-safety log these tests used to read. That log is appended to by every
+flight against the profile, so "the last run in it" changed the first time
+somebody flew the rung again -- and after a stack reap the tail is idle
+station-keeping with no paired frames at all, which failed the whole class in
+setUpClass. A regression about a specific breach has to own the bytes it
+asserts on.
 """
 
 from __future__ import annotations
 
+import gzip
 import os
+import shutil
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -16,21 +27,33 @@ from cbf_gate_flight_bench import bench, load_last_run, paired_frames
 from sparrow_corridor_replay import load_env_profile
 
 ROOT = Path(__file__).parent
-LOG = ROOT / "artifacts" / "companion_safety_sparrow_active_20ms_corridor.jsonl"
+FIXTURE = ROOT / "testdata" / "sparrow_20ms_breach_run.jsonl.gz"
 PROFILE = "sparrow_active_20ms_corridor.env"
 
 
-@unittest.skipUnless(LOG.exists(), f"{LOG.name} not present")
 class GateFlightBenchTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
+        # bench()/load_last_run() take a path and read it as text; decompress
+        # once here rather than teaching them about compression they would
+        # never meet on a real flight.
+        handle, path = tempfile.mkstemp(suffix=".jsonl")
+        os.close(handle)
+        cls._log = Path(path)
+        with gzip.open(FIXTURE, "rb") as source, cls._log.open("wb") as target:
+            shutil.copyfileobj(source, target)
+
         saved = dict(os.environ)
         try:
             load_env_profile(ROOT / PROFILE)
-            cls.report = bench(LOG)
+            cls.report = bench(cls._log)
         finally:
             os.environ.clear()
             os.environ.update(saved)
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls._log.unlink(missing_ok=True)
 
     def test_it_reproduces_the_flight_it_replays(self) -> None:
         for drone_id in ("UAV-01", "UAV-02"):
@@ -46,9 +69,9 @@ class GateFlightBenchTests(unittest.TestCase):
     def test_it_finds_the_breach_the_flight_report_missed(self) -> None:
         """The whole point.
 
-        This log is three runs of a rung that signed FLIGHT_PASS. The driver
-        polled at 1.9 Hz and reported a comfortable margin; the 20 Hz record
-        says the pair went through their separation requirement.
+        This run signed FLIGHT_PASS. The driver polled at 1.9 Hz and reported a
+        comfortable margin; the 20 Hz record says the pair went through their
+        separation requirement, reaching -1.332 m.
         """
         for drone_id in ("UAV-01", "UAV-02"):
             with self.subTest(drone_id):
@@ -64,8 +87,10 @@ class GateFlightBenchTests(unittest.TestCase):
 
         Averaging them together would blend a fixed rung with the broken one
         that preceded it, so the split is load-bearing rather than tidiness.
+        The fixture is a single run, so what this pins is that the splitter
+        returns it whole and in order rather than clipping it.
         """
-        run = load_last_run(LOG)
+        run = load_last_run(self._log)
         times = [row["evaluated_monotonic_s"] for row in run]
 
         self.assertTrue(all(b >= a for a, b in zip(times, times[1:])))
