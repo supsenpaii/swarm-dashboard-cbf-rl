@@ -72,7 +72,7 @@ alter CBF constants, or bypass missing/stale-state holds.
    1.318/1.327 m, with no infeasible, supervisor, watchdog, or sender-latch
    event. Default remains `off`; rollback is `SWARM_CBF_RL_MODE=shadow`
    (observe) or `off`, followed by a stack restart.
-7. `CBF_RL_ACTIVE_TRAJECTORY`: **IN PROGRESS**. A 20 s and 35 s parallel-leg
+7. `CBF_RL_ACTIVE_TRAJECTORY`: **PASS**. A 20 s and 35 s parallel-leg
    flight kept the active policy authenticated, applied, transmitted and
    CBF-clean, but neither UAV reached its endpoint. Extending the same run to
    50 s exposed a real latency-inclusive margin excursion (-0.070/-0.046 m);
@@ -100,5 +100,25 @@ alter CBF constants, or bypass missing/stale-state holds.
    does not cover the slower SITL velocity response. Runtime/default remains
    `off`; the next gate is an offline v3 robustness update using the measured
    response before any new shadow or active flight.
+
+   Closed 2026-08-19 on the Sparrow airframe rather than the v3 rebuild the
+   paragraph above anticipated: the arrival failure was never policy
+   robustness, it was two runtime defects. The barrier was missing its
+   `-2*R*R_dot` term, and the coordinator engaged on a fixed trigger DISTANCE,
+   which buys less and less lead TIME as the rung speed rises (2.69 s at
+   10 m/s, 0.62 s at 20 m/s). With both fixed, `cbf_rl_sitl_evaluate.py`
+   returns PASS on the 20 m/s corridor swap with every check true on both
+   vehicles, `trajectory_completed=true`, and minimum actual CBF margins of
+   14.341 / 14.331 m -- against -0.596 m on the same case before the fixes.
+   The 15 m/s rung passes the same way at 10.045 m. Evidence:
+   `artifacts/gate7_sparrow_20ms.json`, `artifacts/leadfix_corridor_20ms_flight.json`.
+
+   Two operational notes this gate depends on. The evaluator has no run
+   splitting and reads a whole appended trace, so it must be pointed at one
+   isolated run or it will report an older flight's breach; the trace above is
+   the extracted final trajectory block. And the 20 m/s rung must be flown with
+   `SWARM_START_GAZEBO_GUI=false` -- own-state telemetry age peaks at 99.8 ms
+   headless against a 100 ms staleness latch, and with the GUI it reaches
+   100.1 ms and aborts the flight on a single dropped MAVLink message.
 
 Vision, MiDaS and range-estimation work are outside this roadmap.
