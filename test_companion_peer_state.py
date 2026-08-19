@@ -113,10 +113,10 @@ class PeerPayloadFreshnessTests(unittest.TestCase):
 
         fresh = cache.own_swarm_state(100.0, self.origin(), healthy=True)
         stale = cache.own_swarm_state(
-            100.0 + bridge.OWN_STATE_MAX_AGE_S + 0.1, self.origin(), healthy=True
+            100.0 + bridge.CONTROL_INPUT_MAX_AGE_S + 0.1, self.origin(), healthy=True
         )
 
-        self.assertGreater(bridge.OWN_STATE_MAX_AGE_S, bridge.PEER_STATE_MAX_AGE_S)
+        self.assertGreater(bridge.CONTROL_INPUT_MAX_AGE_S, bridge.PEER_STATE_MAX_AGE_S)
         self.assertTrue(fresh["valid"])
         self.assertEqual(fresh["reason"], "ok")
         self.assertEqual(fresh["message_age_ms"], 0.0)
@@ -146,41 +146,44 @@ class PeerPayloadFreshnessTests(unittest.TestCase):
                 offboard_expected=False,
                 offboard_mode_ack_result=None,
                 previous_evaluation_monotonic_s=100.0,
-                maximum_command_age_s=bridge.COMPANION_LOOP_STALL_S,
+                maximum_command_age_s=bridge.CONTROL_INPUT_MAX_AGE_S,
             )
 
         self.assertFalse(stalled_after(0.145), "the 145 ms hiccup, run one")
         self.assertFalse(stalled_after(0.194), "the 194 ms hiccup, run two")
+        self.assertFalse(stalled_after(0.1998), "the 199.8 ms own-state gap")
         self.assertTrue(stalled_after(1.0), "a loop that really stopped")
         # Still inside what the gate plans for, so the barrier is never
         # surprised by a command this old.
-        self.assertLess(bridge.COMPANION_LOOP_STALL_S, 0.86)
+        self.assertLess(bridge.CONTROL_INPUT_MAX_AGE_S, 0.86)
 
-    def test_one_dropped_message_survives_and_two_do_not(self) -> None:
-        """The 2026-08-19 rung-20 abort, in two assertions.
+    def test_a_dropped_message_survives_and_an_outage_does_not(self) -> None:
+        """Both 2026-08-19 aborts, and the line between them.
 
-        Own-state age peaked at 100.1 ms against a 100 ms limit -- one dropped
-        MAVLink message, two sample periods out -- and latched a four-minute
-        flight. Headless the same flight peaked at 99.8 ms and passed, so 0.2 ms
-        decided it. One period of allowance has to absorb that; two consecutive
-        losses are a dead stream and must still fail closed.
+        The rung-20 flight peaked at 100.1 ms against a 100 ms limit -- one
+        dropped message, two sample periods -- and latched. Raising it one
+        period was not enough either: the rung-15 flight then latched at
+        199.8 ms on a healthy vehicle. The bound has to come from the control
+        design rather than from the tail, and the same flight showed where the
+        real line is.
         """
         cache = self.cache()
         cache.local_received_monotonic_s = 100.0
         cache.global_received_monotonic_s = 100.0
         period = bridge.PEER_STATE_PERIOD_S
 
-        one_drop = cache.own_swarm_state(
-            100.0 + 2 * period, self.origin(), healthy=True
+        hiccup = cache.own_swarm_state(
+            100.0 + 4 * period, self.origin(), healthy=True
         )
-        two_drops = cache.own_swarm_state(
-            100.0 + 3 * period, self.origin(), healthy=True
-        )
+        # UAV-02, same flight: telemetry gone for 700.7 ms, a clean 50 ms
+        # staircase of thirteen missed messages. That is an outage, not a
+        # hiccup, and it must still abort.
+        outage = cache.own_swarm_state(100.0 + 0.7007, self.origin(), healthy=True)
 
-        self.assertTrue(one_drop["valid"], one_drop)
-        self.assertEqual(one_drop["reason"], "ok")
-        self.assertFalse(two_drops["valid"], two_drops)
-        self.assertEqual(two_drops["reason"], "telemetry_stale")
+        self.assertTrue(hiccup["valid"], hiccup)
+        self.assertEqual(hiccup["reason"], "ok")
+        self.assertFalse(outage["valid"], outage)
+        self.assertEqual(outage["reason"], "telemetry_stale")
 
     def test_unhealthy_vehicle_is_invalid_even_when_fresh(self) -> None:
         cache = self.cache()

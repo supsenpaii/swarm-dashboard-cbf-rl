@@ -61,47 +61,39 @@ try:
 except ValueError:
     PEER_STATE_MAX_AGE_S = 0.1
 
-# Own state gets its own budget because it is a different measurement
-# from a peer sample.
-# PEER_STATE_MAX_AGE_S bounds a *peer* sample: network plus processing, an age
-# that varies continuously. Own state is read from the local MAVLink stream at
-# PEER_STATE_RATE_HZ, so its age is quantised to whole sample periods -- 0, one
-# period, two periods, nothing in between. Reusing the peer budget unchanged
-# therefore gave own state no allowance for its own sampling at all, and at
-# 20 Hz the limit landed exactly two periods out: one dropped message reads as
-# 100.1 ms against 100 ms and latches the flight.
+# A control input is stale when it is older than the delay the control design
+# already assumes, and both of the things this bounds are control inputs: the
+# vehicle's own state, and the age of the last evaluation of the loop that
+# turns it into a command.
 #
-# Measured 2026-08-19 on the 20 m/s corridor: 100.1/100.2 ms peak own-state age
-# with the Gazebo GUI running (flight aborted twice), 99.8 ms headless (flight
-# passed). 0.2 ms of headroom decided whether a four-minute flight completed.
-# One period of allowance absorbs a single dropped message and still fails on
-# two consecutive ones, which is a real loss of the stream rather than a hiccup.
+# PEER_STATE_MAX_AGE_S, 100 ms, is not that bound. It is the budget for a PEER
+# sample crossing a network, and it happens to equal exactly two periods of the
+# 20 Hz local loop -- so used here it made one dropped message a hard fault.
+# Three detectors carried it. Two are below; the third is the peer registry,
+# where it belongs.
 #
-# This does not spend the safety argument, because the barrier already prices
-# whatever age it is handed: cbf_command_gate's `age_latency` term multiplies
-# max(own_age, peer_age) by the reserve speed inside required_margin, so a
-# state that is one period older simply demands proportionally more separation.
-# The latch is the cruder second guard, not the reasoning.
-
-
-# The companion loop's stall detector is a DIFFERENT question and needs its own
-# number, which is the correction to a first attempt that gave it the own-state
-# budget above. Own-state age asks how stale a sample may be before it stops
-# describing the vehicle; this asks whether the loop producing commands has
-# DIED, and a dead loop never comes back. Sizing it off a peer sample's
-# freshness was always a category error -- it just happened to be survivable
-# until a 32-waypoint lap made each iteration's nearest-point search longer.
+# The bound comes from the consumer instead. `cbf_command_gate` prices
+# `command_latency_s`, 0.86 s on this airframe, into every `required_margin` it
+# computes, and prices the reported age on top via `age_latency` -- so state
+# this old is not merely tolerated, it is PAID for in separation: at 0.5 s and
+# 40 m/s of closing the gate demands about 18 m more room than at one period.
+# Half the command latency leaves the design's own assumption intact and still
+# catches a genuine outage in half a second.
 #
-# Measured across two opposite_orbit missions, ~4000 iterations each: median
-# 50.0 ms, p99 51.0 ms, worst 194 ms, with four excursions over 100 ms in the
-# second run and one in the first. Chasing that tail one period at a time is
-# how a real detector gets whittled away, so take the bound from the thing that
-# actually cares. The CBF gate already prices `command_latency_s`, 0.86 s, into
-# every required_margin it computes, so commands that old are inside what the
-# barrier has planned for. Half of it is 2.5x the worst hiccup ever measured
-# here and still catches a genuinely dead loop in half a second.
-COMPANION_LOOP_STALL_S = 0.5
-OWN_STATE_MAX_AGE_S = PEER_STATE_MAX_AGE_S + PEER_STATE_PERIOD_S
+# Measured, and the reason this is one number derived once rather than two
+# numbers tuned separately. Own-state age was first given the peer budget plus
+# one sample period, 150 ms, on the grounds that one dropped message is not a
+# fault. That is true and it was still the wrong way to pick the number: the
+# 15 m/s corridor then aborted at 199.8 ms on UAV-01, four periods, and raising
+# a real detector one period at a time until the symptom stops is how it gets
+# whittled away to nothing. The same flight showed what the detector is FOR --
+# UAV-02 lost telemetry for 700.7 ms, a clean 50 ms staircase of thirteen
+# missed messages, which is an outage and must abort.
+#
+# Loop iterations, ~8000 across two opposite_orbit missions: median 50.0 ms,
+# p99 51.0 ms, worst 194 ms. Own-state age, 4745 samples: median 0.0 ms,
+# p99 49.0 ms, worst 199.8 ms on a healthy vehicle.
+CONTROL_INPUT_MAX_AGE_S = 0.5
 
 # Liveness is a different question from freshness and needs its own budget.
 # PEER_STATE_MAX_AGE_S bounds how old a *position sample* may be. The validated
@@ -442,7 +434,7 @@ def build_offboard_setpoint_sender(
             maximum_velocity_m_s=float(
                 os.environ.get("SWARM_CBF_MAXIMUM_VELOCITY_M_S", "2.0")
             ),
-            maximum_command_age_s=COMPANION_LOOP_STALL_S,
+            maximum_command_age_s=CONTROL_INPUT_MAX_AGE_S,
         )
     except (TypeError, ValueError) as error:
         LOGGER.error("Offboard setpoint preview disabled for %s: %s", drone_id, error)
@@ -925,7 +917,7 @@ class FastPoseCache:
             velocity_enu_m_s = ned_to_enu(self.velocity_ned_m_s)
         except ValueError:
             return {"valid": False, "reason": "enu_transform_failed", "message_age_ms": round(age_ms, 2)}
-        stale = age_ms > OWN_STATE_MAX_AGE_S * 1000.0
+        stale = age_ms > CONTROL_INPUT_MAX_AGE_S * 1000.0
         return {
             "drone_id": None,
             "frame": "ENU",
@@ -2893,7 +2885,7 @@ class MavlinkWorker(threading.Thread):
             offboard_mode_ack_result=self.last_offboard_mode_ack_result,
             accepted_ack_results=OFFBOARD_ACCEPTED_ACK_RESULTS,
             previous_evaluation_monotonic_s=self.last_companion_evaluation_monotonic,
-            maximum_command_age_s=COMPANION_LOOP_STALL_S,
+            maximum_command_age_s=CONTROL_INPUT_MAX_AGE_S,
         )
         # Evaluated after the conditions, so a latch only clears once its
         # cause is actually gone.
