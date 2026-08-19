@@ -55,7 +55,8 @@ def test_x500_active_runtime_accepts_only_the_validated_150ms_age(monkeypatch) -
 def test_x500_matrix_covers_the_1_to_10ms_envelope() -> None:
     selected = cases()
 
-    assert len(selected) == 420
+    # 10 speeds x 3 lag variants x (13 angles + one vertical + one climbing).
+    assert len(selected) == 450
     assert {case.speed_m_s for case in selected} == set(map(float, range(1, 11)))
     assert {case.peer_age_ms for case in selected} == {0.0, 100.0, 150.0}
     assert all(case.vehicle_profile == "x500" for case in selected)
@@ -66,7 +67,7 @@ def test_x500_matrix_covers_the_1_to_10ms_envelope() -> None:
 def test_x500_matrix_can_extend_to_12ms_without_changing_the_10ms_default() -> None:
     selected = cases(12)
 
-    assert len(selected) == 504
+    assert len(selected) == 540
     assert {case.speed_m_s for case in selected} == set(map(float, range(1, 13)))
     assert x500_20m_cbf_config(12.0).maximum_velocity_m_s == 12.0
 

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+
 import hashlib
 from pathlib import Path
 
@@ -37,11 +39,44 @@ def test_sparrow_policy_artifact_and_active_contract_are_pinned() -> None:
 def test_sparrow_matrix_covers_speed_angle_lag_and_vertical_envelope() -> None:
     selected = cases()
 
-    assert len(selected) == 280
+    # 10 speeds x 2 lag variants x (13 angles + one vertical + one climbing).
+    assert len(selected) == 300
     assert {case.speed_m_s for case in selected} == set(map(float, range(1, 11)))
     assert {case.peer_age_ms for case in selected} == {0.0, 100.0}
     assert all(case.vehicle_profile == "sparrow" for case in selected)
     assert any(case.encounter_angle_deg is None for case in selected)
+
+
+def test_every_speed_gets_a_crossing_that_is_also_a_climb() -> None:
+    """The gap the other two families leave between them.
+
+    `horizontal` holds altitude, `vertical` holds ground track, so a mission
+    doing both at once -- the ordinary one -- was in neither. It is also the
+    only family that reaches the coordinator's horizontal yield branch with a
+    vertical component present, which that branch passes through untouched
+    while it spends horizontal speed on the lane change.
+    """
+    climbing = [case for case in cases() if case.name.startswith("climbing_")]
+
+    assert {case.speed_m_s for case in climbing} == set(map(float, range(1, 11)))
+    for case in climbing:
+        speeds = [
+            math.sqrt(sum(value * value for value in velocity))
+            for velocity in case.velocity.values()
+        ]
+        # The climb tilts the velocity rather than adding to it, so these stay
+        # comparable to their flat neighbours at the same rung.
+        assert all(
+            abs(speed - case.speed_m_s) < 1e-9 for speed in speeds
+        ), case.name
+        # Genuinely three-dimensional: both axes moving, and in opposition.
+        first, second = case.velocity["UAV-01"], case.velocity["UAV-02"]
+        assert first[2] > 0.0 and second[2] < 0.0, case.name
+        assert math.hypot(first[0], first[1]) > 0.0, case.name
+        # Goals inside the fence the barrier will hold them to, which a flat
+        # 15 s of settle time did not manage above 13 m/s.
+        for goal in case.goals.values():
+            assert 0.0 < goal[2] < 200.0, case.name
     assert sparrow_20m_cbf_config().relative_braking_acceleration_m_s2 == 8.0
     assert sparrow_20m_cbf_config().design_margin_buffer_m == 0.0
 

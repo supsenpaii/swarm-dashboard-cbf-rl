@@ -225,6 +225,129 @@ def _vertical_case(
     )
 
 
+def _climbing_case(
+    speed: float,
+    angle: float,
+    tau: float,
+    age_ms: float,
+    vehicle_profile: str = "x500",
+    minimum_separation_m: float = 20.0,
+    climb_deg: float = 30.0,
+) -> SafetyCase:
+    """A crossing that is also a climb, which neither other family covers.
+
+    `_horizontal_case` holds altitude and `_vertical_case` holds ground track,
+    so between them every case in this matrix moves along exactly one of the
+    two. Real missions do not: an aircraft changing level while crossing
+    another's track is the ordinary case, and it is the one the coordinator has
+    never been measured on. Its yield branches on `mission_horizontal_speed`,
+    so a climbing crossing takes the HORIZONTAL branch -- which spends
+    horizontal speed on the lane change and passes `mission[2]` through
+    untouched. Whether that is enough when a third of the closing rate is
+    vertical is the question, and nothing else here asks it.
+
+    Total speed stays `speed` so the case is comparable to its neighbours: the
+    climb tilts the velocity rather than adding to it. One vehicle climbs and
+    the other descends, and both are spawned off-level by exactly the distance
+    that tilt covers before the conflict, so they arrive at one point in three
+    dimensions rather than merely passing near each other in two.
+    """
+    climb = math.radians(climb_deg)
+    horizontal_speed = speed * math.cos(climb)
+    vertical_speed = speed * math.sin(climb)
+    radians = math.radians(angle)
+    first = (1.0, 0.0)
+    second = (math.cos(radians), math.sin(radians))
+
+    horizontal_relative = 2.0 * horizontal_speed * math.sin(radians / 2.0)
+    relative_speed = math.hypot(horizontal_relative, 2.0 * vertical_speed)
+    # Reuse the one contract-derived spawn distance rather than restating its
+    # terms: solve for the flat encounter angle that closes at the same rate.
+    effective_angle = math.degrees(
+        2.0 * math.asin(min(1.0, relative_speed / (2.0 * speed)))
+    )
+    config = profile_config(
+        vehicle_profile, minimum_separation_m=minimum_separation_m
+    )
+    initial_distance = (
+        _required_distance(speed, effective_angle, age_ms, config) + 15.0
+    )
+    time_to_conflict = initial_distance / relative_speed
+
+    floor_m = config.geofence_min_enu_m[2]
+    ceiling_m = config.geofence_max_enu_m[2]
+    center = (floor_m + ceiling_m) / 2.0
+    rise = vertical_speed * time_to_conflict
+    # Fly on past the conflict far enough to prove the pair separated, but not
+    # through the fence the barrier will hold them to. Each goal ends up
+    # `vertical_speed * settle_s` from centre, so at 14 m/s a flat 15 s put it
+    # at 205 m against a 200 m ceiling -- the same trap the vertical family
+    # already carries a clamp for, and the reason this one is a raise rather
+    # than a silent goal nobody can reach.
+    settle_s = min(15.0, (ceiling_m - center - 1.0) / max(vertical_speed, 1e-9))
+    after_s = time_to_conflict + settle_s
+    spawn = {
+        "UAV-01": (
+            -horizontal_speed * time_to_conflict * first[0],
+            -horizontal_speed * time_to_conflict * first[1],
+            center - rise,
+        ),
+        "UAV-02": (
+            -horizontal_speed * time_to_conflict * second[0],
+            -horizontal_speed * time_to_conflict * second[1],
+            center + rise,
+        ),
+    }
+    velocity = {
+        "UAV-01": (
+            horizontal_speed * first[0],
+            horizontal_speed * first[1],
+            vertical_speed,
+        ),
+        "UAV-02": (
+            horizontal_speed * second[0],
+            horizontal_speed * second[1],
+            -vertical_speed,
+        ),
+    }
+    goals = {
+        "UAV-01": (
+            horizontal_speed * after_s * first[0],
+            horizontal_speed * after_s * first[1],
+            center - rise + vertical_speed * after_s,
+        ),
+        "UAV-02": (
+            horizontal_speed * after_s * second[0],
+            horizontal_speed * after_s * second[1],
+            center + rise - vertical_speed * after_s,
+        ),
+    }
+    for drone, goal in goals.items():
+        if not floor_m < goal[2] < ceiling_m:
+            raise ValueError(
+                f"climbing case at {speed:g} m/s puts {drone}'s goal at "
+                f"{goal[2]:.1f} m, outside the {floor_m:.0f}-{ceiling_m:.0f} m "
+                "fence the barrier will hold it to"
+            )
+    horizon_s = 2.0 * time_to_conflict + 35.0
+    return SafetyCase(
+        name=(
+            f"climbing_{angle:03.0f}deg_{climb_deg:02.0f}up"
+            f"_{speed:02.0f}ms_tau{tau:.2f}_age{age_ms:.0f}"
+        ),
+        speed_m_s=speed,
+        encounter_angle_deg=angle,
+        response_time_constant_s=tau,
+        peer_age_ms=age_ms,
+        spawn=spawn,
+        velocity=velocity,
+        goals=goals,
+        maximum_steps=max(800, int(math.ceil(horizon_s / 0.05))) + 1200,
+        vehicle_profile=vehicle_profile,
+        minimum_separation_m=minimum_separation_m,
+    )
+
+
 def cases(
     maximum_speed_m_s: int = 10,
     vehicle_profile: str = "x500",
@@ -258,6 +381,21 @@ def cases(
             result.append(
                 _vertical_case(
                     float(speed), tau, age_ms, vehicle_profile, minimum_separation_m
+                )
+            )
+            # 90 degrees: the pure crossing, where neither vehicle's track
+            # gives way to the other's by geometry alone, and the one angle at
+            # which a lane change is least able to borrow from along-path
+            # speed. One climbing case per speed and lag variant, the same
+            # weight the vertical family carries.
+            result.append(
+                _climbing_case(
+                    float(speed),
+                    90.0,
+                    tau,
+                    age_ms,
+                    vehicle_profile,
+                    minimum_separation_m,
                 )
             )
     return tuple(result)
