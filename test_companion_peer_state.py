@@ -113,10 +113,10 @@ class PeerPayloadFreshnessTests(unittest.TestCase):
 
         fresh = cache.own_swarm_state(100.0, self.origin(), healthy=True)
         stale = cache.own_swarm_state(
-            100.0 + bridge.LOCAL_SAMPLE_MAX_AGE_S + 0.1, self.origin(), healthy=True
+            100.0 + bridge.OWN_STATE_MAX_AGE_S + 0.1, self.origin(), healthy=True
         )
 
-        self.assertGreater(bridge.LOCAL_SAMPLE_MAX_AGE_S, bridge.PEER_STATE_MAX_AGE_S)
+        self.assertGreater(bridge.OWN_STATE_MAX_AGE_S, bridge.PEER_STATE_MAX_AGE_S)
         self.assertTrue(fresh["valid"])
         self.assertEqual(fresh["reason"], "ok")
         self.assertEqual(fresh["message_age_ms"], 0.0)
@@ -146,13 +146,15 @@ class PeerPayloadFreshnessTests(unittest.TestCase):
                 offboard_expected=False,
                 offboard_mode_ack_result=None,
                 previous_evaluation_monotonic_s=100.0,
-                maximum_command_age_s=bridge.LOCAL_SAMPLE_MAX_AGE_S,
+                maximum_command_age_s=bridge.COMPANION_LOOP_STALL_S,
             )
 
-        period = bridge.PEER_STATE_PERIOD_S
-        self.assertFalse(stalled_after(2 * period), "one slow iteration")
-        self.assertFalse(stalled_after(0.145), "the measured 145 ms hiccup")
-        self.assertTrue(stalled_after(4 * period), "a loop that really stopped")
+        self.assertFalse(stalled_after(0.145), "the 145 ms hiccup, run one")
+        self.assertFalse(stalled_after(0.194), "the 194 ms hiccup, run two")
+        self.assertTrue(stalled_after(1.0), "a loop that really stopped")
+        # Still inside what the gate plans for, so the barrier is never
+        # surprised by a command this old.
+        self.assertLess(bridge.COMPANION_LOOP_STALL_S, 0.86)
 
     def test_one_dropped_message_survives_and_two_do_not(self) -> None:
         """The 2026-08-19 rung-20 abort, in two assertions.
