@@ -1,0 +1,32 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html",   "x": 0,    "y": 0,    "w": 1440, "h": 900, "title": "BAY · workspace chính" },
+    { "file": "Plan.dc.html",   "x": 1540, "y": 0,    "w": 1440, "h": 900, "title": "VẼ · dựng nhiệm vụ" },
+    { "file": "Safety.dc.html", "x": 0,    "y": 1000, "w": 1440, "h": 900, "title": "AN TOÀN · chi tiết" },
+    { "file": "Tokens.dc.html", "x": 1540, "y": 1000, "w": 1000, "h": 900, "title": "Bảng thành phần" }
+  ],
+  "annotations": [
+    {
+      "id": "safety-strip",
+      "x": 0,
+      "y": -190,
+      "w": 460,
+      "text": "Dải an toàn luôn hiện là thay đổi lớn nhất.\n\nKhoảng cách thật, biên CBF, khoảng cách rào chắn ĐANG đòi, và vai điều phối — bốn con số hiện không hiển thị ở đâu cả, dù chúng là thứ giữ hai chiếc không đâm nhau.\n\nKéo thanh \"cbfMargin\" phía trên khung BAY để xem dải đổi màu xanh → hổ phách → đỏ."
+    },
+    {
+      "id": "stepper",
+      "x": 1540,
+      "y": -190,
+      "w": 460,
+      "text": "Bước nhiệm vụ thay cho câu hướng dẫn.\n\nBản hiện tại phải viết thứ tự bằng chữ: \"vẽ → GỬI → ARM/TAKEOFF → BẮT ĐẦU MISSION\". Server đã gửi sẵn start_ready và start_block_reason — giao diện chỉ đang không hiển thị chúng thành chuỗi.\n\nCảnh báo dưới khung vẽ là chỗ đã làm bạn mất thời gian: click chéo tạo đường tự cắt."
+    },
+    {
+      "id": "not-decided",
+      "x": 0,
+      "y": 1960,
+      "w": 460,
+      "text": "Chưa quyết, cần bạn chọn:\n\n· Font Be Vietnam Pro (thiết kế riêng cho tiếng Việt) thay Arial — hay bạn muốn hướng khác?\n· Màu nhấn hiện là xanh trời #38bdf8, lấy từ nút tracking sẵn có. Có ba lựa chọn khác trong chip phía trên mỗi khung.\n· Bảng thành phần dùng số liệu thật từ chuyến bay nấc 20 hôm nay (biên +13.5 m, rào chắn đòi 36.2 m)."
+    }
+  ],
+  "launch": { "view": "canvas" }
+}

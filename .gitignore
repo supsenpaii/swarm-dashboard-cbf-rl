@@ -47,3 +47,7 @@ swarm_dashboard_handoff_*/
 .vscode/
 *.code-workspace
 *.swp
+
+# Design canvas: nguồn .dc.html được giữ, bản đóng gói 2 MB thì không.
+design/*.html
+!design/*.dc.html

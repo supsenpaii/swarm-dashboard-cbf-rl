@@ -1,0 +1,185 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+  <style>
+    body { margin: 0; background: #0b1120; }
+    a { color: #38bdf8; } a:hover { color: #7dd3fc; }
+    * { box-sizing: border-box; }
+  </style>
+</helmet>
+
+<div style="width: 1440px; height: 900px; background: #0b1120; font-family: 'Be Vietnam Pro', system-ui, sans-serif; color: #e2e8f0; display: flex; flex-direction: column;">
+
+  <div style="height: 52px; flex-shrink: 0; display: flex; align-items: center; gap: 20px; padding: 0 18px; background: #0e1626; border-bottom: 1px solid #1e2b44;">
+    <div style="display: flex; align-items: baseline; gap: 9px;">
+      <span style="font-size: 14px; font-weight: 700;">Swarm UAV</span>
+      <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #64748b; letter-spacing: 0.08em;">LỚP AN TOÀN</span>
+    </div>
+    <div style="flex-grow: 1;"></div>
+    <div style="display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 13px; border-radius: 15px; background: #14351f; border: 1px solid #22c55e;">
+      <span style="width: 6px; height: 6px; border-radius: 50%; background: #22c55e; box-shadow: 0 0 7px #22c55e;"></span>
+      <span style="font-size: 11px; font-weight: 600; color: #bbf7d0;">RÀO CHẮN HOẠT ĐỘNG · 20 Hz</span>
+    </div>
+  </div>
+
+  <div style="flex-grow: 1; display: flex; min-height: 0;">
+
+    <div style="width: 62px; flex-shrink: 0; display: flex; flex-direction: column; padding: 10px 0; gap: 2px; background: #0e1626; border-right: 1px solid #1e2b44;">
+      <sc-for list="{{rail}}" as="item" hint-placeholder-count="4">
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 11px 0; cursor: pointer; border-left: 2px solid {{item.edge}}; background: {{item.bg}};">
+          <div style="width: 19px; height: 19px; border-radius: 3px; background: {{item.fg}}; opacity: 0.85;"></div>
+          <span style="font-size: 8px; font-weight: 700; letter-spacing: 0.07em; color: {{item.fg}};">{{item.label}}</span>
+        </div>
+      </sc-for>
+    </div>
+
+    <div style="flex-grow: 1; padding: 22px 26px; overflow: hidden; display: flex; flex-direction: column; gap: 22px;">
+
+      <!-- hero numbers -->
+      <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px;">
+        <sc-for list="{{hero}}" as="h" hint-placeholder-count="4">
+          <div style="padding: 16px 18px; border-radius: 8px; background: #0e1728; border: 1px solid {{h.bd}};">
+            <div style="font-size: 9px; font-weight: 700; letter-spacing: 0.14em; color: #64748b; margin-bottom: 9px;">{{h.k}}</div>
+            <div style="display: flex; align-items: baseline; gap: 5px;">
+              <span style="font-family: 'IBM Plex Mono', monospace; font-size: 34px; font-weight: 600; letter-spacing: -0.02em; color: {{h.c}};">{{h.v}}</span>
+              <span style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #64748b;">{{h.u}}</span>
+            </div>
+            <div style="margin-top: 7px; font-size: 10px; color: #64748b;">{{h.note}}</div>
+          </div>
+        </sc-for>
+      </div>
+
+      <!-- margin over time -->
+      <div style="padding: 18px 20px 14px; border-radius: 8px; background: #0e1728; border: 1px solid #1e2b44;">
+        <div style="display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 14px;">
+          <span style="font-size: 9px; font-weight: 700; letter-spacing: 0.14em; color: #64748b;">BIÊN CBF THEO THỜI GIAN · 120 s</span>
+          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #475569;">nhỏ nhất +13.5 m · 0 khung thủng</span>
+        </div>
+        <div style="position: relative; height: 132px;">
+          <svg width="100%" height="132" viewBox="0 0 1180 132" preserveAspectRatio="none">
+            <line x1="0" y1="118" x2="1180" y2="118" stroke="#7f1d1d" stroke-width="1.5" stroke-dasharray="6 4"/>
+            <line x1="0" y1="86" x2="1180" y2="86" stroke="#1e2b44" stroke-width="1"/>
+            <line x1="0" y1="52" x2="1180" y2="52" stroke="#1e2b44" stroke-width="1"/>
+            <line x1="0" y1="18" x2="1180" y2="18" stroke="#1e2b44" stroke-width="1"/>
+            <path d="M0 14 L90 16 L180 22 L270 38 L360 62 L450 88 L520 100 L560 96 L620 74 L700 50 L800 30 L900 20 L1000 16 L1100 14 L1180 13"
+                  fill="none" stroke="{{accent}}" stroke-width="2.2" stroke-linejoin="round"/>
+            <path d="M0 14 L90 16 L180 22 L270 38 L360 62 L450 88 L520 100 L560 96 L620 74 L700 50 L800 30 L900 20 L1000 16 L1100 14 L1180 13 L1180 132 L0 132 Z"
+                  fill="{{accent}}" fill-opacity="0.07"/>
+            <circle cx="520" cy="100" r="4" fill="#f59e0b"/>
+          </svg>
+          <span style="position: absolute; left: 0; top: 112px; font-family: 'IBM Plex Mono', monospace; font-size: 9px; color: #b91c1c;">0 · THỦNG</span>
+          <span style="position: absolute; right: 0; top: 8px; font-family: 'IBM Plex Mono', monospace; font-size: 9px; color: #475569;">+30 m</span>
+        </div>
+      </div>
+
+      <!-- two panels -->
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; flex-grow: 1; min-height: 0;">
+
+        <div style="padding: 18px 20px; border-radius: 8px; background: #0e1728; border: 1px solid #1e2b44;">
+          <div style="font-size: 9px; font-weight: 700; letter-spacing: 0.14em; color: #64748b; margin-bottom: 15px;">RÀO CHẮN ĐANG ĐÒI</div>
+          <div style="display: flex; flex-direction: column; gap: 11px;">
+            <sc-for list="{{budget}}" as="b" hint-placeholder-count="5">
+              <div style="display: flex; flex-direction: column; gap: 5px;">
+                <div style="display: flex; align-items: baseline; justify-content: space-between;">
+                  <span style="font-size: 11px; color: #94a3b8;">{{b.k}}</span>
+                  <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; font-weight: 500; color: #cbd5e1;">{{b.v}}</span>
+                </div>
+                <div style="height: 4px; border-radius: 2px; background: #16223a;">
+                  <div style="height: 4px; width: {{b.w}}; border-radius: 2px; background: {{b.c}};"></div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="display: flex; align-items: baseline; justify-content: space-between; margin-top: 16px; padding-top: 13px; border-top: 1px solid #1e2b44;">
+            <span style="font-size: 11px; font-weight: 600; color: #e2e8f0;">Tổng</span>
+            <span style="font-family: 'IBM Plex Mono', monospace; font-size: 17px; font-weight: 600; color: #e2e8f0;">36.2 m</span>
+          </div>
+        </div>
+
+        <div style="padding: 18px 20px; border-radius: 8px; background: #0e1728; border: 1px solid #1e2b44;">
+          <div style="font-size: 9px; font-weight: 700; letter-spacing: 0.14em; color: #64748b; margin-bottom: 15px;">ĐIỀU PHỐI</div>
+          <div style="display: flex; flex-direction: column; gap: 13px;">
+            <sc-for list="{{coord}}" as="c" hint-placeholder-count="2">
+              <div style="padding: 13px 15px; border-radius: 6px; background: #111c30; border-left: 3px solid {{c.color}};">
+                <div style="display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 8px;">
+                  <span style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; font-weight: 600; color: #e2e8f0;">{{c.id}}</span>
+                  <span style="font-size: 10px; font-weight: 700; letter-spacing: 0.08em; color: {{c.color}};">{{c.role}}</span>
+                </div>
+                <div style="display: flex; gap: 20px;">
+                  <div style="display: flex; flex-direction: column; gap: 2px;">
+                    <span style="font-size: 9px; color: #64748b;">CAN THIỆP</span>
+                    <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #cbd5e1;">{{c.rate}}</span>
+                  </div>
+                  <div style="display: flex; flex-direction: column; gap: 2px;">
+                    <span style="font-size: 9px; color: #64748b;">TUỔI STATE</span>
+                    <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #cbd5e1;">{{c.age}}</span>
+                  </div>
+                </div>
+              </div>
+            </sc-for>
+            <div style="padding: 12px 15px; border-radius: 6px; background: #111c30;">
+              <div style="font-size: 9px; font-weight: 700; letter-spacing: 0.12em; color: #64748b; margin-bottom: 8px;">LEAD TIME</div>
+              <div style="display: flex; align-items: baseline; gap: 6px;">
+                <span style="font-family: 'IBM Plex Mono', monospace; font-size: 19px; font-weight: 600; color: #e2e8f0;">3.5</span>
+                <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #64748b;">s · vào cuộc ở 300.4 m</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{
+  "accent": {"editor": "color", "default": "#38bdf8", "options": ["#38bdf8", "#22d3ee", "#a78bfa", "#f472b6"]}
+}'>
+class Component extends DCLogic {
+  renderVals() {
+    const accent = this.props.accent ?? '#38bdf8';
+
+    const rail = [
+      { label: 'BAY',     fg: '#64748b', bg: 'transparent', edge: 'transparent' },
+      { label: 'VẼ',      fg: '#64748b', bg: 'transparent', edge: 'transparent' },
+      { label: 'THEO',    fg: '#64748b', bg: 'transparent', edge: 'transparent' },
+      { label: 'AN TOÀN', fg: '#e2e8f0', bg: '#16233b',     edge: accent },
+    ];
+
+    const hero = [
+      { k: 'KHOẢNG CÁCH', v: '68.9', u: 'm', c: '#e2e8f0', bd: '#1e2b44',
+        note: 'sàn cứng 20 m' },
+      { k: 'BIÊN CBF',    v: '+13.5', u: 'm', c: '#22c55e', bd: '#1a4030',
+        note: 'nhỏ nhất trong 120 s' },
+      { k: 'RÀO CHẮN ĐÒI',v: '36.2', u: 'm', c: '#94a3b8', bd: '#1e2b44',
+        note: 'ở tốc độ khép hiện tại' },
+      { k: 'TỐC ĐỘ KHÉP', v: '0.0', u: 'm/s', c: '#e2e8f0', bd: '#1e2b44',
+        note: 'đã đi qua nhau' },
+    ];
+
+    const budget = [
+      { k: 'Ngăn cách tối thiểu', v: '20.00 m', w: '55%', c: '#475569' },
+      { k: 'Dự trữ bám',          v: '2.00 m',  w: '6%',  c: '#475569' },
+      { k: 'Bất định vị trí',     v: '0.06 m',  w: '1%',  c: '#475569' },
+      { k: 'Trễ lệnh × tốc độ',   v: '8.94 m',  w: '25%', c: accent },
+      { k: 'Quãng phanh',         v: '5.20 m',  w: '14%', c: accent },
+    ];
+
+    const coord = [
+      { id: 'UAV-01', role: 'ƯU TIÊN', color: accent,    rate: '0.0 %', age: '0 ms' },
+      { id: 'UAV-02', role: 'NHƯỜNG',  color: '#f59e0b', rate: '5.6 %', age: '49 ms' },
+    ];
+
+    return { accent, rail, hero, budget, coord };
+  }
+}
+</script>
+</body>
+</html>
