@@ -51,3 +51,6 @@ swarm_dashboard_handoff_*/
 # Design canvas: nguồn .dc.html được giữ, bản đóng gói 2 MB thì không.
 design/*.html
 !design/*.dc.html
+
+# Map tile pack — rebuild with fetch_map_tiles.py
+static/tiles/

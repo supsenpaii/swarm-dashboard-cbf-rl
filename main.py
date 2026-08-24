@@ -32,6 +32,7 @@ if (
 import paho.mqtt.client as mqtt
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from body_attitude_recenter import BodyAttitudeRecenterController
@@ -3976,6 +3977,13 @@ app = FastAPI(
 # ============================================================
 # HTTP routes
 # ============================================================
+
+app.mount(
+    "/static",
+    StaticFiles(directory=str(BASE_DIR / "static")),
+    name="static",
+)
+
 
 @app.get("/")
 async def index() -> FileResponse:

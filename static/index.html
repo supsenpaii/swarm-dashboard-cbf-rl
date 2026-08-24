@@ -1,13 +1,11 @@
 <!DOCTYPE html>
-<html lang="vi">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Swarm UAV Control</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="/static/vendor/fonts/fonts.css">
+  <link rel="stylesheet" href="/static/vendor/leaflet/leaflet.css">
   <style>
     :root {
       /* Nền trung tính sâu thay slate xanh; accent lạnh, trạng thái bão hoà hơn. */
@@ -25,7 +23,7 @@
     body {
       margin:0; background:var(--bg); color:var(--text);
       font-family:'Be Vietnam Pro',system-ui,-apple-system,sans-serif;
-      font-size:13px; overflow:hidden;
+      font-size:15px; overflow:hidden;
     }
     button,input,select { font:inherit; color:inherit; }
     ::-webkit-scrollbar { width:10px; height:10px; }
@@ -42,14 +40,14 @@
       width:22px; height:22px; border-radius:5px; background:var(--accent);
       display:flex; align-items:center; justify-content:center; flex-shrink:0;
     }
-    header h1 { margin:0; font-size:15px; font-weight:700; letter-spacing:-.015em; }
-    .subtitle { font-family:var(--mono); font-size:10px; color:var(--dim2); letter-spacing:.1em; }
-    .fleet-count { display:flex; align-items:center; gap:6px; font-family:var(--mono); font-size:11px; color:var(--dim2); }
+    header h1 { margin:0; font-size:18px; font-weight:700; letter-spacing:-.015em; }
+    .subtitle { font-family:var(--mono); font-size:12px; color:var(--dim2); letter-spacing:.1em; }
+    .fleet-count { display:flex; align-items:center; gap:6px; font-family:var(--mono); font-size:13px; color:var(--dim2); }
     .fleet-count strong { color:var(--text); font-weight:500; }
     #connection-status {
       display:flex; align-items:center; gap:8px; height:30px; padding:0 13px;
       border-radius:15px; background:var(--bad-bg); border:1px solid var(--bad);
-      font-size:11px; font-weight:600; color:var(--bad-fg);
+      font-size:13px; font-weight:600; color:var(--bad-fg);
     }
     #connection-status.connected { background:var(--ok-bg); border-color:var(--ok); color:var(--ok-fg); }
 
@@ -66,7 +64,7 @@
       background:transparent; color:var(--dim2); cursor:pointer;
     }
     .rail-button svg { width:21px; height:21px; }
-    .rail-button span { font-size:8px; font-weight:700; letter-spacing:.08em; }
+    .rail-button span { font-size:9px; font-weight:700; letter-spacing:.08em; }
     .rail-button:hover { color:var(--dim); }
     .rail-button.active { color:var(--text); background:var(--accent-bg); border-left-color:var(--accent); }
 
@@ -75,17 +73,17 @@
       padding:22px; display:flex; gap:20px;
     }
     #left-stack { flex-grow:1; min-width:0; display:flex; flex-direction:column; gap:20px; }
-    #right-stack { width:324px; flex-shrink:0; display:flex; flex-direction:column; gap:20px; }
+    #right-stack { width:560px; flex-shrink:0; display:flex; flex-direction:column; gap:20px; }
 
     .card {
       padding:18px 20px; border-radius:var(--r);
       background:var(--card); border:1px solid var(--line);
     }
     .card-title {
-      font-size:10px; font-weight:700; letter-spacing:.16em; color:var(--dim2);
+      font-size:12px; font-weight:700; letter-spacing:.16em; color:var(--dim2);
       text-transform:uppercase;
     }
-    .panel-subtitle { margin:11px 0 0; color:var(--dim2); font-size:11px; line-height:1.6; }
+    .panel-subtitle { margin:11px 0 0; color:var(--dim2); font-size:13px; line-height:1.6; }
     .panel-subtitle strong { color:var(--dim); }
 
     /* ── workspace ──────────────────────────────────────── */
@@ -105,19 +103,19 @@
     .safety-head { display:flex; align-items:center; gap:10px; margin-bottom:18px; }
     .safety-badge {
       height:20px; display:flex; align-items:center; padding:0 8px; border-radius:5px;
-      background:rgba(46,230,168,.1); font-family:var(--mono); font-size:9px;
+      background:rgba(46,230,168,.1); font-family:var(--mono); font-size:11px;
       font-weight:600; letter-spacing:.06em; color:var(--ok);
     }
     .safety-row { display:flex; align-items:flex-start; gap:46px; }
     .safety-cell { display:flex; flex-direction:column; gap:7px; }
-    .safety-key { font-size:10px; font-weight:600; letter-spacing:.13em; color:var(--dim2); }
+    .safety-key { font-size:12px; font-weight:600; letter-spacing:.13em; color:var(--dim2); }
     .safety-num { display:flex; align-items:baseline; gap:6px; }
     .safety-num b {
-      font-family:var(--mono); font-size:46px; font-weight:500;
+      font-family:var(--mono); font-size:54px; font-weight:500;
       letter-spacing:-.03em; line-height:1;
     }
-    .safety-num span { font-family:var(--mono); font-size:15px; color:var(--dim2); }
-    .safety-note { font-size:10px; color:var(--dim2); }
+    .safety-num span { font-family:var(--mono); font-size:18px; color:var(--dim2); }
+    .safety-note { font-size:12px; color:var(--dim2); }
     .safety-divider { width:1px; align-self:stretch; background:var(--line); }
     .safety-roles { display:flex; flex-direction:column; gap:9px; }
     .safety-role {
@@ -125,8 +123,8 @@
       border-radius:7px; background:var(--raise);
     }
     .safety-role i { width:3px; height:15px; border-radius:2px; background:var(--dim3); }
-    .safety-role em { font-family:var(--mono); font-size:12px; font-style:normal; color:#c3cad6; }
-    .safety-role strong { font-size:11px; font-weight:700; letter-spacing:.07em; color:var(--dim2); }
+    .safety-role em { font-family:var(--mono); font-size:14px; font-style:normal; color:#c3cad6; }
+    .safety-role strong { font-size:13px; font-weight:700; letter-spacing:.07em; color:var(--dim2); }
 
     #safety-bar-wrap { margin-top:20px; }
     #safety-bar { position:relative; height:16px; }
@@ -137,42 +135,42 @@
     .bar-actual { position:absolute; top:0; width:3px; height:16px; border-radius:2px; }
     .bar-scale {
       display:flex; justify-content:space-between; margin-top:7px;
-      font-family:var(--mono); font-size:9px; color:var(--dim3);
+      font-family:var(--mono); font-size:11px; color:var(--dim3);
     }
     .bar-scale .floor-label { color:var(--bad); }
 
     /* ── thẻ từng chiếc ─────────────────────────────────── */
     #vehicle-cards { flex-shrink:0; display:grid; grid-template-columns:1fr 1fr; gap:20px; }
     .vehicle-head { display:flex; align-items:center; gap:9px; margin-bottom:15px; }
-    .vehicle-head .name { font-size:14px; font-weight:700; }
+    .vehicle-head .name { font-size:17px; font-weight:700; }
     .vehicle-chip {
-      font-family:var(--mono); font-size:10px; padding:3px 7px; border-radius:4px;
+      font-family:var(--mono); font-size:12px; padding:3px 7px; border-radius:4px;
       background:var(--raise); color:var(--dim2); letter-spacing:.05em;
     }
     .vehicle-chip.armed { background:var(--ok-bg); color:var(--ok-fg); }
     .telemetry-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:14px; }
     .telemetry-item { min-width:0; display:flex; flex-direction:column; gap:4px; }
-    .field-label { font-size:9px; letter-spacing:.09em; color:var(--dim2); }
+    .field-label { font-size:11px; letter-spacing:.09em; color:var(--dim2); }
     .field-value {
-      font-family:var(--mono); font-size:21px; font-weight:500; letter-spacing:-.02em;
+      font-family:var(--mono); font-size:25px; font-weight:500; letter-spacing:-.02em;
       overflow-wrap:anywhere; line-height:1.2;
     }
 
     /* ── thanh điều khiển ───────────────────────────────── */
-    #control-bar { flex-grow:1; min-height:0; display:flex; gap:26px; overflow:auto; }
+    #control-bar { flex-grow:1; min-height:0; gap:26px; overflow:auto; }
     .control-group { display:flex; flex-direction:column; gap:11px; }
     .control-divider { width:1px; align-self:stretch; background:var(--line); flex-shrink:0; }
     .mode-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
     .mode-button {
       height:46px; border:1px solid var(--line2); border-radius:var(--r2);
-      background:var(--raise); color:var(--dim); font-size:12px; font-weight:600; cursor:pointer;
+      background:var(--raise); color:var(--dim); font-size:14px; font-weight:600; cursor:pointer;
     }
     .mode-button:hover { border-color:#2c3546; color:var(--text); }
     .mode-button.active { border-color:var(--accent); background:var(--accent-bg); color:var(--text); }
     .action-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
     .action-button {
       height:46px; border:1px solid var(--line2); border-radius:var(--r2);
-      background:var(--raise); color:var(--dim); font-size:12px; font-weight:700;
+      background:var(--raise); color:var(--dim); font-size:14px; font-weight:700;
       letter-spacing:.05em; cursor:pointer;
     }
     .action-button.green { background:var(--ok-bg); border-color:var(--ok); color:var(--ok-fg); }
@@ -184,44 +182,44 @@
     }
 
     .manual-status { display:flex; align-items:center; justify-content:space-between; }
-    .manual-status span { font-size:10px; font-weight:700; letter-spacing:.16em; color:var(--dim2); }
+    .manual-status span { font-size:12px; font-weight:700; letter-spacing:.16em; color:var(--dim2); }
     .manual-status strong {
-      font-family:var(--mono); font-size:9px; padding:3px 7px; border-radius:4px;
+      font-family:var(--mono); font-size:11px; padding:3px 7px; border-radius:4px;
       background:var(--raise); color:var(--dim2); font-weight:500;
     }
     .manual-enable-button {
       width:100%; height:40px; border:1px solid var(--line2); border-radius:var(--r2);
-      background:var(--raise); color:var(--dim); font-size:12px; font-weight:600; cursor:pointer;
+      background:var(--raise); color:var(--dim); font-size:14px; font-weight:600; cursor:pointer;
     }
     .manual-enable-button.active { border-color:var(--accent); background:var(--accent-bg); color:var(--text); }
     .manual-keyboard-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:5px; }
     .manual-key {
       height:40px; border:1px solid var(--line2); border-radius:6px; background:var(--raise);
-      font-family:var(--mono); font-size:12px; font-weight:500; color:var(--dim); cursor:pointer;
+      font-family:var(--mono); font-size:14px; font-weight:500; color:var(--dim); cursor:pointer;
     }
     .manual-key.pressed { border-color:var(--accent); background:var(--accent-bg); color:var(--text); }
-    .manual-help { font-size:10px; line-height:1.6; color:var(--dim2); }
+    .manual-help { font-size:12px; line-height:1.6; color:var(--dim2); }
 
     /* ── minimap ────────────────────────────────────────── */
     #map-shell {
-      width:324px; height:324px; flex-shrink:0; position:relative;
+      width:100%; height:560px; flex-shrink:0; position:relative;
       border-radius:var(--r); overflow:hidden;
       background:var(--input); border:1px solid var(--line);
     }
-    #map { width:100%; height:100%; background:var(--input); }
+    #map { width:100%; height:100%; background:#e9e5de; }
 
     /* Kích thước bản đồ đi theo công việc: nhỏ khi bay, mở rộng khi vẽ. */
     body[data-ws="plan"] #map-shell,
     body.map-expanded #map-shell {
-      position:absolute; inset:22px 418px 22px 22px;
+      position:absolute; inset:22px 602px 22px 22px;
       width:auto; height:auto; z-index:5;
     }
 
     #map-click-badge {
-      position:absolute; z-index:700; top:11px; left:11px;
+      position:absolute; z-index:700; top:11px; left:52px;
       display:flex; align-items:center; gap:7px; height:26px; padding:0 10px;
       border-radius:13px; background:rgba(8,9,13,.88); border:1px solid var(--line2);
-      font-size:10px; font-weight:600; color:var(--dim); white-space:nowrap; pointer-events:none;
+      font-size:12px; font-weight:600; color:var(--dim); white-space:nowrap; pointer-events:none;
     }
     #map-click-badge i { width:6px; height:6px; border-radius:50%; background:var(--dim3); }
     #map-click-badge.draw { border-color:var(--accent); color:var(--text); }
@@ -230,44 +228,52 @@
     #map-click-badge.point i { background:var(--warn); }
     body[data-ws="plan"] #map-click-badge {
       top:18px; left:50%; transform:translateX(-50%); height:38px; padding:0 18px;
-      border-radius:19px; font-size:12px;
+      border-radius:19px; font-size:14px;
     }
+    #map-offline-note {
+      position:absolute; z-index:700; top:11px; right:11px;
+      display:flex; align-items:center; height:26px; padding:0 10px; border-radius:13px;
+      background:rgba(8,9,13,.88); border:1px solid var(--warn);
+      font-family:var(--mono); font-size:12px; font-weight:600; color:var(--warn-fg);
+    }
+    body[data-ws="plan"] #left-stack,
+    body.map-expanded #left-stack { visibility:hidden; }
     #map-shell.draw #map { cursor:crosshair; }
 
     #map-expand {
       position:absolute; z-index:700; bottom:11px; right:11px;
       display:flex; align-items:center; gap:7px; height:28px; padding:0 11px;
       border-radius:7px; background:rgba(8,9,13,.9); border:1px solid var(--accent);
-      font-size:10px; font-weight:600; color:var(--accent); cursor:pointer;
+      font-size:12px; font-weight:600; color:var(--accent); cursor:pointer;
     }
     #map-hint {
       position:absolute; z-index:700; bottom:11px; left:11px;
-      max-width:calc(100% - 130px); font-family:var(--mono); font-size:9px;
+      max-width:calc(100% - 130px); font-family:var(--mono); font-size:11px;
       color:var(--dim3); pointer-events:none; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
     }
     body[data-ws="plan"] #map-hint {
       left:50%; transform:translateX(-50%); bottom:18px; max-width:70%;
       padding:12px 18px; border-radius:9px; white-space:normal; text-align:center;
       background:rgba(8,9,13,.94); border:1px solid #7a5216;
-      font-family:'Be Vietnam Pro',sans-serif; font-size:12px; color:var(--warn-fg);
+      font-family:'Be Vietnam Pro',sans-serif; font-size:14px; color:var(--warn-fg);
     }
 
     /* ── nhiệm vụ ───────────────────────────────────────── */
-    #mission-card { flex-grow:1; min-height:0; display:flex; flex-direction:column; overflow:auto; }
+    #mission-card { flex-grow:1; min-height:0; display:flex; flex-direction:column; overflow:auto; padding-bottom:0; }
     .mission-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:15px; }
-    .mission-head span:last-child { font-family:var(--mono); font-size:10px; color:var(--dim2); }
+    .mission-head span:last-child { font-family:var(--mono); font-size:12px; color:var(--dim2); }
     #mission-stepper { display:flex; flex-direction:column; }
     .step { display:flex; align-items:flex-start; gap:13px; padding:7px 0; }
     .step-mark { display:flex; flex-direction:column; align-items:center; flex-shrink:0; }
     .step-dot {
       width:24px; height:24px; border-radius:50%; display:flex; align-items:center;
       justify-content:center; background:var(--raise); border:1.5px solid var(--line2);
-      font-family:var(--mono); font-size:11px; font-weight:600; color:var(--dim2);
+      font-family:var(--mono); font-size:13px; font-weight:600; color:var(--dim2);
     }
     .step-line { width:1.5px; height:16px; margin-top:3px; background:var(--line2); }
     .step-text { display:flex; flex-direction:column; gap:2px; padding-top:2px; min-width:0; }
-    .step-title { font-size:13px; font-weight:600; color:var(--dim2); }
-    .step-note { font-family:var(--mono); font-size:10px; color:var(--dim3); line-height:1.4; }
+    .step-title { font-size:15px; font-weight:600; color:var(--dim2); }
+    .step-note { font-family:var(--mono); font-size:12px; color:var(--dim3); line-height:1.4; }
     .step.done .step-dot { background:var(--ok-bg); border-color:var(--ok); color:var(--ok-fg); }
     .step.done .step-line { background:var(--ok); }
     .step.done .step-title { color:var(--text); }
@@ -281,33 +287,33 @@
 
     /* ── input ──────────────────────────────────────────── */
     .altitude-row { display:flex; flex-direction:column; gap:7px; margin-top:14px; }
-    .altitude-row > label { font-size:12px; color:var(--dim); }
+    .altitude-row > label { font-size:14px; color:var(--dim); }
     .altitude-row > div {
       display:flex; align-items:center; gap:10px; height:46px; padding:0 15px;
       border-radius:var(--r2); background:var(--input); border:1px solid var(--line2);
-      font-family:var(--mono); font-size:12px; color:var(--dim2);
+      font-family:var(--mono); font-size:14px; color:var(--dim2);
     }
     .altitude-row input {
       flex:1; min-width:0; border:0; background:transparent;
-      font-family:var(--mono); font-size:19px; font-weight:500; color:var(--text);
+      font-family:var(--mono); font-size:22px; font-weight:500; color:var(--text);
       letter-spacing:-.02em;
     }
     .altitude-row input:focus { outline:none; }
     .altitude-row > div:focus-within { border-color:var(--accent); }
     select, #tracking-distance-input {
       height:34px; padding:0 10px; border:1px solid var(--line2); border-radius:6px;
-      background:var(--input); color:var(--text); font-size:12px;
+      background:var(--input); color:var(--text); font-size:14px;
     }
     #tracking-distance-input { width:84px; font-family:var(--mono); text-align:right; }
     input[type=checkbox] { accent-color:var(--accent); width:15px; height:15px; }
 
     .information-row {
       display:flex; align-items:baseline; justify-content:space-between; gap:12px;
-      padding:9px 0; border-bottom:1px solid #161b24; font-size:12px; color:var(--dim);
+      padding:9px 0; border-bottom:1px solid #161b24; font-size:14px; color:var(--dim);
     }
     .information-row:last-child { border-bottom:0; }
     .information-row strong {
-      font-family:var(--mono); font-size:13px; font-weight:500; color:var(--text);
+      font-family:var(--mono); font-size:15px; font-weight:500; color:var(--text);
       text-align:right; overflow-wrap:anywhere;
     }
     .mode-information, .target-information { display:flex; flex-direction:column; margin-top:12px; }
@@ -315,32 +321,32 @@
     /* ── gimbal ─────────────────────────────────────────── */
     .gimbal-controls { display:flex; flex-direction:column; gap:8px; }
     .gimbal-axis-row { display:flex; align-items:center; gap:10px; }
-    .gimbal-axis-name { width:42px; font-size:11px; color:var(--dim); }
+    .gimbal-axis-name { width:42px; font-size:13px; color:var(--dim); }
     .gimbal-step-button {
       width:34px; height:34px; flex-shrink:0; border:1px solid var(--line2);
-      border-radius:6px; background:var(--raise); color:var(--dim); font-size:16px; cursor:pointer;
+      border-radius:6px; background:var(--raise); color:var(--dim); font-size:19px; cursor:pointer;
     }
     .gimbal-step-button:hover { border-color:var(--accent); color:var(--text); }
-    .gimbal-angle-value { flex:1; text-align:center; font-family:var(--mono); font-size:16px; font-weight:500; }
+    .gimbal-angle-value { flex:1; text-align:center; font-family:var(--mono); font-size:19px; font-weight:500; }
     .gimbal-home-button {
       width:100%; height:40px; margin-top:11px; border:1px solid var(--line2);
       border-radius:var(--r2); background:var(--raise); color:var(--dim);
-      font-size:11px; font-weight:600; letter-spacing:.06em; cursor:pointer;
+      font-size:13px; font-weight:600; letter-spacing:.06em; cursor:pointer;
     }
-    #gimbal-status { margin-top:11px; padding:10px 12px; border-radius:var(--r2); background:var(--raise); font-size:11px; line-height:1.5; color:var(--dim2); }
+    #gimbal-status { margin-top:11px; padding:10px 12px; border-radius:var(--r2); background:var(--raise); font-size:13px; line-height:1.5; color:var(--dim2); }
 
     /* ── tracking ───────────────────────────────────────── */
     .tracking-actions { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
     .tracking-action-button {
       height:46px; border:1px solid var(--accent); border-radius:var(--r2);
-      background:var(--accent-bg); color:#bfe9fa; font-size:12px; font-weight:700;
+      background:var(--accent-bg); color:#bfe9fa; font-size:14px; font-weight:700;
       letter-spacing:.04em; cursor:pointer;
     }
     .tracking-action-button.stop { border-color:var(--bad); background:var(--bad-bg); color:var(--bad-fg); }
     .tracking-action-button:disabled { background:#101419; border-color:var(--line); color:#39414e; cursor:not-allowed; }
     .tracking-follow-options {
       display:flex; flex-direction:column; gap:9px; margin-top:11px; padding:12px 14px;
-      border-radius:var(--r2); background:var(--raise); color:var(--dim2); font-size:11px; line-height:1.5;
+      border-radius:var(--r2); background:var(--raise); color:var(--dim2); font-size:13px; line-height:1.5;
     }
     .tracking-follow-options label { display:flex; align-items:center; gap:9px; }
     .tracking-shell {
@@ -351,18 +357,18 @@
     #tracking-selection { position:absolute; inset:0; width:100%; height:100%; cursor:crosshair; touch-action:none; }
     #tracking-overlay {
       position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
-      padding:18px; background:rgba(4,5,10,.78); color:var(--dim2); font-size:12px;
+      padding:18px; background:rgba(4,5,10,.78); color:var(--dim2); font-size:14px;
       text-align:center; pointer-events:none;
     }
     #tracking-status {
       margin-top:11px; min-height:38px; padding:10px 12px; border-radius:var(--r2);
-      background:var(--raise); color:var(--dim2); font-size:11px; line-height:1.5;
+      background:var(--raise); color:var(--dim2); font-size:13px; line-height:1.5;
       border-left:2px solid var(--line2);
     }
     #tracking-status.success { border-left-color:var(--ok); color:var(--ok-fg); }
     #tracking-status.warning { border-left-color:var(--warn); color:var(--warn-fg); }
     #tracking-status.error { border-left-color:var(--bad); color:var(--bad-fg); }
-    #target-estimate-distance { margin-top:11px; font-size:12px; color:var(--dim); }
+    #target-estimate-distance { margin-top:11px; font-size:14px; color:var(--dim); }
     #target-estimate-distance strong { font-family:var(--mono); color:var(--text); }
     #tracking-log {
       max-height:260px; margin:0; padding:12px 14px; overflow:auto; border-radius:var(--r2);
@@ -372,7 +378,7 @@
     /* ── kết quả lệnh ───────────────────────────────────── */
     .command-result {
       padding:11px 13px; border-radius:var(--r2); background:var(--raise);
-      border-left:2px solid var(--line2); font-size:12px; line-height:1.55; color:var(--dim);
+      border-left:2px solid var(--line2); font-size:14px; line-height:1.55; color:var(--dim);
     }
     .command-result.success { border-left-color:var(--ok); color:var(--ok-fg); }
     .command-result.warning { border-left-color:var(--warn); color:var(--warn-fg); }
@@ -383,21 +389,52 @@
     .tab-button {
       display:flex; align-items:center; justify-content:center; gap:9px;
       height:40px; border:1px solid var(--line2); border-radius:var(--r2);
-      background:var(--raise); color:var(--dim); font-size:12px; font-weight:600; cursor:pointer;
+      background:var(--raise); color:var(--dim); font-size:14px; font-weight:600; cursor:pointer;
     }
     .tab-button.active { border-color:var(--accent); background:var(--accent-bg); color:var(--text); }
     .online-dot { width:7px; height:7px; border-radius:50%; background:var(--bad); }
     .online-dot.online { background:var(--ok); box-shadow:0 0 8px var(--ok); }
 
+    /* ── chọn drone để gửi nhiệm vụ (workspace VẼ) ──────── */
+    .drone-picker { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:11px; }
+    .drone-pick {
+      flex-direction:column; align-items:flex-start; justify-content:center; gap:3px;
+      height:62px; padding:0 15px; text-align:left;
+    }
+    .drone-pick b { font-family:var(--mono); font-size:18px; font-weight:600; letter-spacing:-.01em; }
+    .drone-pick em {
+      font-style:normal; font-size:13px; font-weight:500; color:var(--dim2);
+    }
+    .drone-pick.active em { color:var(--accent); }
+    .drone-pick .route-dot {
+      position:absolute; top:11px; right:13px;
+      width:7px; height:7px; border-radius:50%; background:var(--dim3);
+    }
+    .drone-pick { position:relative; }
+    .drone-pick.has-route .route-dot { background:var(--ok); box-shadow:0 0 8px var(--ok); }
+
+    .plan-section-gap { margin-top:20px; }
+    .param-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+    .param-grid .altitude-row { margin-top:0; }
+    /* Panel nhiệm vụ cuộn, nên hành động chính phải neo lại — không được
+       trôi khỏi màn hình khi danh sách tham số dài ra. */
+    #mission-footer {
+      position:sticky; bottom:0; z-index:3;
+      display:flex; flex-direction:column; gap:10px;
+      margin-top:16px; padding:14px 0 18px; background:var(--card);
+      box-shadow:0 -14px 18px -8px var(--card);
+    }
+    #mission-send-button { width:100%; height:60px; font-size:18px; letter-spacing:.06em; }
+
     /* ── an toàn: chi tiết ──────────────────────────────── */
     .safety-hero { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
     .safety-hero-cell { padding:15px 16px; border-radius:var(--r2); background:var(--raise); }
     .safety-hero-cell .field-label { margin-bottom:8px; }
-    .safety-hero-cell b { font-family:var(--mono); font-size:26px; font-weight:600; letter-spacing:-.02em; }
-    .safety-hero-cell u { text-decoration:none; font-family:var(--mono); font-size:12px; color:var(--dim2); }
+    .safety-hero-cell b { font-family:var(--mono); font-size:31px; font-weight:600; letter-spacing:-.02em; }
+    .safety-hero-cell u { text-decoration:none; font-family:var(--mono); font-size:14px; color:var(--dim2); }
     .budget-row { display:flex; flex-direction:column; gap:6px; margin-top:13px; }
-    .budget-head { display:flex; align-items:baseline; justify-content:space-between; font-size:12px; color:var(--dim); }
-    .budget-head b { font-family:var(--mono); font-size:13px; font-weight:500; color:#c3cad6; }
+    .budget-head { display:flex; align-items:baseline; justify-content:space-between; font-size:14px; color:var(--dim); }
+    .budget-head b { font-family:var(--mono); font-size:15px; font-weight:500; color:#c3cad6; }
     .budget-track { height:5px; border-radius:3px; background:#161b24; }
     .budget-fill { height:5px; border-radius:3px; background:var(--dim3); }
 
@@ -405,8 +442,8 @@
     @media (max-width:1360px) {
       #right-stack { width:288px; }
       #map-shell { width:288px; height:288px; }
-      body[data-ws="plan"] #map-shell, body.map-expanded #map-shell { inset:22px 382px 22px 22px; }
-      .safety-num b { font-size:38px; }
+      body[data-ws="plan"] #map-shell, body.map-expanded #map-shell { inset:22px 602px 22px 22px; }
+      .safety-num b { font-size:45px; }
       .safety-row { gap:30px; }
     }
   </style>
@@ -430,19 +467,19 @@
   <nav id="rail">
     <button type="button" class="rail-button active" data-ws="fly">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 4 20l8-4 8 4z"/></svg>
-      <span>BAY</span>
+      <span>FLY</span>
     </button>
     <button type="button" class="rail-button" data-ws="plan">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 18 9 7l6 8 5-9"/><circle cx="4" cy="18" r="1.7"/><circle cx="20" cy="6" r="1.7"/></svg>
-      <span>VẼ</span>
+      <span>PLAN</span>
     </button>
     <button type="button" class="rail-button" data-ws="track">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="7"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
-      <span>THEO</span>
+      <span>TRACK</span>
     </button>
     <button type="button" class="rail-button" data-ws="safety">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg>
-      <span>AN TOÀN</span>
+      <span>SAFETY</span>
     </button>
   </nav>
 
@@ -452,28 +489,28 @@
       <!-- ══ LỚP AN TOÀN ══ -->
       <div id="safety-strip" class="card">
         <div class="safety-head">
-          <span class="card-title">Lớp an toàn</span>
-          <span class="safety-badge" id="safety-verdict">CHỜ DỮ LIỆU</span>
+          <span class="card-title">Safety layer</span>
+          <span class="safety-badge" id="safety-verdict">WAITING FOR DATA</span>
         </div>
         <div class="safety-row">
           <div class="safety-cell">
-            <span class="safety-key">KHOẢNG CÁCH</span>
+            <span class="safety-key">SEPARATION</span>
             <div class="safety-num"><b id="safety-separation">—</b><span>m</span></div>
-            <span class="safety-note">sàn cứng <span id="safety-floor">20</span> m</span>
+            <span class="safety-note">hard floor <span id="safety-floor">20</span> m</span>
           </div>
           <div class="safety-cell">
-            <span class="safety-key">BIÊN CBF</span>
+            <span class="safety-key">CBF MARGIN</span>
             <div class="safety-num"><b id="safety-margin" style="font-weight:700">—</b><span>m</span></div>
-            <span class="safety-note">nhỏ nhất đang ghi nhận</span>
+            <span class="safety-note">lowest recorded</span>
           </div>
           <div class="safety-cell">
-            <span class="safety-key">RÀO CHẮN ĐÒI</span>
+            <span class="safety-key">BARRIER DEMAND</span>
             <div class="safety-num"><b id="safety-required" style="font-weight:400;color:#8b95a5">—</b><span>m</span></div>
-            <span class="safety-note">ở tốc độ khép hiện tại</span>
+            <span class="safety-note">at current closing speed</span>
           </div>
           <div class="safety-divider"></div>
           <div class="safety-cell">
-            <span class="safety-key">ĐIỀU PHỐI</span>
+            <span class="safety-key">COORDINATION</span>
             <div class="safety-roles">
               <div class="safety-role"><i id="role-dot-UAV-01"></i><em>UAV-01</em><strong id="role-UAV-01">—</strong></div>
               <div class="safety-role"><i id="role-dot-UAV-02"></i><em>UAV-02</em><strong id="role-UAV-02">—</strong></div>
@@ -489,7 +526,7 @@
             <div class="bar-actual" id="bar-actual"></div>
           </div>
           <div class="bar-scale">
-            <span>0</span><span class="floor-label">20 · SÀN CỨNG</span><span>60</span><span>120 m</span>
+            <span>0</span><span class="floor-label">20 · HARD FLOOR</span><span>60</span><span>120 m</span>
           </div>
         </div>
       </div>
@@ -517,17 +554,17 @@
       <!-- ══ THANH ĐIỀU KHIỂN ══ -->
       <div id="control-bar" class="card ws ws-fly card-flex">
         <div class="control-group" style="width:300px;flex-shrink:0">
-          <span class="card-title">Chế độ bay</span>
+          <span class="card-title">Flight mode</span>
           <div class="mode-grid">
             <button id="position-mode-button" type="button" class="mode-button active">POSITION</button>
             <button id="takeoff-mode-button" type="button" class="mode-button">TAKE OFF</button>
             <button id="rtl-mode-button" type="button" class="mode-button">RETURN HOME</button>
-            <button id="offboard-mode-button" type="button" class="mode-button" title="Legacy: bay tới một điểm bản đồ, không dùng để chạy Mission Path">MAP POINT</button>
+            <button id="offboard-mode-button" type="button" class="mode-button" title="Legacy: fly to a single map point; not for running a Mission Path">MAP POINT</button>
           </div>
           <div class="mode-information">
-            <div class="information-row"><span>PX4 mode thật</span><strong id="actual-mode">Unknown</strong></div>
-            <div class="information-row"><span>Nguồn điều khiển</span><strong id="control-source">Web keyboard</strong></div>
-            <div class="information-row"><span>Xe đang chọn</span><strong id="active-drone-label">UAV-01</strong></div>
+            <div class="information-row"><span>Actual PX4 mode</span><strong id="actual-mode">Unknown</strong></div>
+            <div class="information-row"><span>Control source</span><strong id="control-source">Web keyboard</strong></div>
+            <div class="information-row"><span>Selected vehicle</span><strong id="active-drone-label">UAV-01</strong></div>
           </div>
           <div class="tabs" style="margin-top:4px">
             <button type="button" class="tab-button active" data-drone-id="UAV-01">UAV-01</button>
@@ -538,8 +575,8 @@
         <div class="control-divider"></div>
 
         <div id="manual-control-section" class="control-group" style="width:214px;flex-shrink:0">
-          <div class="manual-status"><span>Bàn phím</span><strong id="manual-status-value">DISABLED</strong></div>
-          <button id="manual-enable-button" type="button" class="manual-enable-button">BẬT ĐIỀU KHIỂN</button>
+          <div class="manual-status"><span>Keyboard</span><strong id="manual-status-value">DISABLED</strong></div>
+          <button id="manual-enable-button" type="button" class="manual-enable-button">ENABLE CONTROL</button>
           <div class="manual-keyboard-grid">
             <button type="button" class="manual-key" data-code="KeyQ">Q</button>
             <button type="button" class="manual-key" data-code="KeyW">W</button>
@@ -551,41 +588,41 @@
             <button type="button" class="manual-key" data-code="Space">STOP</button>
             <button type="button" class="manual-key" data-code="KeyF">F ↓</button>
           </div>
-          <div class="manual-help">W/S: tiến/lùi · A/D: trái/phải<br>Q/E: quay · R/F: lên/xuống</div>
+          <div class="manual-help">W/S: forward/back · A/D: left/right<br>Q/E: yaw · R/F: up/down</div>
         </div>
 
         <div class="control-divider"></div>
 
         <div class="control-group" style="flex-grow:1;min-width:0">
-          <span class="card-title">Điều khiển</span>
+          <span class="card-title">Commands</span>
           <div class="action-grid">
             <button id="arm-button" type="button" class="action-button green">ARM</button>
             <button id="hold-button" type="button" class="action-button gray">HOLD</button>
             <button id="land-button" type="button" class="action-button orange">LAND</button>
             <button id="disarm-button" type="button" class="action-button red">DISARM</button>
           </div>
-          <button id="hold-current-button" type="button" class="action-button gray" style="width:100%">GIỮ VỊ TRÍ HIỆN TẠI</button>
-          <div id="command-result" class="command-result">Chưa có lệnh điều khiển.</div>
+          <button id="hold-current-button" type="button" class="action-button gray" style="width:100%">HOLD CURRENT POSITION</button>
+          <div id="command-result" class="command-result">No command sent yet.</div>
         </div>
 
         <div class="control-divider"></div>
 
         <div id="takeoff-control-section" class="control-group" style="width:230px;flex-shrink:0">
-          <span class="card-title">Cất cánh · bay tới điểm</span>
+          <span class="card-title">Take off · fly to point</span>
           <div class="altitude-row" style="margin-top:0">
-            <label for="takeoff-altitude">Cao độ cất cánh</label>
+            <label for="takeoff-altitude">Takeoff altitude</label>
             <div><input id="takeoff-altitude" type="number" min="2.5" max="30" step="0.5" value="5"> m</div>
           </div>
           <button id="start-takeoff-button" type="button" class="action-button green" style="width:100%">START TAKEOFF</button>
           <div id="offboard-control-section">
             <div class="altitude-row">
-              <label for="target-altitude">Cao độ điểm bay tới</label>
+              <label for="target-altitude">Target point altitude</label>
               <div><input id="target-altitude" type="number" min="1" max="200" step="0.5" value="5"> m</div>
             </div>
             <div class="target-information">
               <div class="information-row"><span>Latitude</span><strong id="target-latitude">Not selected</strong></div>
               <div class="information-row"><span>Longitude</span><strong id="target-longitude">Not selected</strong></div>
-              <div class="information-row"><span>Khoảng cách</span><strong id="target-distance">N/A</strong></div>
+              <div class="information-row"><span>Distance</span><strong id="target-distance">N/A</strong></div>
             </div>
             <div class="action-grid" style="margin-top:11px">
               <button id="fly-button" type="button" class="action-button green" disabled>FLY TO POINT</button>
@@ -601,25 +638,25 @@
           <div class="gimbal-controls">
             <div class="gimbal-axis-row">
               <div class="gimbal-axis-name">ROLL</div>
-              <button type="button" class="gimbal-step-button" data-axis="roll" data-direction="-1" aria-label="Giảm roll">−</button>
+              <button type="button" class="gimbal-step-button" data-axis="roll" data-direction="-1" aria-label="Decrease roll">−</button>
               <div id="gimbal-roll-value" class="gimbal-angle-value">0.0°</div>
-              <button type="button" class="gimbal-step-button" data-axis="roll" data-direction="1" aria-label="Tăng roll">+</button>
+              <button type="button" class="gimbal-step-button" data-axis="roll" data-direction="1" aria-label="Increase roll">+</button>
             </div>
             <div class="gimbal-axis-row">
               <div class="gimbal-axis-name">PITCH</div>
-              <button type="button" class="gimbal-step-button" data-axis="pitch" data-direction="-1" aria-label="Giảm pitch">−</button>
+              <button type="button" class="gimbal-step-button" data-axis="pitch" data-direction="-1" aria-label="Decrease pitch">−</button>
               <div id="gimbal-pitch-value" class="gimbal-angle-value">0.0°</div>
-              <button type="button" class="gimbal-step-button" data-axis="pitch" data-direction="1" aria-label="Tăng pitch">+</button>
+              <button type="button" class="gimbal-step-button" data-axis="pitch" data-direction="1" aria-label="Increase pitch">+</button>
             </div>
             <div class="gimbal-axis-row">
               <div class="gimbal-axis-name">YAW</div>
-              <button type="button" class="gimbal-step-button" data-axis="yaw" data-direction="-1" aria-label="Giảm yaw">−</button>
+              <button type="button" class="gimbal-step-button" data-axis="yaw" data-direction="-1" aria-label="Decrease yaw">−</button>
               <div id="gimbal-yaw-value" class="gimbal-angle-value">0.0°</div>
-              <button type="button" class="gimbal-step-button" data-axis="yaw" data-direction="1" aria-label="Tăng yaw">+</button>
+              <button type="button" class="gimbal-step-button" data-axis="yaw" data-direction="1" aria-label="Increase yaw">+</button>
             </div>
           </div>
           <button id="gimbal-home-button" type="button" class="gimbal-home-button">GIMBAL HOME · 0° / 0° / 0°</button>
-          <div id="gimbal-status">Chưa gửi lệnh gimbal.</div>
+          <div id="gimbal-status">No gimbal command sent.</div>
         </div>
       </div>
 
@@ -628,19 +665,19 @@
         <div class="control-group" style="width:330px;flex-shrink:0">
           <span class="card-title">Tracking</span>
           <div class="tracking-actions">
-            <button id="tracking-start-button" class="tracking-action-button" type="button">BẮT ĐẦU TRACKING</button>
-            <button id="tracking-stop-button" class="tracking-action-button stop" type="button">DỪNG TRACKING</button>
-            <button id="tracking-follow-start-button" class="tracking-action-button" type="button">BẮT ĐẦU FOLLOW</button>
-            <button id="tracking-follow-stop-button" class="tracking-action-button stop" type="button">DỪNG FOLLOW</button>
+            <button id="tracking-start-button" class="tracking-action-button" type="button">START TRACKING</button>
+            <button id="tracking-stop-button" class="tracking-action-button stop" type="button">STOP TRACKING</button>
+            <button id="tracking-follow-start-button" class="tracking-action-button" type="button">START FOLLOW</button>
+            <button id="tracking-follow-stop-button" class="tracking-action-button stop" type="button">STOP FOLLOW</button>
           </div>
           <div class="tracking-follow-options">
             <label>Baseline RGB:
               <select id="tracking-bootstrap-direction">
-                <option value="right">Bên phải LOS</option>
-                <option value="left">Bên trái LOS</option>
+                <option value="right">Right of LOS</option>
+                <option value="left">Left of LOS</option>
               </select>
             </label>
-            <label><input id="tracking-corridor-confirmed" type="checkbox"> Tôi xác nhận hành lang ngang trống (không có obstacle avoidance)</label>
+            <label><input id="tracking-corridor-confirmed" type="checkbox"> I confirm the lateral corridor is clear (no obstacle avoidance)</label>
           </div>
         </div>
         <div class="control-divider"></div>
@@ -649,52 +686,52 @@
           <div class="tracking-shell">
             <img id="tracking-feed" alt="Tracking stream">
             <canvas id="tracking-selection"></canvas>
-            <div id="tracking-overlay">Nhấn TRACKING để bắt đầu.</div>
+            <div id="tracking-overlay">Press TRACKING to begin.</div>
           </div>
-          <div id="tracking-status">Tracking chưa chạy.</div>
+          <div id="tracking-status">Tracking is not running.</div>
           <div id="target-estimate-distance">Bearing range: <strong>N/A</strong></div>
         </div>
         <div class="control-divider"></div>
         <div id="tracking-log-panel" class="control-group" style="flex-grow:1;min-width:0">
           <span class="card-title">Tracking Log · <span id="tracking-log-drone">UAV</span></span>
-          <pre id="tracking-log">Tracking chưa chạy.</pre>
+          <pre id="tracking-log">Tracking is not running.</pre>
         </div>
       </div>
 
       <!-- ══ AN TOÀN CHI TIẾT ══ -->
       <div id="control-bar-safety" class="card ws ws-safety card-flex" style="flex-grow:1;min-height:0;gap:26px;overflow:auto">
         <div class="control-group" style="width:400px;flex-shrink:0">
-          <span class="card-title">Rào chắn đang đòi</span>
+          <span class="card-title">Barrier demand</span>
           <div id="budget-list"></div>
         </div>
         <div class="control-divider"></div>
         <div class="control-group" style="width:330px;flex-shrink:0">
-          <span class="card-title">Ngưỡng đang áp dụng</span>
+          <span class="card-title">Applied thresholds</span>
           <div class="target-information" style="margin-top:0">
-            <div class="information-row"><span>Ngăn cách tối thiểu</span><strong id="cfg-separation">—</strong></div>
-            <div class="information-row"><span>Trần tốc độ CBF</span><strong id="cfg-cbf-speed">—</strong></div>
-            <div class="information-row"><span>Trần tốc độ mission</span><strong id="cfg-mission-speed">—</strong></div>
-            <div class="information-row"><span>Chế độ RL</span><strong id="cfg-rl-mode">—</strong></div>
+            <div class="information-row"><span>Minimum separation</span><strong id="cfg-separation">—</strong></div>
+            <div class="information-row"><span>CBF speed ceiling</span><strong id="cfg-cbf-speed">—</strong></div>
+            <div class="information-row"><span>Mission speed ceiling</span><strong id="cfg-mission-speed">—</strong></div>
+            <div class="information-row"><span>RL mode</span><strong id="cfg-rl-mode">—</strong></div>
           </div>
         </div>
         <div class="control-divider"></div>
         <div class="control-group" style="flex-grow:1;min-width:0">
-          <span class="card-title">Chi tiết</span>
+          <span class="card-title">Detail</span>
           <div class="safety-hero">
             <div class="safety-hero-cell">
-              <div class="field-label">KHOẢNG CÁCH</div>
+              <div class="field-label">SEPARATION</div>
               <b id="safety-detail-separation">—</b><u> m</u>
             </div>
             <div class="safety-hero-cell">
-              <div class="field-label">BIÊN CBF</div>
+              <div class="field-label">CBF MARGIN</div>
               <b id="safety-detail-margin">—</b><u> m</u>
             </div>
             <div class="safety-hero-cell">
-              <div class="field-label">RÀO CHẮN ĐÒI</div>
+              <div class="field-label">BARRIER DEMAND</div>
               <b id="safety-detail-required" style="color:#8b95a5">—</b><u> m</u>
             </div>
             <div class="safety-hero-cell">
-              <div class="field-label">CAN THIỆP</div>
+              <div class="field-label">INTERVENTION</div>
               <b id="safety-detail-closing">—</b><u> %</u>
             </div>
           </div>
@@ -705,88 +742,109 @@
     <div id="right-stack">
       <section id="map-shell">
         <div id="map"></div>
-        <div id="map-click-badge"><i></i><span id="map-click-text">Click bản đồ không làm gì</span></div>
-        <div id="map-hint">Position: bật keyboard rồi dùng W/A/S/D</div>
+        <div id="map-click-badge"><i></i><span id="map-click-text">Map click does nothing</span></div>
+        <div id="map-offline-note" style="display:none">NO TILES HERE · outside local pack</div>
+        <div id="map-hint">Position: enable the keyboard, then use W/A/S/D</div>
         <div id="map-expand">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
-          <span id="map-expand-text">MỞ RỘNG</span>
+          <span id="map-expand-text">EXPAND</span>
         </div>
       </section>
 
       <div id="mission-card" class="card">
         <div class="mission-head">
-          <span class="card-title">Nhiệm vụ</span>
+          <span class="card-title">Mission</span>
           <span id="mission-drone-label">UAV-01</span>
+        </div>
+
+        <!-- chọn xe nhận nhiệm vụ — chỉ ở workspace VẼ, vì thanh điều khiển
+             của workspace BAY (nơi có tab chọn xe) bị ẩn ở đây -->
+        <div class="ws ws-plan" style="margin-bottom:20px">
+          <span class="card-title">Send to vehicle</span>
+          <div class="drone-picker">
+            <button type="button" class="tab-button drone-pick active" data-drone-id="UAV-01">
+              <span class="route-dot"></span><b>UAV-01</b><em id="pick-note-UAV-01">no route drawn</em>
+            </button>
+            <button type="button" class="tab-button drone-pick" data-drone-id="UAV-02">
+              <span class="route-dot"></span><b>UAV-02</b><em id="pick-note-UAV-02">no route drawn</em>
+            </button>
+          </div>
         </div>
 
         <div id="mission-stepper">
           <div class="step" id="step-1">
             <div class="step-mark"><div class="step-dot">1</div><div class="step-line"></div></div>
-            <div class="step-text"><div class="step-title">Vẽ đường bay</div><div class="step-note" id="step-1-note">chưa vẽ</div></div>
+            <div class="step-text"><div class="step-title">Draw route</div><div class="step-note" id="step-1-note">not drawn</div></div>
           </div>
           <div class="step" id="step-2">
             <div class="step-mark"><div class="step-dot">2</div><div class="step-line"></div></div>
-            <div class="step-text"><div class="step-title">Gửi nhiệm vụ</div><div class="step-note" id="step-2-note">chưa gửi</div></div>
+            <div class="step-text"><div class="step-title">Send mission</div><div class="step-note" id="step-2-note">not sent</div></div>
           </div>
           <div class="step" id="step-3">
             <div class="step-mark"><div class="step-dot">3</div><div class="step-line"></div></div>
-            <div class="step-text"><div class="step-title">Arm</div><div class="step-note" id="step-3-note">chưa arm</div></div>
+            <div class="step-text"><div class="step-title">Arm</div><div class="step-note" id="step-3-note">not armed</div></div>
           </div>
           <div class="step" id="step-4">
             <div class="step-mark"><div class="step-dot">4</div><div class="step-line"></div></div>
-            <div class="step-text"><div class="step-title">Cất cánh</div><div class="step-note" id="step-4-note">chưa bay</div></div>
+            <div class="step-text"><div class="step-title">Take off</div><div class="step-note" id="step-4-note">not airborne</div></div>
           </div>
           <div class="step" id="step-5">
             <div class="step-mark"><div class="step-dot">5</div></div>
-            <div class="step-text"><div class="step-title">Bắt đầu bay</div><div class="step-note" id="step-5-note">chưa sẵn sàng</div></div>
+            <div class="step-text"><div class="step-title">Start flight</div><div class="step-note" id="step-5-note">not ready</div></div>
           </div>
         </div>
 
         <!-- công cụ vẽ, chỉ ở workspace VẼ -->
-        <div class="ws ws-plan" style="margin-top:16px">
-          <span class="card-title">Công cụ</span>
+        <div class="ws ws-plan plan-section-gap">
+          <span class="card-title">Drawing tools</span>
           <div class="mode-grid" style="grid-template-columns:repeat(4,1fr);margin-top:11px">
-            <button id="mission-draw-button" type="button" class="mode-button" style="height:56px;font-size:11px">VẼ TAY</button>
-            <button id="mission-square-button" type="button" class="mode-button" style="height:56px;font-size:11px">VUÔNG</button>
-            <button id="mission-circle-button" type="button" class="mode-button" style="height:56px;font-size:11px">TRÒN</button>
-            <button id="mission-clear-button" type="button" class="mode-button" style="height:56px;font-size:11px">XOÁ</button>
+            <button id="mission-draw-button" type="button" class="mode-button" style="height:56px">FREEHAND</button>
+            <button id="mission-square-button" type="button" class="mode-button" style="height:56px">SQUARE</button>
+            <button id="mission-circle-button" type="button" class="mode-button" style="height:56px">CIRCLE</button>
+            <button id="mission-clear-button" type="button" class="mode-button" style="height:56px">CLEAR</button>
+          </div>
+
+          <div class="plan-section-gap"><span class="card-title">Parameters</span></div>
+          <div class="param-grid" style="margin-top:11px">
+            <div class="altitude-row">
+              <label for="mission-altitude">Altitude (ENU up)</label>
+              <div><input id="mission-altitude" type="number" min="2" max="200" step="0.5" value="9"> m</div>
+            </div>
+            <div class="altitude-row">
+              <label for="mission-speed">Flight speed</label>
+              <div><input id="mission-speed" type="number" min="0.2" max="19.2" step="0.1" value="5"> m/s</div>
+            </div>
           </div>
           <div class="altitude-row">
-            <label for="mission-altitude">Cao độ (ENU up)</label>
-            <div><input id="mission-altitude" type="number" min="2" max="200" step="0.5" value="9"> m</div>
-          </div>
-          <div class="altitude-row">
-            <label for="mission-speed">Tốc độ bay</label>
-            <div><input id="mission-speed" type="number" min="0.2" max="19.2" step="0.1" value="5"> m/s</div>
-          </div>
-          <div class="altitude-row">
-            <label for="mission-size">Cạnh / đường kính preset</label>
+            <label for="mission-size">Preset side / diameter</label>
             <div><input id="mission-size" type="number" min="5" max="600" step="1" value="240"> m</div>
           </div>
           <div class="target-information">
             <div class="information-row"><span>Waypoint</span><strong id="mission-waypoints">0</strong></div>
-            <div class="information-row"><span id="mission-perimeter-label">Chu vi</span><strong id="mission-perimeter">N/A</strong></div>
-            <div class="information-row"><span id="mission-lap-label">Một vòng</span><strong id="mission-lap">N/A</strong></div>
-            <div class="information-row"><span>Profile runtime</span><strong id="mission-profile">Đang tải...</strong></div>
-            <div class="information-row"><span>Trạng thái</span><strong id="mission-state">Chưa gửi</strong></div>
-            <div class="information-row"><span>Thực thi</span><strong id="mission-execution">Chưa chạy</strong></div>
-            <div class="information-row"><span>Flight gate</span><strong id="mission-readiness">CHƯA SẴN SÀNG</strong></div>
+            <div class="information-row"><span id="mission-perimeter-label">Perimeter</span><strong id="mission-perimeter">N/A</strong></div>
+            <div class="information-row"><span id="mission-lap-label">One lap</span><strong id="mission-lap">N/A</strong></div>
+            <div class="information-row"><span>Profile runtime</span><strong id="mission-profile">Loading...</strong></div>
+            <div class="information-row"><span>State</span><strong id="mission-state">Not sent</strong></div>
+            <div class="information-row"><span>Execution</span><strong id="mission-execution">Not running</strong></div>
+            <div class="information-row"><span>Flight gate</span><strong id="mission-readiness">NOT READY</strong></div>
           </div>
-          <button id="mission-send-button" type="button" class="action-button green" style="width:100%;margin-top:14px" disabled>GỬI NHIỆM VỤ</button>
-          <div class="panel-subtitle">Click các góc <strong>đi vòng quanh</strong> hình, một chiều duy nhất. Click chéo tạo đường tự cắt và sẽ bị từ chối. Đường tự khép kín — đừng click lại điểm đầu. Không bấm MAP POINT · LEGACY để chạy quỹ đạo — nút đó nằm ở workspace BAY và chỉ bay tới một điểm.</div>
+          <div class="panel-subtitle">Click the corners <strong>going around</strong> the shape, one direction only. Clicking across creates a self-intersecting path and it will be rejected. The path closes itself — do not click the first point again. Do not use MAP POINT · LEGACY to run a route; that button lives in the FLY workspace and only flies to a single point.</div>
         </div>
 
         <div style="flex-grow:1"></div>
-        <div class="action-grid" style="margin-top:16px">
-          <button id="mission-start-button" type="button" class="action-button green" disabled>BẮT ĐẦU</button>
-          <button id="mission-stop-button" type="button" class="action-button orange" disabled>DỪNG</button>
+        <div id="mission-footer">
+          <button id="mission-send-button" type="button" class="ws ws-plan action-button green" disabled>SEND MISSION TO <span id="mission-send-target">UAV-01</span></button>
+          <div class="action-grid">
+            <button id="mission-start-button" type="button" class="action-button green" disabled>START</button>
+            <button id="mission-stop-button" type="button" class="action-button orange" disabled>STOP</button>
+          </div>
         </div>
       </div>
     </div>
   </div>
 </main>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="/static/vendor/leaflet/leaflet.js"></script>
 <script>
   const DRONE_IDS=["UAV-01","UAV-02"];
   const NAV_STATE_NAMES={0:"Manual",1:"Altitude",2:"Position",3:"Mission",4:"Hold",5:"RTL",14:"Offboard",17:"Takeoff",18:"Land"};
@@ -824,7 +882,45 @@
   const lastMissionSignature={};
 
   const map=L.map("map").setView([47.3979712,8.5461637],18);
-  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:20,attribution:"© OpenStreetMap contributors"}).addTo(map);
+
+  /* Nền lưới vẽ cục bộ: bản đồ vẫn đọc được khi không có internet (bay ngoài
+     đồng, hoặc DNS chặn tile). OSM chồng lên trên khi tải được. */
+  const GridBackdrop=L.GridLayer.extend({
+    createTile(coords){
+      const tile=document.createElement("canvas");
+      const size=this.getTileSize();
+      tile.width=size.x; tile.height=size.y;
+      const c=tile.getContext("2d");
+      c.fillStyle="#e9e5de"; c.fillRect(0,0,size.x,size.y);
+      c.strokeStyle="#d3ccc0"; c.lineWidth=1;
+      for(let i=0;i<=4;i++){
+        const o=Math.round(i*size.x/4)+.5;
+        c.beginPath(); c.moveTo(o,0); c.lineTo(o,size.y); c.stroke();
+        c.beginPath(); c.moveTo(0,o); c.lineTo(size.x,o); c.stroke();
+      }
+      return tile;
+    }
+  });
+  new GridBackdrop({maxZoom:22}).addTo(map);
+
+  /* Tile phục vụ từ chính FastAPI này, không phải CDN — gói dựng sẵn bằng
+     fetch_map_tiles.py. maxNativeZoom dừng ở mức gói có; Leaflet phóng to ảnh
+     z18 cho các mức sâu hơn thay vì để trống. */
+  const tileLayer=L.tileLayer("/static/tiles/{z}/{x}/{y}.png",{
+    minZoom:13, maxNativeZoom:18, maxZoom:20,
+    attribution:"© OpenStreetMap contributors",
+    errorTileUrl:"data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
+  });
+  /* Ra ngoài vùng đã tải thì nói thẳng, thay vì để người bay đoán xem bản đồ
+     hỏng hay chỉ là chưa có tile ở đó. */
+  tileLayer.on("tileerror",()=>setMapOfflineNote(true));
+  tileLayer.on("tileload",()=>setMapOfflineNote(false));
+  tileLayer.addTo(map);
+
+  function setMapOfflineNote(offline){
+    const el=document.getElementById("map-offline-note");
+    if(el)el.style.display=offline?"flex":"none";
+  }
 
   function getValue(object,paths,fallback=null){
     for(const path of paths){
@@ -855,19 +951,19 @@
     const nav=Number(droneNavState(drone));
 
     if(!drone){
-      return "chưa có telemetry";
+      return "no telemetry";
     }
 
     if(!droneArmed(drone)){
-      return "UAV chưa ARM";
+      return "vehicle is not armed";
     }
 
     if(!Number.isFinite(nav)||nav!==2){
-      return "PX4 chưa ở Position mode";
+      return "PX4 is not in Position mode";
     }
 
     if(!droneManualSignalOk(drone)){
-      return "manual bridge chưa chạy hoặc PX4 chưa nhận manual input";
+      return "manual bridge is down or PX4 is not accepting manual input";
     }
 
     return "";
@@ -888,7 +984,7 @@
     e.textContent=text; e.className="command-result"; if(type)e.classList.add(type);
   }
   function sendJson(message){
-    if(!websocketReady()){setCommandResult("WebSocket chưa kết nối.","error");return false;}
+    if(!websocketReady()){setCommandResult("WebSocket is not connected.","error");return false;}
     socket.send(JSON.stringify(message)); return true;
   }
   function sendAction(action,extra={}){return sendJson({type:"control_action",drone_id:selectedDroneId,action,...extra});}
@@ -943,7 +1039,7 @@
       setGimbalStatus(`${selectedDroneId}: AUTO TRACKING${rateText}${yawLimitText}${bodyYawText}${bodyYawError?` · ${bodyYawError}`:""}.`,statusType);
     }else if(status.dataset.autoTracking){
       delete status.dataset.autoTracking;
-      setGimbalStatus(`${selectedDroneId}: điều khiển gimbal bằng tay.`);
+      setGimbalStatus(`${selectedDroneId}: manual gimbal control.`);
     }
   }
   function setTrackingStatus(text,type=""){
@@ -987,14 +1083,14 @@
         desired_distance_m:10
       });
     }catch(error){
-      setTrackingStatus(error.message||"Không khởi động được tracking.","error");
+      setTrackingStatus(error.message||"Could not start tracking.","error");
     }finally{
       updateTrackingUi();
     }
   }
   async function stopTracking(){
     try{await trackingApi("/api/tracking/stop");}
-    catch(error){setTrackingStatus(error.message||"Không dừng được tracking.","error");}
+    catch(error){setTrackingStatus(error.message||"Could not stop tracking.","error");}
   }
   async function startFollow(){
     const direction=document.getElementById("tracking-bootstrap-direction").value;
@@ -1006,12 +1102,12 @@
         corridor_confirmed:confirmed
       });
     }catch(error){
-      setTrackingStatus(error.message||"Không bắt đầu được Follow.","error");
+      setTrackingStatus(error.message||"Could not start Follow.","error");
     }
   }
   async function stopFollow(){
     try{await trackingApi("/api/tracking/follow",{enabled:false});}
-    catch(error){setTrackingStatus(error.message||"Không dừng được Follow.","error");}
+    catch(error){setTrackingStatus(error.message||"Could not stop Follow.","error");}
   }
   function openTrackingStream(force=false){
     if(!trackingStatus?.active)return;
@@ -1022,7 +1118,7 @@
     const overlay=document.getElementById("tracking-overlay");
     image.alt=`Tracking ${trackingStatus.drone_id}`;
     overlay.style.display="flex";
-    overlay.textContent=`Đang mở tracking ${trackingStatus.drone_id}...`;
+    overlay.textContent=`Opening tracking on ${trackingStatus.drone_id}...`;
     image.src=`/api/tracking/stream?ts=${Date.now()}`;
   }
   function scheduleTrackingReconnect(){
@@ -1046,7 +1142,7 @@
     const output=document.getElementById("tracking-log");
     panel.classList.toggle("active",active);
     if(!active){
-      output.textContent="Tracking chưa chạy.";
+      output.textContent="Tracking is not running.";
       return;
     }
 
@@ -1132,12 +1228,12 @@
     )?"":"none";
     followStopButton.style.display=followWorkflowActive?"":"none";
     followStartButton.textContent=workflowState==="RGB_BOOTSTRAP"
-      ?"ĐANG HIỆU CHUẨN RGB"
+      ?"CALIBRATING RGB"
       :["TARGET_INITIALIZED","PRESTREAMING_TARGET","REQUESTING_FOLLOW_MODE"].includes(workflowState)
-        ?"ĐANG CHUYỂN PX4 FOLLOW"
+        ?"SWITCHING PX4 TO FOLLOW"
         :workflowState==="FOLLOWING"
-          ?"ĐANG FOLLOW"
-          :"BẮT ĐẦU FOLLOW";
+          ?"FOLLOWING"
+          :"START FOLLOW";
     panel.classList.toggle("active",active);
     if(!active){
       trackingStreamStarted=false;
@@ -1145,8 +1241,8 @@
       document.getElementById("tracking-feed").removeAttribute("src");
       clearTrackingSelection();
       if(trackingStatus&&!trackingStatus.available){
-        setTrackingStatus(trackingStatus.error||"Package tracking không khả dụng.","error");
-      }else setTrackingStatus("Tracking chưa chạy.");
+        setTrackingStatus(trackingStatus.error||"Tracking package is unavailable.","error");
+      }else setTrackingStatus("Tracking is not running.");
       return;
     }
 
@@ -1156,7 +1252,7 @@
     const age=Number(trackingStatus.last_frame_age_ms);
     if(!trackingStatus.has_frame||Number.isFinite(age)&&age>3000){
       overlay.style.display="flex";
-      overlay.textContent=`Đang chờ camera ${trackingStatus.drone_id}...`;
+      overlay.textContent=`Waiting for camera on ${trackingStatus.drone_id}...`;
       scheduleTrackingReconnect();
     }else{
       overlay.style.display="none";
@@ -1168,7 +1264,7 @@
     const fps=Number(trackingStatus.fps);
     const fpsText=Number.isFinite(fps)?` · ${fps.toFixed(1)} FPS`:"";
     const sourceFps=Number(trackingStatus.source_fps);
-    const sourceFpsText=Number.isFinite(sourceFps)?` / nguồn ${sourceFps.toFixed(1)}`:"";
+    const sourceFpsText=Number.isFinite(sourceFps)?` / source ${sourceFps.toFixed(1)}`:"";
     const trackerText=trackingStatus.tracker?` · ${trackingStatus.tracker}`:"";
     const autoGimbalText=trackingStatus.gimbal_active?" · gimbal AUTO":"";
     const bodyYawCommand=Number(trackingStatus.body_yaw_command);
@@ -1238,13 +1334,13 @@
       ?` · Kalman/Memory/ReID${Number.isFinite(Number(advanced.reid_score))?` ${Number(advanced.reid_score).toFixed(2)}`:""}`
       :"";
     if(trackingStatus.state==="selecting"){
-      setTrackingStatus(`${trackingStatus.drone_id}: kéo chuột để chọn mục tiêu.`,"warning");
+      setTrackingStatus(`${trackingStatus.drone_id}: drag to select a target.`,"warning");
     }else if(trackingStatus.state==="tracking"){
-      setTrackingStatus(`${trackingStatus.drone_id}: đang bám mục tiêu.`,trackingStatus.body_yaw_error||followError||visualError||motionError?"warning":"success");
+      setTrackingStatus(`${trackingStatus.drone_id}: tracking the target.`,trackingStatus.body_yaw_error||followError||visualError||motionError?"warning":"success");
     }else if(["occluded","lost"].includes(trackingStatus.state)){
       setTrackingStatus(`${trackingStatus.drone_id}: ${trackingStatus.state.toUpperCase()}.`,"warning");
     }else if(trackingStatus.state==="error"){
-      setTrackingStatus(trackingStatus.error||"Tracking gặp lỗi.","error");
+      setTrackingStatus(trackingStatus.error||"Tracking failed.","error");
     }
   }
   function resizeTrackingCanvas(){
@@ -1294,17 +1390,17 @@
       await trackingApi("/api/tracking/bbox",{
         x:x/canvas.width,y:y/canvas.height,width:width/canvas.width,height:height/canvas.height
       });
-    }catch(error){setTrackingStatus(error.message||"Không chọn được mục tiêu.","error");}
+    }catch(error){setTrackingStatus(error.message||"Could not select a target.","error");}
   }
   function sendGimbalStep(axis,direction){
     const delta=direction*GIMBAL_STEP_DEG;
     if(sendJson({type:"gimbal_control",drone_id:selectedDroneId,axis,delta_deg:delta})){
-      setGimbalStatus(`${selectedDroneId}: đang ${delta>0?"tăng":"giảm"} ${axis} ${Math.abs(delta)}°...`);
+      setGimbalStatus(`${selectedDroneId}: ${delta>0?"increasing":"decreasing"} ${axis} by ${Math.abs(delta)}°...`);
     }
   }
   function sendGimbalHome(){
     if(sendJson({type:"gimbal_home",drone_id:selectedDroneId})){
-      setGimbalStatus(`${selectedDroneId}: đang đưa gimbal về home...`);
+      setGimbalStatus(`${selectedDroneId}: returning gimbal to home...`);
     }
   }
   function sendManualFrame(droneId,enabled,axes={forward:0,right:0,up:0,yaw:0}){
@@ -1370,17 +1466,17 @@
 
     const sourceText={
       position:"Web keyboard / ROS 2",
-      offboard_map:"Legacy ROS 2 point controller (không phải Mission)",
+      offboard_map:"Legacy ROS 2 point controller (not Mission)",
       takeoff:"PX4 automatic takeoff",
       rtl:"PX4 Return to Home"
     };
     document.getElementById("control-source").textContent=sourceText[mode]??"PX4";
 
     const hintText={
-      position:"Position: bật keyboard rồi dùng W/A/S/D",
-      offboard_map:`${selectedDroneId}: legacy point mode — click bản đồ để chọn một điểm`,
-      takeoff:`${selectedDroneId}: chọn độ cao 2.5–10 m rồi nhấn START TAKEOFF`,
-      rtl:`${selectedDroneId}: đang Return to Home`
+      position:"Position: enable the keyboard, then use W/A/S/D",
+      offboard_map:`${selectedDroneId}: legacy point mode — click the map to pick a point`,
+      takeoff:`${selectedDroneId}: pick an altitude of 2.5–10 m, then press START TAKEOFF`,
+      rtl:`${selectedDroneId}: returning to home`
     };
     document.getElementById("map-hint").textContent=hintText[mode]??"PX4 control";
 
@@ -1401,28 +1497,28 @@
     if(mode==="position"){
       if(!sendAction("position"))return;
       markPendingMode("position");
-      setCommandResult(`${selectedDroneId}: đang yêu cầu Position mode...`,"warning");
+      setCommandResult(`${selectedDroneId}: requesting Position mode...`,"warning");
       return;
     }
 
     if(mode==="offboard_map"){
       if(!sendAction("offboard_map"))return;
       markPendingMode("offboard_map");
-      setCommandResult(`${selectedDroneId}: đang yêu cầu Offboard mode...`,"warning");
+      setCommandResult(`${selectedDroneId}: requesting Offboard mode...`,"warning");
     }
   }
 
   function requestTakeoff(){
     const armed=Boolean(getValue(selectedDrone()||{},["status.armed","armed"],false));
     if(!armed){
-      setCommandResult(`${selectedDroneId}: hãy nhấn ARM và chờ Armed = YES trước khi Takeoff.`,"error");
+      setCommandResult(`${selectedDroneId}: press ARM and wait for Armed = YES before Takeoff.`,"error");
       return;
     }
 
     let altitude=Number(document.getElementById("takeoff-altitude").value);
 
     if(!Number.isFinite(altitude)||altitude<2.5||altitude>10){
-      setCommandResult("Độ cao Takeoff phải từ 2.5 đến 10 m.","error");
+      setCommandResult("Takeoff altitude must be between 2.5 and 10 m.","error");
       return;
     }
 
@@ -1435,7 +1531,7 @@
     if(!sendAction("takeoff",{altitude_m:altitude}))return;
 
     markPendingMode("takeoff");
-    setCommandResult(`${selectedDroneId}: đang cất cánh tới ${altitude.toFixed(1)} m...`,"warning");
+    setCommandResult(`${selectedDroneId}: taking off to ${altitude.toFixed(1)} m...`,"warning");
   }
 
   function requestRtl(){
@@ -1445,7 +1541,7 @@
     if(!sendAction("rtl"))return;
 
     markPendingMode("rtl");
-    setCommandResult(`${selectedDroneId}: đã gửi RETURN HOME. Sau khi hạ cánh, chuyển POSITION trước khi ARM lại.`,"warning");
+    setCommandResult(`${selectedDroneId}: RETURN HOME sent. After landing, switch to POSITION before arming again.`,"warning");
   }
   function requestLand(){
     disableManual(selectedDroneId,true);
@@ -1455,12 +1551,12 @@
     pendingModes[selectedDroneId]=null;
     selectedModes[selectedDroneId]="position";
     updateModeUi();
-    setCommandResult(`${selectedDroneId}: đã gửi LAND. Chờ Armed = NO, sau đó dùng POSITION để phục hồi trước khi ARM lại.`,"warning");
+    setCommandResult(`${selectedDroneId}: LAND sent. Wait for Armed = NO, then use POSITION to recover before arming again.`,"warning");
   }
   function requestArm(){
     const drone=selectedDrone();
     if(!drone){
-      setCommandResult(`${selectedDroneId}: chưa có telemetry, chưa ARM được.`,"error");
+      setCommandResult(`${selectedDroneId}: no telemetry, cannot arm.`,"error");
       return;
     }
 
@@ -1471,7 +1567,7 @@
 
       markPendingMode("position");
       setCommandResult(
-        `${selectedDroneId}: chưa ARM. Đang yêu cầu POSITION để thoát RTL/LAND/OFFBOARD hoặc chờ Preflight OK, rồi bấm ARM lại.`,
+        `${selectedDroneId}: not armed. Requesting POSITION to leave RTL/LAND/OFFBOARD, or wait for Preflight OK, then press ARM again.`,
         "warning"
       );
       return;
@@ -1483,13 +1579,13 @@
     if(selectedModes[selectedDroneId]!=="position")return;
     if(manualEnabled[selectedDroneId]){
       disableManual(selectedDroneId,true);
-      setCommandResult(`${selectedDroneId}: keyboard đã tắt.`);
+      setCommandResult(`${selectedDroneId}: keyboard disabled.`);
       return;
     }
 
     const blockReason=manualControlBlockReason(selectedDrone());
     if(blockReason){
-      setCommandResult(`${selectedDroneId}: chưa bật keyboard được - ${blockReason}.`,"warning");
+      setCommandResult(`${selectedDroneId}: cannot enable the keyboard - ${blockReason}.`,"warning");
       return;
     }
 
@@ -1540,7 +1636,7 @@
         pendingModes[selectedDroneId]=null;
         if(actualMode)selectedModes[selectedDroneId]=actualMode;
         setCommandResult(
-          `${selectedDroneId}: PX4 không chuyển sang ${expiredMode} trong 8 giây. Kiểm tra command ACK.`,
+          `${selectedDroneId}: PX4 did not switch to ${expiredMode} within 8 s. Check the command ACK.`,
           "error"
         );
       }
@@ -1553,7 +1649,7 @@
 
     if(manualEnabled[selectedDroneId]&&manualControlBlockReason(d)){
       disableManual(selectedDroneId,true);
-      setCommandResult(`${selectedDroneId}: keyboard đã tắt vì UAV không còn sẵn sàng nhận manual input.`,"warning");
+      setCommandResult(`${selectedDroneId}: keyboard disabled — the vehicle no longer accepts manual input.`,"warning");
     }
 
     document.getElementById("telemetry-content").innerHTML=`
@@ -1567,7 +1663,7 @@
       <div class="telemetry-item"><div class="field-label">GPS satellites</div><div class="field-value">${sats??"N/A"}</div></div>
       <div class="telemetry-item"><div class="field-label">Local XYZ</div><div class="field-value">${formatNumber(x,1)}, ${formatNumber(y,1)}, ${formatNumber(z,1)}</div></div>
       <div class="telemetry-item"><div class="field-label">CBF margin</div><div class="field-value">${cbfMargin===null?"N/A":`${formatNumber(cbfMargin,2)} m`}</div></div>
-      <div class="telemetry-item"><div class="field-label">CBF can thiệp</div><div class="field-value">${cbfRate===null?"N/A":`${(cbfRate*100).toFixed(1)} %`}</div></div>
+      <div class="telemetry-item"><div class="field-label">CBF INTERVENTION</div><div class="field-value">${cbfRate===null?"N/A":`${(cbfRate*100).toFixed(1)} %`}</div></div>
       <div class="telemetry-item"><div class="field-label">Global position</div><div class="field-value">${pos?`${pos.latitude.toFixed(6)}, ${pos.longitude.toFixed(6)}`:"N/A"}</div></div>`;
 
     updateModeUi();
@@ -1650,7 +1746,7 @@
     trackingStreamStarted=false;
     const overlay=document.getElementById("tracking-overlay");
     overlay.style.display="flex";
-    overlay.textContent=`Không mở được tracking ${trackingStatus.drone_id}.`;
+    overlay.textContent=`Could not open tracking on ${trackingStatus.drone_id}.`;
     scheduleTrackingReconnect();
   });
   const trackingCanvas=document.getElementById("tracking-selection");
@@ -1710,13 +1806,13 @@
       return;
     }
     if(selectedModes[selectedDroneId]!=="offboard_map"){
-      setCommandResult("Muốn bay tới một điểm riêng lẻ, chọn MAP POINT · LEGACY. Mission không dùng nút này.","warning"); return;
+      setCommandResult("To fly to a single point, choose MAP POINT · LEGACY. Mission does not use this button.","warning"); return;
     }
     targets[selectedDroneId]={latitude:e.latlng.lat,longitude:e.latlng.lng};
     if(targetMarkers[selectedDroneId])targetMarkers[selectedDroneId].setLatLng(e.latlng);
     else targetMarkers[selectedDroneId]=L.circleMarker(e.latlng,{radius:8,weight:3,color:"#fde047",fillColor:"#fde047",fillOpacity:.75}).addTo(map);
     updateTargetUi();
-    setCommandResult(`${selectedDroneId}: đã chọn điểm, nhấn FLY TO POINT.`,"warning");
+    setCommandResult(`${selectedDroneId}: point selected, press FLY TO POINT.`,"warning");
   });
 
   document.getElementById("target-altitude").addEventListener("change",e=>{
@@ -1734,7 +1830,7 @@
   document.getElementById("fly-button").addEventListener("click",()=>{
     const t=targets[selectedDroneId]; if(!t)return;
     if(sendJson({type:"goto_global",drone_id:selectedDroneId,latitude_deg:t.latitude,longitude_deg:t.longitude,altitude_m:targetAltitudes[selectedDroneId]}))
-      setCommandResult(`${selectedDroneId}: đã gửi điểm đích.`,"warning");
+      setCommandResult(`${selectedDroneId}: destination point sent.`,"warning");
   });
   document.getElementById("cancel-target-button").addEventListener("click",()=>{
     targets[selectedDroneId]=null;
@@ -1774,7 +1870,7 @@
     missionDrawing=false;
     redrawMission(selectedDroneId);
     updateMissionUi();
-    setCommandResult(`${selectedDroneId}: đã tạo quỹ đạo ${vertexCount===4?"vuông":"tròn"} ${size} m.`,"warning");
+    setCommandResult(`${selectedDroneId}: created a ${vertexCount===4?"square":"circular"} route of ${size} m.`,"warning");
   }
 
   function redrawMission(droneId){
@@ -1809,23 +1905,23 @@
   function missionReasonText(reason){
     const text=String(reason||"");
     const exact={
-      "mission runtime is disabled":"Mission runtime chưa bật",
-      "mission is not installed":"Chưa nạp mission",
-      "vehicle is not armed":"UAV chưa armed",
-      "PX4 must be in Position or Hold before mission start":"PX4 phải ở Position hoặc Hold",
-      "active companion sender is unavailable":"Companion sender chưa sẵn sàng",
-      "companion OFFBOARD authority is disabled":"Companion chưa được trao quyền OFFBOARD",
-      "vehicle is not cleared for active companion flight":"UAV chưa qua active-flight gate",
-      "setpoint warmup is not complete":"Đang warmup luồng setpoint",
-      "setpoint warmup has too few samples":"Chưa đủ mẫu setpoint warmup",
-      "setpoint stream gap exceeds the warmup contract":"Luồng setpoint không liên tục"
+      "mission runtime is disabled":"Mission runtime is disabled",
+      "mission is not installed":"Mission is not installed",
+      "vehicle is not armed":"Vehicle is not armed",
+      "PX4 must be in Position or Hold before mission start":"PX4 must be in Position or Hold",
+      "active companion sender is unavailable":"Companion sender is unavailable",
+      "companion OFFBOARD authority is disabled":"Companion OFFBOARD authority is disabled",
+      "vehicle is not cleared for active companion flight":"Vehicle is not cleared for active flight",
+      "setpoint warmup is not complete":"Setpoint stream is warming up",
+      "setpoint warmup has too few samples":"Too few setpoint warmup samples",
+      "setpoint stream gap exceeds the warmup contract":"Setpoint stream is not continuous"
     };
     if(exact[text])return exact[text];
-    if(text.startsWith("mission is already "))return `Mission đang ${text.slice(19)}`;
+    if(text.startsWith("mission is already "))return `Mission is already ${text.slice(19)}`;
     if(text.startsWith("abort latched: "))return `Abort latch: ${text.slice(15)}`;
     if(text.startsWith("safety condition active: "))return `Safety blocker: ${text.slice(25)}`;
-    if(text.startsWith("setpoint stream is not transmitting: "))return `Setpoint chưa phát: ${text.slice(37)}`;
-    return text||"Chưa có trạng thái từ companion";
+    if(text.startsWith("setpoint stream is not transmitting: "))return `Setpoint not transmitting: ${text.slice(37)}`;
+    return text||"No status from the companion yet";
   }
 
   function applyMissionConfig(config){
@@ -1864,9 +1960,21 @@
     const execution=mission?.execution_state||"idle";
     const executing=["entering","running","stopping"].includes(execution);
     document.getElementById("mission-drone-label").textContent=selectedDroneId;
+    document.getElementById("mission-send-target").textContent=selectedDroneId;
+
+    /* Bộ chọn xe phải nói được xe KIA có đường hay chưa, không chỉ xe đang chọn —
+       nếu không thì gửi nhầm xe mà không có dấu hiệu nào. */
+    for(const id of DRONE_IDS){
+      const other=missionPaths[id]||[];
+      const note=document.getElementById(`pick-note-${id}`);
+      if(note)note.textContent=other.length>=2?`${other.length} waypoints · ready to send`
+        :other.length?`${other.length} point · not enough`:"no route drawn";
+      const pick=document.querySelector(`.drone-pick[data-drone-id="${id}"]`);
+      if(pick)pick.classList.toggle("has-route",other.length>=2);
+    }
     document.getElementById("mission-waypoints").textContent=String(points.length);
-    document.getElementById("mission-perimeter-label").textContent=openLine?"Chiều dài":"Chu vi";
-    document.getElementById("mission-lap-label").textContent=openLine?"Bay hết":"Một vòng";
+    document.getElementById("mission-perimeter-label").textContent=openLine?"Length":"Perimeter";
+    document.getElementById("mission-lap-label").textContent=openLine?"Full run":"One lap";
     document.getElementById("mission-perimeter").textContent=pathLength?`${pathLength.toFixed(1)} m`:"N/A";
     document.getElementById("mission-lap").textContent=
       pathLength&&Number.isFinite(speed)&&speed>0?`${(pathLength/speed).toFixed(0)} s`:"N/A";
@@ -1879,26 +1987,26 @@
     if(signature!==lastMissionSignature[selectedDroneId]){
       lastMissionSignature[selectedDroneId]=signature;
       if(mission?.state==="refused")
-        setCommandResult(`${selectedDroneId}: nhiệm vụ BỊ TỪ CHỐI — ${mission.reason}`,"warning");
+        setCommandResult(`${selectedDroneId}: mission REJECTED — ${mission.reason}`,"warning");
       else if(execution==="running")
-        setCommandResult(`${selectedDroneId}: mission đang chạy trong PX4 OFFBOARD.`,"success");
+        setCommandResult(`${selectedDroneId}: mission is running in PX4 OFFBOARD.`,"success");
       else if(["blocked","aborted"].includes(execution))
         setCommandResult(`${selectedDroneId}: mission ${execution.toUpperCase()} — ${missionReasonText(mission.execution_reason)}`,"error");
       else if(execution==="entering")
-        setCommandResult(`${selectedDroneId}: companion đang xin PX4 vào OFFBOARD...`,"warning");
+        setCommandResult(`${selectedDroneId}: companion is requesting PX4 OFFBOARD...`,"warning");
       else if(execution==="stopping")
-        setCommandResult(`${selectedDroneId}: đang dừng mission và về Position...`,"warning");
+        setCommandResult(`${selectedDroneId}: stopping the mission and returning to Position...`,"warning");
       else if(mission?.state==="installed")
-        setCommandResult(`${selectedDroneId}: đã nạp quỹ đạo ${mission.waypoints} waypoint, ${mission.lap_duration_s}s/vòng.`,"warning");
+        setCommandResult(`${selectedDroneId}: route installed — ${mission.waypoints} waypoints, ${mission.lap_duration_s}s per lap.`,"warning");
     }
-    if(!mission||mission.state==="none")label.textContent=points.length?"Chưa gửi":"Chưa vẽ";
+    if(!mission||mission.state==="none")label.textContent=points.length?"Not sent":"Not drawn";
     else if(mission.state==="installed"){
-      label.textContent=`Đã nạp · ${mission.waypoints} wp · ${mission.lap_duration_s}s/vòng`;
-    }else label.textContent=`Từ chối: ${mission.reason||"không rõ lý do"}`;
+      label.textContent=`Installed · ${mission.waypoints} wp · ${mission.lap_duration_s}s per lap`;
+    }else label.textContent=`Rejected: ${mission.reason||"reason unknown"}`;
 
     const executionLabels={
-      idle:"Chưa chạy",entering:"Đang vào OFFBOARD",running:"ĐANG BAY",
-      stopping:"Đang về Position",blocked:"BỊ CHẶN",aborted:"ABORTED"
+      idle:"Not running",entering:"Entering OFFBOARD",running:"FLYING",
+      stopping:"Returning to Position",blocked:"BLOCKED",aborted:"ABORTED"
     };
     const executionLabel=document.getElementById("mission-execution");
     const executionReason=missionReasonText(mission?.execution_reason);
@@ -1909,10 +2017,10 @@
     const readiness=document.getElementById("mission-readiness");
     const readinessReason=missionReasonText(mission?.start_block_reason);
     readiness.textContent=mission?.start_ready===true
-      ?"SẴN SÀNG"
-      :`CHƯA SẴN SÀNG · ${readinessReason}`;
+      ?"READY"
+      :`NOT READY · ${readinessReason}`;
     readiness.title=mission?.start_ready===true
-      ?"Companion đã xác nhận đủ điều kiện chuyển OFFBOARD"
+      ?"Companion confirms all conditions for entering OFFBOARD"
       :readinessReason;
     document.getElementById("mission-start-button").title=
       mission?.start_ready===true?"":readinessReason;
@@ -1935,22 +2043,22 @@
       speed_m_s:Number(document.getElementById("mission-speed").value),
       waypoints:points.map(p=>({latitude_deg:p.lat,longitude_deg:p.lng}))
     });
-    if(ok)setCommandResult(`${selectedDroneId}: đã gửi nhiệm vụ ${points.length} waypoint.`,"warning");
+    if(ok)setCommandResult(`${selectedDroneId}: sent a ${points.length}-waypoint mission.`,"warning");
   }
 
   function startMission(){
     const mission=missionVerdicts[selectedDroneId];
     if(mission?.start_ready!==true){
-      setCommandResult(`${selectedDroneId}: chưa thể bắt đầu — ${missionReasonText(mission?.start_block_reason)}.`,"error");
+      setCommandResult(`${selectedDroneId}: cannot start yet — ${missionReasonText(mission?.start_block_reason)}.`,"error");
       return;
     }
     if(sendJson({type:"mission_start",drone_id:selectedDroneId}))
-      setCommandResult(`${selectedDroneId}: đã gửi yêu cầu bắt đầu tới companion.`,"warning");
+      setCommandResult(`${selectedDroneId}: start request sent to the companion.`,"warning");
   }
 
   function stopMission(){
     if(sendJson({type:"mission_stop",drone_id:selectedDroneId}))
-      setCommandResult(`${selectedDroneId}: đã yêu cầu dừng mission và về Position.`,"warning");
+      setCommandResult(`${selectedDroneId}: requested mission stop and return to Position.`,"warning");
   }
 
   document.getElementById("mission-draw-button").addEventListener("click",()=>{
@@ -1959,8 +2067,8 @@
     redrawMission(selectedDroneId);
     updateMissionUi();
     setCommandResult(missionDrawing
-      ?`${selectedDroneId}: click bản đồ để thêm waypoint, tắt VẼ TAY khi xong.`
-      :`${selectedDroneId}: đã tắt chế độ vẽ.`,"warning");
+      ?`${selectedDroneId}: click the map to add waypoints, turn FREEHAND off when done.`
+      :`${selectedDroneId}: drawing mode off.`,"warning");
   });
   document.getElementById("mission-square-button").addEventListener("click",()=>missionPreset(4));
   document.getElementById("mission-circle-button").addEventListener("click",()=>missionPreset(24));
@@ -1983,7 +2091,7 @@
       if(result.type==="local_error"){
         if(droneId===selectedDroneId){
           pendingModes[droneId]=null;
-          setCommandResult(`${droneId}: ${result.error||"Lỗi điều khiển"}`,"error");
+          setCommandResult(`${droneId}: ${result.error||"Control error"}`,"error");
         }
         continue;
       }
@@ -2007,7 +2115,7 @@
             const actual=modeFromNavState(droneNavState(drones[droneId]));
             if(actual)selectedModes[droneId]=actual;
             updateModeUi();
-            setCommandResult(`${droneId}: ${commandName} bị PX4 từ chối — ${result.result_text||result.result}.`,"error");
+            setCommandResult(`${droneId}: ${commandName} rejected by PX4 — ${result.result_text||result.result}.`,"error");
           }
         }
       }
@@ -2041,17 +2149,17 @@
             updateGimbalUi();
             if(m.ok){
               const label=m.axis==="home"?"HOME":String(m.axis||"").toUpperCase();
-              setGimbalStatus(`${m.drone_id}: ${label} đã cập nhật trên Gazebo.`,"success");
-            }else setGimbalStatus(m.error||"Không gửi được lệnh gimbal.","error");
+              setGimbalStatus(`${m.drone_id}: ${label} updated in Gazebo.`,"success");
+            }else setGimbalStatus(m.error||"Could not send the gimbal command.","error");
           }
         }
         if(m.type==="control_publish_result"){
           if(m.ok){
             if(m.action!=="manual_control"){
               const destination=String(m.action||"").startsWith("mission_")?"companion":"backend";
-              setCommandResult(`${m.drone_id}: ${m.action} đã chuyển tới ${destination}.`,"warning");
+              setCommandResult(`${m.drone_id}: ${m.action} moved to ${destination}.`,"warning");
             }
-          }else setCommandResult(m.error||"Không gửi được lệnh.","error");
+          }else setCommandResult(m.error||"Could not send the command.","error");
         }
       }catch(error){console.error(error);}
     };
@@ -2120,7 +2228,7 @@
     if (!text || !host) return;
     const planned = document.body.dataset.ws === "plan";
     const expanded = planned || document.body.classList.contains("map-expanded");
-    text.textContent = expanded ? "THU NHỎ" : "MỞ RỘNG";
+    text.textContent = expanded ? "COLLAPSE" : "EXPAND";
     host.style.display = planned ? "none" : "flex";
   }
 
@@ -2132,18 +2240,18 @@
     if (!badge || !text || !shell) return;
 
     let mode = "none";
-    let label = "Click bản đồ không làm gì";
+    let label = "Map click does nothing";
     if (typeof missionDrawing !== "undefined" && missionDrawing) {
       mode = "draw";
       const drawn = (typeof missionPaths !== "undefined" && missionPaths[selectedDroneId])
         ? missionPaths[selectedDroneId].length : 0;
       label = drawn
-        ? `Click bản đồ = thêm waypoint · đã có ${drawn}`
-        : "Click bản đồ = thêm waypoint";
+        ? `Map click = add waypoint · ${drawn} so far`
+        : "Map click = add waypoint";
     } else if (typeof selectedModes !== "undefined"
                && selectedModes[selectedDroneId] === "offboard_map") {
       mode = "point";
-      label = "Click bản đồ = chọn điểm bay tới";
+      label = "Map click = pick destination point";
     }
     badge.className = mode === "none" ? "" : mode;
     shell.classList.toggle("draw", mode === "draw");
@@ -2181,11 +2289,11 @@
     const preflight = Boolean(pick(["status.preflight_checks_pass"], false));
 
     const big = [
-      { k: "CAO ĐỘ", v: number(altitude, 1), c: "" },
-      { k: "TỐC ĐỘ", v: number(speed, 1), c: "" },
+      { k: "ALTITUDE", v: number(altitude, 1), c: "" },
+      { k: "SPEED", v: number(speed, 1), c: "" },
       { k: "PIN", v: number(battery, 0), c: Number(battery) < 25 ? "var(--warn)" : "" },
       {
-        k: "BIÊN CBF",
+        k: "CBF MARGIN",
         v: Number.isFinite(margin) ? (margin >= 0 ? "+" : "") + margin.toFixed(1) : "—",
         c: !Number.isFinite(margin) ? "var(--dim2)"
           : margin < 0 ? "var(--bad)" : margin < 4 ? "var(--warn)" : "var(--ok)",
@@ -2204,7 +2312,7 @@
       big.map(s => `<div class="telemetry-item"><div class="field-label">${s.k}</div>` +
         `<div class="field-value"${s.c ? ` style="color:${s.c}"` : ""}>${s.v}</div></div>`).join("") +
       `<div class="telemetry-item" style="grid-column:1/-1"><div class="field-label" ` +
-      `style="font-family:var(--mono);color:var(--dim2);letter-spacing:.06em;font-size:10px;` +
+      `style="font-family:var(--mono);color:var(--dim2);letter-spacing:.06em;font-size:12px;` +
       `line-height:1.7;padding-top:4px">${chips.join(" · ")}</div></div>`;
 
     return { body, chip: armed ? "ARMED" : "DISARMED", armed };
@@ -2283,9 +2391,9 @@
 
     const verdict = document.getElementById("safety-verdict");
     if (verdict) {
-      const label = worst === null ? "CHỜ DỮ LIỆU"
-        : worst.margin < 0 ? "ĐÃ THỦNG"
-        : worst.margin < 4 ? "BIÊN MỎNG" : "RÀO CHẮN ĐANG GIỮ";
+      const label = worst === null ? "WAITING FOR DATA"
+        : worst.margin < 0 ? "BREACHED"
+        : worst.margin < 4 ? "THIN MARGIN" : "BARRIER HOLDING";
       verdict.textContent = label;
       verdict.style.color = color;
       verdict.style.background = worst === null ? "var(--raise)"
@@ -2322,9 +2430,9 @@
       const shadow = safetyOf(snapshot, droneId).cbf_rl_shadow || {};
       const coordination = shadow.conflict_coordination || {};
       const role = coordination.active ? coordination.role : null;
-      const label = role === "priority" ? "ƯU TIÊN"
-        : role === "yield" ? "NHƯỜNG"
-        : coordination.role === "clear" ? "RẢNH" : dash;
+      const label = role === "priority" ? "PRIORITY"
+        : role === "yield" ? "YIELDING"
+        : coordination.role === "clear" ? "CLEAR" : dash;
       const roleColor = role === "priority" ? "var(--accent)"
         : role === "yield" ? "var(--warn)" : "var(--dim2)";
       setText(`role-${droneId}`, label);
@@ -2360,13 +2468,13 @@
     const host = document.getElementById("budget-list");
     if (!host) return;
     if (worst === null || typeof worst.required !== "number") {
-      host.innerHTML = '<div class="step-note">Chưa có dữ liệu rào chắn.</div>';
+      host.innerHTML = '<div class="step-note">No barrier data yet.</div>';
       return;
     }
     const dynamic = Math.max(0, worst.required - HARD_FLOOR_M);
     const rows = [
-      { label: "Ngăn cách tối thiểu", value: HARD_FLOOR_M, color: "var(--dim3)" },
-      { label: "Phần động (trễ, phanh, bất định)", value: dynamic, color: "var(--accent)" },
+      { label: "Minimum separation", value: HARD_FLOOR_M, color: "var(--dim3)" },
+      { label: "Dynamic term (latency, braking, uncertainty)", value: dynamic, color: "var(--accent)" },
     ];
     host.innerHTML = rows.map(row => `
       <div class="budget-row">
@@ -2376,8 +2484,8 @@
         }%;background:${row.color}"></div></div>
       </div>`).join("") +
       `<div class="information-row" style="margin-top:14px;border-top:1px solid var(--line);
-        border-bottom:0;padding-top:13px"><span style="font-weight:600;color:var(--text)">Tổng</span>
-        <strong style="font-size:17px">${worst.required.toFixed(2)} m</strong></div>`;
+        border-bottom:0;padding-top:13px"><span style="font-weight:600;color:var(--text)">Total</span>
+        <strong style="font-size:20px">${worst.required.toFixed(2)} m</strong></div>`;
   }
 
   /* ── bước nhiệm vụ ────────────────────────────────────────────────── */
@@ -2397,16 +2505,16 @@
 
     const steps = [
       { done: drawn >= 2,
-        note: drawn >= 2 ? `${drawn} waypoint` : drawn === 1 ? "cần ít nhất 2 điểm" : "chưa vẽ" },
+        note: drawn >= 2 ? `${drawn} waypoint` : drawn === 1 ? "at least 2 points needed" : "not drawn" },
       { done: installed, blocked: rejected,
-        note: rejected ? (mission.reason || "bị từ chối")
-          : installed ? `đã nạp · ${mission.lap_duration_s}s/vòng` : "chưa gửi" },
-      { done: armed, note: armed ? "đã arm" : "chưa arm" },
-      { done: airborne, note: airborne ? "đang bay" : "chưa cất cánh" },
+        note: rejected ? (mission.reason || "rejected")
+          : installed ? `installed · ${mission.lap_duration_s}s per lap` : "not sent" },
+      { done: armed, note: armed ? "armed" : "not armed" },
+      { done: airborne, note: airborne ? "airborne" : "not airborne" },
       { done: running,
-        note: running ? "ĐANG BAY"
-          : mission && mission.start_ready === true ? "sẵn sàng"
-          : mission ? (mission.start_block_reason || "chưa sẵn sàng") : "chưa sẵn sàng" },
+        note: running ? "FLYING"
+          : mission && mission.start_ready === true ? "ready"
+          : mission ? (mission.start_block_reason || "not ready") : "not ready" },
     ];
 
     const firstOpen = steps.findIndex(step => !step.done);
