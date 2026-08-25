@@ -52,6 +52,21 @@ def test_a_map_point_is_sent_as_a_two_waypoint_mission():
     assert "latitude_deg:t.latitude" in body
 
 
+def test_a_map_point_has_its_own_speed_and_does_not_inherit_the_ceiling():
+    """`mission-speed` defaults to the runtime ceiling -- 19.2 m/s on this
+    profile. Reading it here meant clicking a point 30 m away launched the
+    vehicle at the fastest speed the config allows, which is not what "fly
+    over there" asks for. The point leg keeps the same ceiling and a walking
+    default."""
+    source = INDEX.read_text(encoding="utf-8")
+    assert 'id="point-speed"' in source
+    assert "POINT_SPEED_DEFAULT_M_S=5" in source
+    body = source[source.index("function flyToPoint()"):]
+    body = body[: body.index("\n  }\n")]
+    assert 'getElementById("point-speed")' in body
+    assert "mission-speed" not in body
+
+
 def test_a_queued_point_start_expires_instead_of_flying_later():
     """A click must not sit dormant and then launch a flight minutes later.
 

@@ -615,14 +615,18 @@
           <button id="start-takeoff-button" type="button" class="action-button green" style="width:100%">START TAKEOFF</button>
         </div>
 
-        <!-- Anh em của takeoff, không phải con: hai chế độ loại trừ nhau, nên
-             lồng vào nhau thì nhóm trong không bao giờ hiện được. Không cần
-             divider giữa hai cái — nhiều nhất một cái hiện tại mỗi thời điểm. -->
+        <!-- Anh em của takeoff, không phải con: từng bị lồng vào nhau và khi đó
+             nhóm trong không bao giờ hiện được. Không còn là một chế độ bay, nên
+             không có cổng nào che nó nữa. -->
         <div id="fly-point-section" class="control-group" style="width:230px;flex-shrink:0">
           <span class="card-title">Fly to point</span>
           <div class="altitude-row" style="margin-top:0">
             <label for="target-altitude">Target point altitude</label>
             <div><input id="target-altitude" type="number" min="1" max="200" step="0.5" value="5"> m</div>
+          </div>
+          <div class="altitude-row">
+            <label for="point-speed">Speed to the point</label>
+            <div><input id="point-speed" type="number" min="0.2" max="19.2" step="0.5" value="5"> m/s</div>
           </div>
           <div class="target-information">
             <div class="information-row"><span>Latitude</span><strong id="target-latitude">Not selected</strong></div>
@@ -1688,6 +1692,7 @@
      cho LinearTrajectory: bay một lần rồi đỗ ở đầu xa với feed-forward bằng 0,
      và CBF chạy trên MỌI khung nên lúc đang đỗ vẫn né được. */
   const PENDING_FLY_START_MS=20000;
+  const POINT_SPEED_DEFAULT_M_S=5;
   const pendingFlyStart={};
 
   /* Hình học của chặng đang cài, để phân biệt mission MỚI với mission cũ còn
@@ -1711,7 +1716,7 @@
       type:"mission_path",
       drone_id:selectedDroneId,
       altitude_m:targetAltitudes[selectedDroneId],
-      speed_m_s:Number(document.getElementById("mission-speed").value),
+      speed_m_s:Number(document.getElementById("point-speed").value),
       waypoints:[
         {latitude_deg:here.latitude,longitude_deg:here.longitude},
         {latitude_deg:t.latitude,longitude_deg:t.longitude}
@@ -2001,11 +2006,17 @@
     const fallback=Number.isFinite(preferred)?Math.max(minimum,Math.min(maximum,preferred)):maximum;
     const signature=`${minimum}:${maximum}:${fallback}`;
     const input=document.getElementById("mission-speed");
+    /* Cùng trần với mission, nhưng mặc định KHÔNG phải trần: "bay tới đây" là
+       một thao tác đi lại, không phải yêu cầu bay nhanh nhất có thể. */
+    const point=document.getElementById("point-speed");
     if(signature!==missionConfigSignature){
       missionConfigSignature=signature;
       input.min=String(minimum);
       input.max=String(maximum);
       input.value=String(fallback);
+      point.min=String(minimum);
+      point.max=String(maximum);
+      point.value=String(Math.max(minimum,Math.min(maximum,POINT_SPEED_DEFAULT_M_S)));
     }
     const command=Number(config.command_limit_m_s);
     const cbf=Number(config.cbf_maximum_velocity_m_s);
