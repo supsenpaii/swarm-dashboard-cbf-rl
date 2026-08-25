@@ -526,7 +526,7 @@
             <div class="bar-actual" id="bar-actual"></div>
           </div>
           <div class="bar-scale">
-            <span>0</span><span class="floor-label">20 · HARD FLOOR</span><span>60</span><span>120 m</span>
+            <span>0</span><span class="floor-label" id="bar-floor-label">20 · HARD FLOOR</span><span>60</span><span>120 m</span>
           </div>
         </div>
       </div>
@@ -608,26 +608,31 @@
         <div class="control-divider"></div>
 
         <div id="takeoff-control-section" class="control-group" style="width:230px;flex-shrink:0">
-          <span class="card-title">Take off · fly to point</span>
+          <span class="card-title">Take off</span>
           <div class="altitude-row" style="margin-top:0">
             <label for="takeoff-altitude">Takeoff altitude</label>
             <div><input id="takeoff-altitude" type="number" min="2.5" max="30" step="0.5" value="5"> m</div>
           </div>
           <button id="start-takeoff-button" type="button" class="action-button green" style="width:100%">START TAKEOFF</button>
-          <div id="offboard-control-section">
-            <div class="altitude-row">
-              <label for="target-altitude">Target point altitude</label>
-              <div><input id="target-altitude" type="number" min="1" max="200" step="0.5" value="5"> m</div>
-            </div>
-            <div class="target-information">
-              <div class="information-row"><span>Latitude</span><strong id="target-latitude">Not selected</strong></div>
-              <div class="information-row"><span>Longitude</span><strong id="target-longitude">Not selected</strong></div>
-              <div class="information-row"><span>Distance</span><strong id="target-distance">N/A</strong></div>
-            </div>
-            <div class="action-grid" style="margin-top:11px">
-              <button id="fly-button" type="button" class="action-button green" disabled>FLY TO POINT</button>
-              <button id="cancel-target-button" type="button" class="action-button gray">CANCEL</button>
-            </div>
+        </div>
+
+        <!-- Anh em của takeoff, không phải con: hai chế độ loại trừ nhau, nên
+             lồng vào nhau thì nhóm trong không bao giờ hiện được. Không cần
+             divider giữa hai cái — nhiều nhất một cái hiện tại mỗi thời điểm. -->
+        <div id="offboard-control-section" class="control-group" style="width:230px;flex-shrink:0">
+          <span class="card-title">Fly to point</span>
+          <div class="altitude-row" style="margin-top:0">
+            <label for="target-altitude">Target point altitude</label>
+            <div><input id="target-altitude" type="number" min="1" max="200" step="0.5" value="5"> m</div>
+          </div>
+          <div class="target-information">
+            <div class="information-row"><span>Latitude</span><strong id="target-latitude">Not selected</strong></div>
+            <div class="information-row"><span>Longitude</span><strong id="target-longitude">Not selected</strong></div>
+            <div class="information-row"><span>Distance</span><strong id="target-distance">N/A</strong></div>
+          </div>
+          <div class="action-grid" style="margin-top:11px">
+            <button id="fly-button" type="button" class="action-button green" disabled>FLY TO POINT</button>
+            <button id="cancel-target-button" type="button" class="action-button gray">CANCEL</button>
           </div>
         </div>
 
@@ -1460,9 +1465,9 @@
     document.getElementById("takeoff-mode-button").classList.toggle("active",takeoff);
     document.getElementById("rtl-mode-button").classList.toggle("active",rtl);
 
-    document.getElementById("manual-control-section").style.display=position?"block":"none";
-    document.getElementById("offboard-control-section").style.display=offboard?"block":"none";
-    document.getElementById("takeoff-control-section").style.display=takeoff?"block":"none";
+    document.getElementById("manual-control-section").style.display=position?"":"none";
+    document.getElementById("offboard-control-section").style.display=offboard?"":"none";
+    document.getElementById("takeoff-control-section").style.display=takeoff?"":"none";
 
     const sourceText={
       position:"Web keyboard / ROS 2",
@@ -2187,7 +2192,7 @@
      bằng tên trần: dòng khởi động của nó chạy trước khi file này được đánh giá,
      và một ReferenceError ở đó sẽ nuốt luôn connectWebSocket(). */
 
-  const HARD_FLOOR_M = 20.0;
+  let hardFloorM = 20.0;          /* ghi đè mỗi khung từ mission_config */
   const BAR_MAX_M = 120.0;
 
   /* ── chuyển workspace ─────────────────────────────────────────────── */
@@ -2340,8 +2345,10 @@
 
   /* ── lớp an toàn ──────────────────────────────────────────────────── */
   function safetyOf(snapshot, droneId) {
-    const entry = (snapshot && snapshot.tracking && snapshot.tracking[droneId]) || {};
-    return entry.companion_safety || {};
+    /* `tracking` là status của tracking manager, KHÔNG key theo drone — đọc nó
+       ở đây khiến cả lớp an toàn im lặng, vì {} không bao giờ có margin. */
+    const streams = (snapshot && snapshot.tracking_pose_streams) || {};
+    return (streams[droneId] || {}).companion_safety || {};
   }
 
   function updateSafetyUi(snapshot) {
@@ -2352,6 +2359,13 @@
     const dash = "—";
     const fixed = (value, digits) =>
       typeof value === "number" && isFinite(value) ? value.toFixed(digits) : dash;
+
+    /* Sàn cứng phải chốt trước mọi thứ đọc nó trong cùng khung này, nếu không
+       thanh và bảng phân rã vẽ bằng giá trị của khung trước. */
+    const config = (snapshot && snapshot.mission_config) || {};
+    if (Number.isFinite(Number(config.minimum_separation_m))) {
+      hardFloorM = Number(config.minimum_separation_m);
+    }
 
     /* Đọc chiếc có biên TỆ HƠN: dải này nói về CẶP, không phải một chiếc. */
     let worst = null;
@@ -2403,7 +2417,7 @@
 
     /* thanh so với sàn cứng */
     const pct = value => `${Math.max(0, Math.min(100, (value / BAR_MAX_M) * 100))}%`;
-    const floorPct = (HARD_FLOOR_M / BAR_MAX_M) * 100;
+    const floorPct = (hardFloorM / BAR_MAX_M) * 100;
     const floor = document.getElementById("bar-floor");
     const tick = document.getElementById("bar-floor-tick");
     const required = document.getElementById("bar-required");
@@ -2448,14 +2462,13 @@
     setText("safety-detail-closing", worstRate === null ? dash : (worstRate * 100).toFixed(1));
 
     /* ngưỡng đang áp dụng, từ mission_config của chính server */
-    const config = (snapshot && snapshot.mission_config) || {};
     setText("cfg-separation", fixed(config.minimum_separation_m, 1) + " m");
     setText("cfg-cbf-speed", fixed(config.cbf_maximum_velocity_m_s, 1) + " m/s");
     setText("cfg-mission-speed", fixed(config.maximum_speed_m_s, 1) + " m/s");
     setText("cfg-rl-mode", config.cbf_rl_mode || dash);
-    if (Number.isFinite(Number(config.minimum_separation_m))) {
-      setText("safety-floor", Number(config.minimum_separation_m).toFixed(0));
-    }
+    setText("safety-floor", hardFloorM.toFixed(0));
+    const floorLabel = document.getElementById("bar-floor-label");
+    if (floorLabel) floorLabel.textContent = `${hardFloorM.toFixed(0)} · HARD FLOOR`;
 
     renderBudget(worst);
     updateVehicleCards();
@@ -2471,9 +2484,9 @@
       host.innerHTML = '<div class="step-note">No barrier data yet.</div>';
       return;
     }
-    const dynamic = Math.max(0, worst.required - HARD_FLOOR_M);
+    const dynamic = Math.max(0, worst.required - hardFloorM);
     const rows = [
-      { label: "Minimum separation", value: HARD_FLOOR_M, color: "var(--dim3)" },
+      { label: "Minimum separation", value: hardFloorM, color: "var(--dim3)" },
       { label: "Dynamic term (latency, braking, uncertainty)", value: dynamic, color: "var(--accent)" },
     ];
     host.innerHTML = rows.map(row => `

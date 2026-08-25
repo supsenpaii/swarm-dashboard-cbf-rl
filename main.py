@@ -4017,40 +4017,9 @@ async def get_drones() -> dict[str, Any]:
         results = copy.deepcopy(
             latest_control_results
         )
-        tracking_pose_streams = {
-            drone_id: {
-                "source": "px4_mavlink",
-                "age_ms": (
-                    round(
-                        max(
-                            0.0,
-                            monotonic_now
-                            - tracking_fast_pose_received_monotonic[drone_id],
-                        )
-                        * 1000.0,
-                        2,
-                    )
-                    if tracking_fast_pose_received_monotonic[drone_id] > 0.0
-                    else None
-                ),
-                "fresh": bool(
-                    tracking_fast_pose_received_monotonic[drone_id] > 0.0
-                    and monotonic_now
-                    - tracking_fast_pose_received_monotonic[drone_id]
-                    <= 0.25
-                ),
-                "visual_follow_bridge": copy.deepcopy(
-                    tracking_visual_follow_bridge_status[drone_id]
-                ),
-                "peer_state": copy.deepcopy(
-                    tracking_peer_state_status[drone_id]
-                ),
-                "companion_safety": copy.deepcopy(
-                    tracking_companion_safety[drone_id]
-                ),
-            }
-            for drone_id in ALLOWED_DRONES
-        }
+        tracking_pose_streams = tracking_pose_stream_snapshot(
+            monotonic_now
+        )
         swarm_state = swarm_state_store.snapshot(monotonic_now)
         formation_shadow = (
             {
@@ -4410,6 +4379,52 @@ def mission_runtime_config() -> dict[str, Any]:
     }
 
 
+def tracking_pose_stream_snapshot(
+    monotonic_now: float,
+) -> dict[str, dict[str, Any]]:
+    """Per-drone fast-pose stream state, including the companion safety frame.
+
+    The dashboard's safety layer reads `companion_safety` from here. It used to
+    be built inline in /api/drones only, so the WebSocket -- the payload the
+    page actually consumes -- never carried it and the safety strip could not
+    render a single number. One builder, both transports.
+    """
+    return {
+        drone_id: {
+            "source": "px4_mavlink",
+            "age_ms": (
+                round(
+                    max(
+                        0.0,
+                        monotonic_now
+                        - tracking_fast_pose_received_monotonic[drone_id],
+                    )
+                    * 1000.0,
+                    2,
+                )
+                if tracking_fast_pose_received_monotonic[drone_id] > 0.0
+                else None
+            ),
+            "fresh": bool(
+                tracking_fast_pose_received_monotonic[drone_id] > 0.0
+                and monotonic_now
+                - tracking_fast_pose_received_monotonic[drone_id]
+                <= 0.25
+            ),
+            "visual_follow_bridge": copy.deepcopy(
+                tracking_visual_follow_bridge_status[drone_id]
+            ),
+            "peer_state": copy.deepcopy(
+                tracking_peer_state_status[drone_id]
+            ),
+            "companion_safety": copy.deepcopy(
+                tracking_companion_safety[drone_id]
+            ),
+        }
+        for drone_id in ALLOWED_DRONES
+    }
+
+
 async def send_snapshots(
     websocket: WebSocket,
     send_lock: asyncio.Lock,
@@ -4427,6 +4442,12 @@ async def send_snapshots(
             )
 
             missions = mission_verdicts()
+
+            pose_streams = (
+                tracking_pose_stream_snapshot(
+                    time.monotonic()
+                )
+            )
 
         with gimbal_lock:
             gimbal_state = copy.deepcopy(
@@ -4451,6 +4472,9 @@ async def send_snapshots(
                 ),
                 "gazebo": gazebo_bridge.status(),
                 "tracking": tracking_manager.status(),
+                "tracking_pose_streams": (
+                    pose_streams
+                ),
                 "mqtt_connected": (
                     mqtt_connected.is_set()
                 ),

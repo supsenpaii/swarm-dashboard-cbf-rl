@@ -18,6 +18,7 @@ in the source and cheap to pin.
 """
 
 import re
+from html.parser import HTMLParser
 from pathlib import Path
 
 
@@ -64,3 +65,74 @@ def test_connect_websocket_is_the_last_thing_the_first_script_does() -> None:
         "connectWebSocket() must stay on the boot line; anything that throws "
         "earlier on that line takes the socket down with it"
     )
+
+
+def test_the_fly_to_point_panel_is_not_nested_inside_the_takeoff_panel() -> None:
+    """Two mutually exclusive modes cannot share a parent that one of them hides.
+
+    `#offboard-control-section` used to be a child of `#takeoff-control-section`,
+    and updateModeUi() sets the child visible when `offboard` and the parent
+    visible when `takeoff` -- conditions that are never both true. Measured in a
+    browser: FLY TO POINT had a 0x0 bounding box in *every* mode, so MAP POINT
+    could select a point on the map and never let anyone act on it.
+    """
+    source = INDEX.read_text(encoding="utf-8")
+
+    class Ancestry(HTMLParser):
+        """Records the open-element ids surrounding each id we care about."""
+
+        def __init__(self) -> None:
+            super().__init__(convert_charrefs=True)
+            self.stack: list[str | None] = []
+            self.ancestors: dict[str, list[str]] = {}
+
+        def handle_starttag(self, tag, attrs):
+            identifier = dict(attrs).get("id")
+            if identifier:
+                self.ancestors[identifier] = [
+                    a for a in self.stack if a is not None
+                ]
+            if tag not in ("br", "img", "input", "meta", "link", "hr"):
+                self.stack.append(identifier)
+
+        def handle_endtag(self, tag):
+            if self.stack:
+                self.stack.pop()
+
+    parser = Ancestry()
+    parser.feed(source)
+    assert "takeoff-control-section" not in parser.ancestors.get(
+        "offboard-control-section", []
+    ), "fly-to-point panel is still inside the takeoff panel"
+    # And neither may be revived by setting display:block over .control-group.
+    assert 'style.display=takeoff?"block"' not in source
+    assert 'style.display=offboard?"block"' not in source
+
+
+def test_the_safety_layer_reads_the_payload_the_server_actually_sends() -> None:
+    """`tracking` is the tracking-manager status object, not a per-drone map.
+
+    safetyOf() read `snapshot.tracking[droneId].companion_safety`, which is
+    always undefined, so the safety strip, the coordination role chips and the
+    barrier-demand breakdown rendered a dash on every frame the project has ever
+    run. The data is per drone under `tracking_pose_streams`, and the WebSocket
+    snapshot has to carry it -- it only ever went out on /api/drones.
+    """
+    source = INDEX.read_text(encoding="utf-8")
+    assert "snapshot.tracking_pose_streams" in source
+    assert "snapshot.tracking[droneId]" not in source
+
+    server = (INDEX.parent.parent / "main.py").read_text(encoding="utf-8")
+    assert "def tracking_pose_stream_snapshot(" in server
+    # Both transports must use the one builder, and the socket must send it.
+    assert server.count("tracking_pose_stream_snapshot(") >= 3
+    assert '"tracking_pose_streams": (' in server
+
+
+def test_the_hard_floor_is_read_from_config_not_pinned_in_the_page() -> None:
+    """The bar tick and the barrier breakdown used a literal 20.0 while the
+    thresholds panel showed the live `minimum_separation_m`. On a profile whose
+    floor is not 20 m the same quantity appeared twice, with two values."""
+    source = INDEX.read_text(encoding="utf-8")
+    assert "HARD_FLOOR_M" not in source
+    assert "hardFloorM = Number(config.minimum_separation_m)" in source
