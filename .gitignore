@@ -54,3 +54,6 @@ design/*.html
 
 # Map tile pack — rebuild with fetch_map_tiles.py
 static/tiles/
+
+# Khoá riêng iroh của shadow transport — sinh lại được, không bao giờ đẩy đi.
+keys/
