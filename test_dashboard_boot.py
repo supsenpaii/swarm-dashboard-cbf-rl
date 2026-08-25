@@ -70,7 +70,7 @@ def test_connect_websocket_is_the_last_thing_the_first_script_does() -> None:
 def test_the_fly_to_point_panel_is_not_nested_inside_the_takeoff_panel() -> None:
     """Two mutually exclusive modes cannot share a parent that one of them hides.
 
-    `#offboard-control-section` used to be a child of `#takeoff-control-section`,
+    `#fly-point-section` used to be a child of `#takeoff-control-section`,
     and updateModeUi() sets the child visible when `offboard` and the parent
     visible when `takeoff` -- conditions that are never both true. Measured in a
     browser: FLY TO POINT had a 0x0 bounding box in *every* mode, so MAP POINT
@@ -102,11 +102,12 @@ def test_the_fly_to_point_panel_is_not_nested_inside_the_takeoff_panel() -> None
     parser = Ancestry()
     parser.feed(source)
     assert "takeoff-control-section" not in parser.ancestors.get(
-        "offboard-control-section", []
+        "fly-point-section", []
     ), "fly-to-point panel is still inside the takeoff panel"
-    # And neither may be revived by setting display:block over .control-group.
+    # Takeoff must not be revived by setting display:block over .control-group.
     assert 'style.display=takeoff?"block"' not in source
-    assert 'style.display=offboard?"block"' not in source
+    # Fly-to-point is no longer a flight mode, so nothing may gate it at all.
+    assert 'getElementById("fly-point-section").style.display' not in source
 
 
 def test_the_safety_layer_reads_the_payload_the_server_actually_sends() -> None:
@@ -136,3 +137,22 @@ def test_the_hard_floor_is_read_from_config_not_pinned_in_the_page() -> None:
     source = INDEX.read_text(encoding="utf-8")
     assert "HARD_FLOOR_M" not in source
     assert "hardFloorM = Number(config.minimum_separation_m)" in source
+
+
+def test_the_server_refuses_the_action_that_opens_the_second_writer() -> None:
+    """Removing the button is not enough -- the allowlist is the actual gate.
+
+    `offboard_map` (and its legacy alias `enable_offboard`) makes the ROS 2 node
+    set `offboard_enabled` and stream position setpoints, which then race the
+    companion's 20 Hz velocity stream inside PX4. The browser no longer sends
+    it, but any MQTT or WebSocket client could, so the refusal has to live on
+    the server where every client passes through.
+    """
+    server = (INDEX.parent.parent / "main.py").read_text(encoding="utf-8")
+    allowlist = server[server.index("ALLOWED_ACTIONS = {"):]
+    allowlist = allowlist[: allowlist.index("}")]
+    assert '"offboard_map"' not in allowlist
+    assert '"enable_offboard"' not in allowlist
+    # The one-point path has no handler left to reach either.
+    assert "async def handle_goto_global(" not in server
+    assert '"goto_global"' not in server

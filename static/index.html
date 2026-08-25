@@ -559,7 +559,6 @@
             <button id="position-mode-button" type="button" class="mode-button active">POSITION</button>
             <button id="takeoff-mode-button" type="button" class="mode-button">TAKE OFF</button>
             <button id="rtl-mode-button" type="button" class="mode-button">RETURN HOME</button>
-            <button id="offboard-mode-button" type="button" class="mode-button" title="Legacy: fly to a single map point; not for running a Mission Path">MAP POINT</button>
           </div>
           <div class="mode-information">
             <div class="information-row"><span>Actual PX4 mode</span><strong id="actual-mode">Unknown</strong></div>
@@ -619,7 +618,7 @@
         <!-- Anh em của takeoff, không phải con: hai chế độ loại trừ nhau, nên
              lồng vào nhau thì nhóm trong không bao giờ hiện được. Không cần
              divider giữa hai cái — nhiều nhất một cái hiện tại mỗi thời điểm. -->
-        <div id="offboard-control-section" class="control-group" style="width:230px;flex-shrink:0">
+        <div id="fly-point-section" class="control-group" style="width:230px;flex-shrink:0">
           <span class="card-title">Fly to point</span>
           <div class="altitude-row" style="margin-top:0">
             <label for="target-altitude">Target point altitude</label>
@@ -833,7 +832,7 @@
             <div class="information-row"><span>Execution</span><strong id="mission-execution">Not running</strong></div>
             <div class="information-row"><span>Flight gate</span><strong id="mission-readiness">NOT READY</strong></div>
           </div>
-          <div class="panel-subtitle">Click the corners <strong>going around</strong> the shape, one direction only. Clicking across creates a self-intersecting path and it will be rejected. The path closes itself — do not click the first point again. Do not use MAP POINT · LEGACY to run a route; that button lives in the FLY workspace and only flies to a single point.</div>
+          <div class="panel-subtitle">Click the corners <strong>going around</strong> the shape, one direction only. Clicking across creates a self-intersecting path and it will be rejected. The path closes itself — do not click the first point again.</div>
         </div>
 
         <div style="flex-grow:1"></div>
@@ -940,7 +939,7 @@
   function modeFromNavState(value){
     const n=Number(value);
     if(n===2)return "position";
-    if(n===14)return "offboard_map";
+    if(n===14)return "offboard";
     if(n===17)return "takeoff";
     if(n===5)return "rtl";
     return null;
@@ -1456,22 +1455,19 @@
     globalThis.updateClickBadge?.();
     const mode=selectedModes[selectedDroneId];
     const position=mode==="position";
-    const offboard=mode==="offboard_map";
     const takeoff=mode==="takeoff";
     const rtl=mode==="rtl";
 
     document.getElementById("position-mode-button").classList.toggle("active",position);
-    document.getElementById("offboard-mode-button").classList.toggle("active",offboard);
     document.getElementById("takeoff-mode-button").classList.toggle("active",takeoff);
     document.getElementById("rtl-mode-button").classList.toggle("active",rtl);
 
     document.getElementById("manual-control-section").style.display=position?"":"none";
-    document.getElementById("offboard-control-section").style.display=offboard?"":"none";
     document.getElementById("takeoff-control-section").style.display=takeoff?"":"none";
 
     const sourceText={
       position:"Web keyboard / ROS 2",
-      offboard_map:"Legacy ROS 2 point controller (not Mission)",
+      offboard:"Companion mission (PX4 OFFBOARD)",
       takeoff:"PX4 automatic takeoff",
       rtl:"PX4 Return to Home"
     };
@@ -1479,7 +1475,7 @@
 
     const hintText={
       position:"Position: enable the keyboard, then use W/A/S/D",
-      offboard_map:`${selectedDroneId}: legacy point mode — click the map to pick a point`,
+      offboard:`${selectedDroneId}: companion is flying — click the map to queue the next point`,
       takeoff:`${selectedDroneId}: pick an altitude of 2.5–10 m, then press START TAKEOFF`,
       rtl:`${selectedDroneId}: returning to home`
     };
@@ -1496,21 +1492,10 @@
     updateModeUi();
   }
 
-  function requestMode(mode){
-    if(mode!=="position")disableManual(selectedDroneId,true);
-
-    if(mode==="position"){
-      if(!sendAction("position"))return;
-      markPendingMode("position");
-      setCommandResult(`${selectedDroneId}: requesting Position mode...`,"warning");
-      return;
-    }
-
-    if(mode==="offboard_map"){
-      if(!sendAction("offboard_map"))return;
-      markPendingMode("offboard_map");
-      setCommandResult(`${selectedDroneId}: requesting Offboard mode...`,"warning");
-    }
+  function requestPositionMode(){
+    if(!sendAction("position"))return;
+    markPendingMode("position");
+    setCommandResult(`${selectedDroneId}: requesting Position mode...`,"warning");
   }
 
   function requestTakeoff(){
@@ -1697,6 +1682,81 @@
       if(!firstMapPosition){map.setView(point,18);firstMapPosition=true;}
     }
   }
+  /* FLY TO POINT không còn đường riêng xuống PX4. Nó dựng một mission hai
+     waypoint -- vị trí hiện tại → điểm click -- nên chuyến bay đi qua đúng
+     chuỗi đã chứng nhận: nominal → coordinator → CBF → supervisor. Hai waypoint
+     cho LinearTrajectory: bay một lần rồi đỗ ở đầu xa với feed-forward bằng 0,
+     và CBF chạy trên MỌI khung nên lúc đang đỗ vẫn né được. */
+  const PENDING_FLY_START_MS=20000;
+  const pendingFlyStart={};
+
+  /* Hình học của chặng đang cài, để phân biệt mission MỚI với mission cũ còn
+     sót lại. Thiếu nó thì một start_ready từ chuyến trước sẽ cho bay tới điểm
+     cũ ngay khi vừa bấm. */
+  function missionStamp(mission){
+    return mission
+      ?`${mission.state}|${mission.waypoints??""}|${(mission.start_enu_m||[]).join(",")}|${mission.perimeter_m??""}`
+      :"";
+  }
+
+  function flyToPoint(){
+    const t=targets[selectedDroneId];
+    if(!t)return;
+    const here=dronePosition(selectedDrone());
+    if(!here){
+      setCommandResult(`${selectedDroneId}: no global position yet — cannot build the leg.`,"error");
+      return;
+    }
+    const ok=sendJson({
+      type:"mission_path",
+      drone_id:selectedDroneId,
+      altitude_m:targetAltitudes[selectedDroneId],
+      speed_m_s:Number(document.getElementById("mission-speed").value),
+      waypoints:[
+        {latitude_deg:here.latitude,longitude_deg:here.longitude},
+        {latitude_deg:t.latitude,longitude_deg:t.longitude}
+      ]
+    });
+    if(!ok)return;
+    pendingFlyStart[selectedDroneId]={at:Date.now(),stamp:missionStamp(missionVerdicts[selectedDroneId]),installed:false};
+    setCommandResult(`${selectedDroneId}: leg sent — starting as soon as the companion is ready.`,"warning");
+    updateTargetUi();
+  }
+
+  /* Cài mission đi qua MQTT nên start_ready chỉ đúng vài khung sau khi gửi.
+     Chờ có hạn và hiện trạng thái ra nút: một cú click không được nằm im rồi
+     bay bất ngờ mười phút sau. */
+  function advancePendingFlyStarts(){
+    for(const id of DRONE_IDS){
+      const pending=pendingFlyStart[id];
+      if(!pending)continue;
+      const mission=missionVerdicts[id];
+      if(!pending.installed&&missionStamp(mission)!==pending.stamp){
+        if(mission?.state==="installed"&&mission.waypoints===2)pending.installed=true;
+        else{
+          delete pendingFlyStart[id];
+          setCommandResult(`${id}: leg REJECTED — ${mission?.reason||"reason unknown"}`,"error");
+          continue;
+        }
+      }
+      if(pending.installed&&mission?.start_ready===true){
+        delete pendingFlyStart[id];
+        if(sendJson({type:"mission_start",drone_id:id}))
+          setCommandResult(`${id}: flying to the point.`,"warning");
+        continue;
+      }
+      if(Date.now()-pending.at>PENDING_FLY_START_MS){
+        delete pendingFlyStart[id];
+        setCommandResult(
+          `${id}: leg not started — ${pending.installed
+            ?missionReasonText(mission?.start_block_reason)
+            :"the companion never installed it"}. Press FLY TO POINT again.`,
+          "error");
+      }
+    }
+    updateTargetUi();
+  }
+
   function updateTargetUi(){
     const t=targets[selectedDroneId];
     document.getElementById("target-altitude").value=targetAltitudes[selectedDroneId];
@@ -1705,13 +1765,17 @@
       document.getElementById("target-longitude").textContent="Not selected";
       document.getElementById("target-distance").textContent="N/A";
       document.getElementById("fly-button").disabled=true;
+      document.getElementById("fly-button").textContent="FLY TO POINT";
       return;
     }
     document.getElementById("target-latitude").textContent=t.latitude.toFixed(7);
     document.getElementById("target-longitude").textContent=t.longitude.toFixed(7);
     const p=dronePosition(selectedDrone());
     document.getElementById("target-distance").textContent=p?`${map.distance(L.latLng(p.latitude,p.longitude),L.latLng(t.latitude,t.longitude)).toFixed(1)} m`:"N/A";
-    document.getElementById("fly-button").disabled=selectedModes[selectedDroneId]!=="offboard_map";
+    const execution=missionVerdicts[selectedDroneId]?.execution_state||"idle";
+    const busy=Boolean(pendingFlyStart[selectedDroneId])||["entering","running","stopping"].includes(execution);
+    document.getElementById("fly-button").disabled=busy;
+    document.getElementById("fly-button").textContent=busy?"FLYING TO POINT...":"FLY TO POINT";
   }
   function selectDrone(id){
     if(!DRONE_IDS.includes(id))return;
@@ -1726,8 +1790,7 @@
   document.getElementById("tracking-stop-button").addEventListener("click",stopTracking);
   document.getElementById("tracking-follow-start-button").addEventListener("click",startFollow);
   document.getElementById("tracking-follow-stop-button").addEventListener("click",stopFollow);
-  document.getElementById("position-mode-button").addEventListener("click",()=>requestMode("position"));
-  document.getElementById("offboard-mode-button").addEventListener("click",()=>requestMode("offboard_map"));
+  document.getElementById("position-mode-button").addEventListener("click",requestPositionMode);
   document.getElementById("takeoff-mode-button").addEventListener("click",()=>{
     disableManual(selectedDroneId,true);
     selectedModes[selectedDroneId]="takeoff";
@@ -1810,9 +1873,6 @@
       updateMissionUi();
       return;
     }
-    if(selectedModes[selectedDroneId]!=="offboard_map"){
-      setCommandResult("To fly to a single point, choose MAP POINT · LEGACY. Mission does not use this button.","warning"); return;
-    }
     targets[selectedDroneId]={latitude:e.latlng.lat,longitude:e.latlng.lng};
     if(targetMarkers[selectedDroneId])targetMarkers[selectedDroneId].setLatLng(e.latlng);
     else targetMarkers[selectedDroneId]=L.circleMarker(e.latlng,{radius:8,weight:3,color:"#fde047",fillColor:"#fde047",fillOpacity:.75}).addTo(map);
@@ -1832,12 +1892,15 @@
     takeoffAltitudes[selectedDroneId]=a;
     e.target.value=a;
   });
-  document.getElementById("fly-button").addEventListener("click",()=>{
-    const t=targets[selectedDroneId]; if(!t)return;
-    if(sendJson({type:"goto_global",drone_id:selectedDroneId,latitude_deg:t.latitude,longitude_deg:t.longitude,altitude_m:targetAltitudes[selectedDroneId]}))
-      setCommandResult(`${selectedDroneId}: destination point sent.`,"warning");
-  });
+  document.getElementById("fly-button").addEventListener("click",flyToPoint);
   document.getElementById("cancel-target-button").addEventListener("click",()=>{
+    /* CANCEL trước đây chỉ xóa marker trên trình duyệt, drone không nhận gì cả.
+       Giờ chặng là một mission thật nên hủy phải dừng được nó. */
+    delete pendingFlyStart[selectedDroneId];
+    const execution=missionVerdicts[selectedDroneId]?.execution_state||"idle";
+    if(["entering","running"].includes(execution)
+       &&sendJson({type:"mission_stop",drone_id:selectedDroneId}))
+      setCommandResult(`${selectedDroneId}: stopping the leg and returning to Position.`,"warning");
     targets[selectedDroneId]=null;
     if(targetMarkers[selectedDroneId]){map.removeLayer(targetMarkers[selectedDroneId]);delete targetMarkers[selectedDroneId];}
     updateTargetUi();
@@ -2145,7 +2208,7 @@
           trackingStatus=m.tracking||null;
           mergeGimbalAngles(m.gimbal_angles_deg||{});
           processControlResults(m.control_results||{});
-          updateCounters();renderTelemetry();updateMap();updateTargetUi();updateGimbalUi();updateTrackingUi();updateMissionUi();
+          updateCounters();renderTelemetry();updateMap();advancePendingFlyStarts();updateGimbalUi();updateTrackingUi();updateMissionUi();
           globalThis.updateSafetyUi?.(m);globalThis.updateStepper?.();globalThis.updateClickBadge?.();
         }
         if(m.type==="gimbal_control_result"){
@@ -2244,22 +2307,17 @@
     const shell = document.getElementById("map-shell");
     if (!badge || !text || !shell) return;
 
-    let mode = "none";
-    let label = "Map click does nothing";
-    if (typeof missionDrawing !== "undefined" && missionDrawing) {
-      mode = "draw";
-      const drawn = (typeof missionPaths !== "undefined" && missionPaths[selectedDroneId])
-        ? missionPaths[selectedDroneId].length : 0;
-      label = drawn
-        ? `Map click = add waypoint · ${drawn} so far`
-        : "Map click = add waypoint";
-    } else if (typeof selectedModes !== "undefined"
-               && selectedModes[selectedDroneId] === "offboard_map") {
-      mode = "point";
-      label = "Map click = pick destination point";
-    }
-    badge.className = mode === "none" ? "" : mode;
-    shell.classList.toggle("draw", mode === "draw");
+    /* Chỉ còn hai nghĩa cho một cú click, và không còn chế độ nào để nhầm:
+       vẽ tuyến, hoặc chọn điểm đến. */
+    const drawing = typeof missionDrawing !== "undefined" && missionDrawing;
+    const drawn = (typeof missionPaths !== "undefined" && missionPaths[selectedDroneId])
+      ? missionPaths[selectedDroneId].length : 0;
+    const mode = drawing ? "draw" : "point";
+    const label = !drawing
+      ? "Map click = pick destination point"
+      : (drawn ? `Map click = add waypoint · ${drawn} so far` : "Map click = add waypoint");
+    badge.className = mode;
+    shell.classList.toggle("draw", drawing);
     text.textContent = label;
   }
 

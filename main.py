@@ -568,7 +568,6 @@ CAMERA_MAX_FPS = 10.0
 
 ALLOWED_ACTIONS = {
     "position",
-    "offboard_map",
     "takeoff",
     "arm",
     "disarm",
@@ -577,7 +576,6 @@ ALLOWED_ACTIONS = {
     "rtl",
     "hold_current",
     # Giữ tương thích với giao diện cũ.
-    "enable_offboard",
     "keyboard_off",
     "stop",
 }
@@ -4699,74 +4697,6 @@ async def handle_manual_control(
         )
 
 
-async def handle_goto_global(
-    websocket: WebSocket,
-    send_lock: asyncio.Lock,
-    message: dict[str, Any],
-    drone_id: str,
-) -> None:
-    try:
-        latitude_deg = finite_float(
-            message["latitude_deg"],
-            minimum=-90.0,
-            maximum=90.0,
-        )
-
-        longitude_deg = finite_float(
-            message["longitude_deg"],
-            minimum=-180.0,
-            maximum=180.0,
-        )
-
-        altitude_m = finite_float(
-            message.get(
-                "altitude_m",
-                5.0,
-            ),
-            minimum=1.0,
-            maximum=30.0,
-        )
-
-    except (
-        KeyError,
-        TypeError,
-        ValueError,
-    ) as error:
-        await send_publish_result(
-            websocket,
-            send_lock,
-            ok=False,
-            drone_id=drone_id,
-            action="goto_global",
-            error=(
-                f"Invalid map target: "
-                f"{error}"
-            ),
-        )
-        return
-
-    ok, error = publish_control_message(
-        {
-            "type": "goto_global",
-            "drone_id": drone_id,
-            "latitude_deg": latitude_deg,
-            "longitude_deg": (
-                longitude_deg
-            ),
-            "altitude_m": altitude_m,
-        }
-    )
-
-    await send_publish_result(
-        websocket,
-        send_lock,
-        ok=ok,
-        drone_id=drone_id,
-        action="goto_global",
-        error=error,
-    )
-
-
 async def send_gimbal_result(
     websocket: WebSocket,
     send_lock: asyncio.Lock,
@@ -4993,15 +4923,6 @@ async def receive_web_commands(
 
         if message_type == "manual_control":
             await handle_manual_control(
-                websocket,
-                send_lock,
-                message,
-                drone_id,
-            )
-            continue
-
-        if message_type == "goto_global":
-            await handle_goto_global(
                 websocket,
                 send_lock,
                 message,

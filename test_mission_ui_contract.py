@@ -19,10 +19,54 @@ def test_mission_ui_has_explicit_start_stop_and_readiness_controls():
         assert token in source
 
 
-def test_mission_instructions_do_not_tell_the_operator_to_use_legacy_offboard():
+def test_the_dashboard_never_opens_the_second_offboard_writer():
+    """One OFFBOARD writer, or PX4 flies whichever packet arrived last.
+
+    The ROS 2 node starts streaming position setpoints the moment it is asked
+    for `offboard_map` -- before any point is picked -- while the companion
+    streams velocity setpoints at 20 Hz. Both reach PX4, which takes the most
+    recent one, so the vehicle wandered and never settled on the point. A map
+    point is a two-waypoint mission now, which is the certified path and the
+    only one with collision avoidance on it.
+    """
     source = INDEX.read_text(encoding="utf-8")
-    assert "Do not use MAP POINT · LEGACY to run a route" in source
-    assert "draw → SEND → then enable OFFBOARD" not in source
+    assert "goto_global" not in source
+    assert "offboard_map" not in source
+    assert "enable_offboard" not in source
+
+
+def test_a_map_point_is_sent_as_a_two_waypoint_mission():
+    """It must carry the vehicle's own position as the first waypoint.
+
+    Two waypoints is what makes `validate_mission` build a LinearTrajectory --
+    an open leg that holds at the far end -- rather than a closed loop that
+    laps forever. That hold is the "stop at the point" half of the behaviour;
+    the CBF running on every frame is the other half.
+    """
+    source = INDEX.read_text(encoding="utf-8")
+    body = source[source.index("function flyToPoint()"):]
+    body = body[: body.index("\n  }\n")]
+    assert 'type:"mission_path"' in body
+    assert "dronePosition(selectedDrone())" in body
+    assert "latitude_deg:here.latitude" in body
+    assert "latitude_deg:t.latitude" in body
+
+
+def test_a_queued_point_start_expires_instead_of_flying_later():
+    """A click must not sit dormant and then launch a flight minutes later.
+
+    Installing the mission crosses MQTT, so `start_ready` only turns true a few
+    frames after the send; the start has to wait for it. Bounded, so an
+    operator who walks away from a blocked vehicle does not come back to one
+    that took off on its own.
+    """
+    source = INDEX.read_text(encoding="utf-8")
+    assert "PENDING_FLY_START_MS" in source
+    assert "advancePendingFlyStarts()" in source
+    # Chỉ khởi động khi hình học ĐÃ đổi, nếu không một start_ready còn sót lại
+    # từ chuyến trước sẽ cho bay tới điểm cũ.
+    assert "missionStamp(mission)!==pending.stamp" in source
+    assert "mission.waypoints===2" in source
 
 
 def test_a_map_click_always_says_what_it_will_do():
@@ -42,13 +86,12 @@ def test_a_map_click_always_says_what_it_will_do():
         "function updateClickBadge()",
         "Map click = add waypoint",
         "Map click = pick destination point",
-        "Map click does nothing",
     ):
         assert token in source, token
-    # Drawing tools and the legacy fly-to-point control must never be on
-    # screen together: one is ws-plan, the other ws-fly.
+    # Drawing tools and the fly-to-point control must never be on screen
+    # together: one is ws-plan, the other ws-fly.
     assert 'id="mission-draw-button"' in source
-    assert 'id="offboard-mode-button"' in source
+    assert 'id="fly-button"' in source
 
 
 def test_mission_speed_comes_from_the_runtime_config():
