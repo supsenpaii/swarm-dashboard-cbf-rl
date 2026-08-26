@@ -48,6 +48,11 @@ class MissionLimits:
     geofence_max_enu_m: Vector3
     maximum_speed_m_s: float
     minimum_separation_m: float
+    # What two STATIONARY vehicles must keep between them. At a hold point the
+    # closing speed is zero, so uncertainty, age_latency and stopping_distance
+    # all vanish from the CBF's required separation and only these two terms
+    # are left. Defaulted so existing constructions keep working.
+    station_keeping_separation_m: float = 0.0
 
     @classmethod
     def from_environment(cls) -> "MissionLimits":
@@ -75,6 +80,10 @@ class MissionLimits:
             geofence_max_enu_m=_vector("SWARM_CBF_GEOFENCE_MAX_ENU_M", "100,100,50"),
             maximum_speed_m_s=min(cbf_maximum, mission_maximum),
             minimum_separation_m=_float("SWARM_CBF_MINIMUM_SEPARATION_M", 4.0),
+            station_keeping_separation_m=(
+                _float("SWARM_CBF_MINIMUM_SEPARATION_M", 4.0)
+                + _float("SWARM_CBF_TRACKING_RESERVE_M", 0.0)
+            ),
         )
 
 
@@ -277,6 +286,55 @@ def closest_approach_m(
     minimum = min(math.dist(a, b) for a in left for b in right)
     # Each sample stands for up to half a step of path on either side.
     return max(0.0, minimum - sample_step_m)
+
+
+def unreachable_destinations(
+    trajectories: Mapping[str, Any],
+    limits: MissionLimits | None = None,
+) -> list[dict[str, Any]]:
+    """Pairs of legs whose hold points are closer than the pair can ever hover.
+
+    `review_missions` asks a different question and is deliberately only
+    advisory: whether the PATHS pass close. Crossing legs are flyable, CBF
+    resolves them, and four such scenarios are certified. This asks whether the
+    ENDPOINTS can be occupied at the same time, which is not a conflict to be
+    resolved -- it is arithmetic the barrier can never satisfy. Two vehicles
+    sent to points closer than their station-keeping floor converge, meet the
+    barrier, and hover at it short of BOTH points until someone cancels, with
+    the trajectory reporting finished the whole time because
+    `LinearTrajectory.is_finished` is a clock and not a position check.
+
+    Only an open leg has a hold point. A closed polyline laps forever and never
+    holds anywhere, so it has no destination to conflict over.
+
+    Unlike `validate_mission` this cannot be re-run per drone on the bridge --
+    it is a property of the PAIR, and each companion knows only its own
+    mission. The server is the only place that sees both, so it is the only
+    place this check can live. It is not a safety gate: CBF remains that, and
+    CBF is what makes the outcome a stall rather than a collision. This only
+    stops an unwinnable request from being accepted in the first place.
+    """
+    limits = limits or MissionLimits.from_environment()
+    floor = limits.station_keeping_separation_m
+    holds = {
+        drone: trajectory.end_enu_m
+        for drone, trajectory in trajectories.items()
+        if getattr(trajectory, "end_enu_m", None) is not None
+    }
+    conflicts = []
+    drones = sorted(holds)
+    for index, drone in enumerate(drones):
+        for other in drones[index + 1 :]:
+            distance = math.dist(holds[drone], holds[other])
+            if distance < floor:
+                conflicts.append(
+                    {
+                        "drones": [drone, other],
+                        "destination_separation_m": round(distance, 2),
+                        "station_keeping_separation_m": round(floor, 2),
+                    }
+                )
+    return conflicts
 
 
 def review_missions(

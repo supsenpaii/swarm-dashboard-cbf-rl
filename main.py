@@ -64,6 +64,7 @@ from mission_plan import (
     MissionLimits,
     MissionRejected,
     review_missions,
+    unreachable_destinations,
     validate_mission,
 )
 from trajectory_controller import mission_speed_preview
@@ -4373,6 +4374,9 @@ def mission_runtime_config() -> dict[str, Any]:
         "command_limit_m_s": FORMATION_MAXIMUM_VELOCITY_M_S,
         "cbf_maximum_velocity_m_s": CBF_MAXIMUM_VELOCITY_M_S,
         "minimum_separation_m": limits.minimum_separation_m,
+        # The radius the map draws its no-go discs at, and the floor
+        # handle_mission_path rejects against. One number, one source.
+        "station_keeping_separation_m": limits.station_keeping_separation_m,
         "cbf_rl_mode": os.environ.get("SWARM_CBF_RL_MODE", "off").strip().lower(),
     }
 
@@ -5043,6 +5047,30 @@ async def handle_mission_path(
     with state_lock:
         pending = dict(accepted_mission_paths)
     pending[drone_id] = trajectory
+
+    # Two hold points closer than the station-keeping floor is not a conflict
+    # CBF can resolve -- the pair converges, meets the barrier and hovers short
+    # of BOTH points forever. Refuse it here, where both missions are visible,
+    # rather than launching a flight that can only end in a cancel.
+    blocked = unreachable_destinations(pending)
+    if blocked:
+        conflict = blocked[0]
+        await send_publish_result(
+            websocket,
+            send_lock,
+            ok=False,
+            drone_id=drone_id,
+            action="mission_path",
+            error=(
+                f"{conflict['drones'][0]} and {conflict['drones'][1]} would hold "
+                f"{conflict['destination_separation_m']} m apart; two hovering "
+                f"vehicles need {conflict['station_keeping_separation_m']} m. "
+                "Separation is measured in 3D, so moving the point or splitting "
+                "the two altitudes both work."
+            ),
+        )
+        return
+
     review = (
         review_missions(pending)
         if len(pending) > 1

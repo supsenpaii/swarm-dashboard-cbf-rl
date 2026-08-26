@@ -876,7 +876,11 @@
   let selectedDroneId="UAV-01", socket=null, drones={}, firstMapPosition=false;
   let gazeboStatus=null, trackingStatus=null, trackingStreamStarted=false;
   let trackingRetryTimer=null, trackingSelectionStart=null;
-  const droneMarkers={}, droneTrails={}, targetMarkers={};
+  const droneMarkers={}, droneTrails={}, targetMarkers={}, exclusionCircles={};
+  /* Bán kính hai xe ĐỨNG YÊN phải giữ, lấy từ mission_config. 0 = chưa
+     biết, và lúc chưa biết thì không vẽ gì -- một vòng tròn sai còn tệ
+     hơn không có vòng nào. */
+  let stationKeepingSeparationM=0;
   // One drawn loop per drone, kept in map coordinates so redrawing the shape
   // and sending it are the same list. ENU conversion happens server-side,
   // where the shared origin lives.
@@ -1685,7 +1689,36 @@
       if(!pts.length||map.distance(pts[pts.length-1],L.latLng(p.latitude,p.longitude))>.2)trail.addLatLng(point);
       if(!firstMapPosition){map.setView(point,18);firstMapPosition=true;}
     }
+    updateExclusionZones();
   }
+  /* Vùng một xe khác sẽ đứng: nơi nó đang đỗ, hoặc điểm nó đang được lệnh
+     bay tới. Click vào trong đó là yêu cầu bất khả thi -- hai xe sẽ gặp rào
+     rồi treo, cả hai đều không tới nơi. Vẽ ra thì người dùng không bao giờ
+     bấm vào, tốt hơn hẳn một thông báo lỗi sau khi đã bấm. */
+  function exclusionCentre(id){
+    const t=targets[id];
+    if(t)return L.latLng(t.latitude,t.longitude);
+    const p=dronePosition(drones[id]);
+    return p?L.latLng(p.latitude,p.longitude):null;
+  }
+  function updateExclusionZones(){
+    for(const id of DRONE_IDS){
+      const centre=id===selectedDroneId||!(stationKeepingSeparationM>0)
+        ?null:exclusionCentre(id);
+      if(!centre){
+        if(exclusionCircles[id]){map.removeLayer(exclusionCircles[id]);delete exclusionCircles[id];}
+        continue;
+      }
+      if(exclusionCircles[id])
+        exclusionCircles[id].setLatLng(centre).setRadius(stationKeepingSeparationM);
+      else
+        exclusionCircles[id]=L.circle(centre,{
+          radius:stationKeepingSeparationM,color:"#f87171",weight:1,
+          dashArray:"4 4",fillColor:"#f87171",fillOpacity:.08,interactive:false,
+        }).addTo(map);
+    }
+  }
+
   /* FLY TO POINT không còn đường riêng xuống PX4. Nó dựng một mission hai
      waypoint -- vị trí hiện tại → điểm click -- nên chuyến bay đi qua đúng
      chuỗi đã chứng nhận: nominal → coordinator → CBF → supervisor. Hai waypoint
@@ -1788,6 +1821,7 @@
     selectedDroneId=id;
     document.querySelectorAll(".tab-button").forEach(b=>b.classList.toggle("active",b.dataset.droneId===id));
     renderTelemetry(); updateModeUi(); updateGimbalUi(); updateTrackingUi(); updateMissionUi();
+    updateExclusionZones();
   }
 
   document.querySelectorAll(".tab-button").forEach(b=>b.addEventListener("click",()=>selectDrone(b.dataset.droneId)));
@@ -1882,7 +1916,19 @@
     if(targetMarkers[selectedDroneId])targetMarkers[selectedDroneId].setLatLng(e.latlng);
     else targetMarkers[selectedDroneId]=L.circleMarker(e.latlng,{radius:8,weight:3,color:"#fde047",fillColor:"#fde047",fillOpacity:.75}).addTo(map);
     updateTargetUi();
-    setCommandResult(`${selectedDroneId}: point selected, press FLY TO POINT.`,"warning");
+    updateExclusionZones();
+    /* Cảnh báo thôi, không chặn: cổng thật nằm ở server, nơi duy nhất thấy
+       được cả hai mission. Đây chỉ để người dùng biết ngay lúc click. */
+    const blocker=DRONE_IDS.find(id=>{
+      if(id===selectedDroneId||!(stationKeepingSeparationM>0))return false;
+      const centre=exclusionCentre(id);
+      return centre&&map.distance(centre,e.latlng)<stationKeepingSeparationM;
+    });
+    setCommandResult(
+      blocker
+        ?`${selectedDroneId}: point is inside ${blocker}'s ${stationKeepingSeparationM.toFixed(1)} m hold zone — both would stall short. Move it, or split the altitudes.`
+        :`${selectedDroneId}: point selected, press FLY TO POINT.`,
+      blocker?"error":"warning");
   });
 
   document.getElementById("target-altitude").addEventListener("change",e=>{
@@ -2021,6 +2067,11 @@
     const command=Number(config.command_limit_m_s);
     const cbf=Number(config.cbf_maximum_velocity_m_s);
     const separation=Number(config.minimum_separation_m);
+    const holdFloor=Number(config.station_keeping_separation_m);
+    if(Number.isFinite(holdFloor)&&holdFloor>0){
+      stationKeepingSeparationM=holdFloor;
+      updateExclusionZones();
+    }
     const parts=[`MISSION ${maximum.toFixed(1)} m/s`];
     if(Number.isFinite(command))parts.push(`CMD ${command.toFixed(1)}`);
     if(Number.isFinite(cbf))parts.push(`CBF ${cbf.toFixed(1)}`);

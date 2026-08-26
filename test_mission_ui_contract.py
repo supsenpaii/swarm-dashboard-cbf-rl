@@ -158,3 +158,33 @@ def test_the_dashboard_never_reaches_a_cdn():
     assert '"/static/tiles/{z}/{x}/{y}.png"' in source
     external = set(re.findall(r"https?://([a-z0-9.-]+)", source))
     assert external == set(), external
+
+
+def test_the_map_draws_the_zone_a_second_drone_cannot_be_sent_into() -> None:
+    """A drawn disc is worth more than a rejection message: the operator never
+    clicks there in the first place. Its radius must come from the config for
+    the same reason the safety strip's hard floor does -- on a profile whose
+    floor is not 20 m, a pinned literal draws a circle that is simply a lie."""
+    source = INDEX.read_text(encoding="utf-8")
+    assert "function updateExclusionZones(" in source
+    assert "config.station_keeping_separation_m" in source
+    # No literal radius anywhere near the disc.
+    assert "stationKeepingSeparationM=0" in source.replace(" ", "")
+    assert "L.circle(centre" in source
+    # A drone's own zone is not drawn against itself.
+    assert "id===selectedDroneId" in source
+
+
+def test_the_page_only_warns_about_the_zone_and_leaves_the_gate_on_the_server(
+) -> None:
+    """Same lesson as the second OFFBOARD writer: the browser is not the gate.
+    The click handler may warn, but nothing in the page may refuse to send --
+    any MQTT or WebSocket client could skip it, so the refusal lives where
+    every client passes through."""
+    source = INDEX.read_text(encoding="utf-8")
+    click = source[source.index('map.on("click"'):]
+    click = click[: click.index("document.getElementById(\"target-altitude\")")]
+    assert "hold zone" in click
+    # The point is still recorded and FLY TO POINT still reachable: warn, not block.
+    assert "targets[selectedDroneId]={latitude:" in click
+    assert "return;" not in click.split("stationKeepingSeparationM>0")[1][:400]

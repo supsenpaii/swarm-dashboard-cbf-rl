@@ -11,6 +11,7 @@ from mission_plan import (
     MissionRejected,
     closest_approach_m,
     review_missions,
+    unreachable_destinations,
     validate_mission,
 )
 from trajectory_controller import ClosedPolylineTrajectory, LinearTrajectory
@@ -191,3 +192,87 @@ def test_convex_and_star_shaped_loops_still_pass():
     ]
     for loop in (square_enu, triangle, ell):
         assert self_intersecting_pair(loop) is None
+
+
+# --- destination conflicts -------------------------------------------------
+# `review_missions` above asks whether the PATHS pass close, and is advisory
+# because CBF resolves a crossing. These ask whether the ENDPOINTS can both be
+# occupied, which CBF cannot resolve at any gain: the pair hovers at the
+# barrier short of both points until someone cancels.
+
+HOLD_LIMITS = MissionLimits(
+    geofence_min_enu_m=(-100.0, -100.0, 0.0),
+    geofence_max_enu_m=(100.0, 100.0, 50.0),
+    maximum_speed_m_s=1.5,
+    minimum_separation_m=4.0,
+    station_keeping_separation_m=22.0,
+)
+
+
+def leg(east_m: float, north_m: float, *, altitude_m: float = 9.0):
+    """An open two-waypoint leg from the origin to one ENU point."""
+    return validate_mission(
+        {
+            "waypoints": [
+                {"latitude_deg": ORIGIN.latitude_deg, "longitude_deg": ORIGIN.longitude_deg},
+                {
+                    "latitude_deg": ORIGIN.latitude_deg + north_m * METRE_LAT,
+                    "longitude_deg": ORIGIN.longitude_deg + east_m * METRE_LON,
+                },
+            ],
+            "altitude_m": altitude_m,
+            "speed_m_s": 1.5,
+        },
+        ORIGIN,
+        HOLD_LIMITS,
+    )
+
+
+def test_two_points_closer_than_the_hold_floor_are_refused():
+    conflicts = unreachable_destinations(
+        {"UAV-01": leg(40.0, 0.0), "UAV-02": leg(45.0, 0.0)}, HOLD_LIMITS
+    )
+    assert len(conflicts) == 1
+    assert conflicts[0]["drones"] == ["UAV-01", "UAV-02"]
+    assert conflicts[0]["destination_separation_m"] == pytest.approx(5.0, abs=0.2)
+    assert conflicts[0]["station_keeping_separation_m"] == 22.0
+
+
+def test_two_points_beyond_the_hold_floor_are_allowed():
+    assert not unreachable_destinations(
+        {"UAV-01": leg(-30.0, 0.0), "UAV-02": leg(30.0, 0.0)}, HOLD_LIMITS
+    )
+
+
+def test_altitude_counts_because_the_barrier_is_three_dimensional():
+    """The remedy the rejection message offers has to actually work: the same
+    two points 5 m apart horizontally become legal once the altitudes split."""
+    assert not unreachable_destinations(
+        {
+            "UAV-01": leg(40.0, 0.0, altitude_m=8.0),
+            "UAV-02": leg(45.0, 0.0, altitude_m=30.0),
+        },
+        HOLD_LIMITS,
+    )
+
+
+def test_a_drawn_lap_has_no_destination_to_conflict_over():
+    """A closed polyline never holds anywhere, so overlapping loops are not a
+    destination conflict -- they are a crossing, which is review_missions' job
+    and which four certified scenarios show CBF resolves."""
+    assert not unreachable_destinations(
+        {
+            "UAV-01": validate_mission(mission(), ORIGIN, HOLD_LIMITS),
+            "UAV-02": validate_mission(mission(), ORIGIN, HOLD_LIMITS),
+        },
+        HOLD_LIMITS,
+    )
+
+
+def test_the_hold_floor_is_separation_plus_the_tracking_reserve(monkeypatch):
+    """At rest every speed-derived term of the CBF's required separation is
+    zero; these two are what is left, and the map draws its disc at exactly
+    this radius."""
+    monkeypatch.setenv("SWARM_CBF_MINIMUM_SEPARATION_M", "20.0")
+    monkeypatch.setenv("SWARM_CBF_TRACKING_RESERVE_M", "2.0")
+    assert MissionLimits.from_environment().station_keeping_separation_m == 22.0

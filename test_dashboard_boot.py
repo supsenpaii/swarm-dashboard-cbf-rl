@@ -156,3 +156,25 @@ def test_the_server_refuses_the_action_that_opens_the_second_writer() -> None:
     # The one-point path has no handler left to reach either.
     assert "async def handle_goto_global(" not in server
     assert '"goto_global"' not in server
+
+
+def test_the_server_refuses_two_points_that_can_never_both_be_reached() -> None:
+    """The pair check has to run BEFORE the mission goes onto MQTT.
+
+    Two hold points closer than the station-keeping floor is not a conflict CBF
+    can resolve -- the pair converges, meets the barrier and hovers short of
+    both points, with the trajectory reporting finished the whole time because
+    `LinearTrajectory.is_finished` is a clock and not a position check. And
+    unlike `validate_mission`, this one cannot be re-run per drone on the
+    bridge: it is a property of the PAIR, and each companion knows only its own
+    mission. The server is the only place that sees both.
+    """
+    server = (INDEX.parent.parent / "main.py").read_text(encoding="utf-8")
+    handler = server[server.index("async def handle_mission_path("):]
+    handler = handler[: handler.index("async def handle_mission_action(")]
+    assert "unreachable_destinations(pending)" in handler
+    assert handler.index("unreachable_destinations(pending)") < handler.index(
+        "publish_control_message("
+    ), "the pair check must refuse before the mission is published to MQTT"
+    # The radius the check uses is the one the map draws with -- one source.
+    assert '"station_keeping_separation_m": limits.station_keeping_separation_m' in server
