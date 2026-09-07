@@ -401,7 +401,7 @@ class CornerExitProfileTests(unittest.TestCase):
             speeds.append(math.dist((0.0, 0.0, 0.0), velocity))
         return max(errors), max(speeds)
 
-    def test_sparrow_holds_the_corner_budget_from_10_to_25_ms(self):
+    def test_high_speed_profile_holds_the_corner_budget_from_10_to_25_ms(self):
         for speed_m_s in (10.0, 15.0, 20.0, 25.0):
             with self.subTest(speed_m_s=speed_m_s):
                 worst_m, fastest_m_s = self.fly_square(speed_m_s)
@@ -591,7 +591,7 @@ class MissionSpeedPreviewTests(unittest.TestCase):
 class ResponseLagCornerTests(unittest.TestCase):
     """A corner budget is geometric; a real vehicle spends part of it catching up.
 
-    Measured on a 240 m square at 15 m/s with a 1 m tolerance and Sparrow's
+    Measured on a 240 m square at 15 m/s with a 1 m tolerance and the profile's
     0.860 s response: 3.489 m of cross-track when the lag is ignored, 0.145 m
     when it is planned for. The aircraft was arriving at a 90 degree corner at
     5.06 m/s against a command of about 1 m/s, having never been given the

@@ -18,12 +18,9 @@ from cbf_rl_env import (
     CbfRlEnvConfig,
     CbfRlEnvironment,
     DRONE_IDS,
-    sparrow_10m_floor_cbf_config,
-    sparrow_20m_cbf_config,
     x500_20m_cbf_config,
 )
 from cbf_rl_policy import ProximityCbfRlPolicy
-from conflict_coordinator import sparrow_20m_conflict_config
 
 
 Vector3 = tuple[float, float, float]
@@ -58,12 +55,6 @@ def profile_config(
     same 22.055 m -- which is 20 + 2 + uncertainty, the wrong contract's
     requirement, and the tell that the wall was the harness rather than them.
     """
-    if vehicle_profile == "sparrow":
-        return (
-            sparrow_10m_floor_cbf_config(maximum_velocity_m_s)
-            if minimum_separation_m < 20.0
-            else sparrow_20m_cbf_config(maximum_velocity_m_s)
-        )
     return x500_20m_cbf_config(maximum_velocity_m_s)
 
 
@@ -190,7 +181,7 @@ def _vertical_case(
     # 15 m goal margin put both goals 0.728 m OUTSIDE a 0-200 m fence: each
     # vehicle flew its encounter cleanly, passed, reached the fence, and then
     # hovered a fraction short of a goal it was forbidden to reach. That read
-    # as two liveness failures in the Sparrow 20 m/s matrix for as long as the
+    # as two liveness failures in the high-speed matrix for as long as the
     # matrix existed, and neither was one -- both held 22.3 m of separation
     # over 25,000 steps.
     goal_margin_m = min(15.0, (ceiling_m - floor_m) / 2.0 - half - 1.0)
@@ -353,18 +344,10 @@ def cases(
     vehicle_profile: str = "x500",
     minimum_separation_m: float = 20.0,
 ) -> tuple[SafetyCase, ...]:
-    if maximum_speed_m_s < 1 or vehicle_profile not in {"x500", "sparrow"}:
+    if maximum_speed_m_s < 1 or vehicle_profile != "x500":
         raise ValueError("maximum speed and vehicle profile are invalid")
     result: list[SafetyCase] = []
-    variants = (
-        # 0.90 s, not the 0.75 s this used to carry. The 2026-08-15 Sparrow
-        # flight measured the horizontal response at tau = 0.860 s against a
-        # vertical 0.275 s, so the old upper bound was testing a plant faster
-        # than the real one on the axis that matters most for a crossing.
-        ((0.45, 0.0), (0.90, 100.0))
-        if vehicle_profile == "sparrow"
-        else ((0.45, 0.0), (0.75, 100.0), (0.75, 150.0))
-    )
+    variants = ((0.45, 0.0), (0.75, 100.0), (0.75, 150.0))
     for speed in range(1, maximum_speed_m_s + 1):
         for tau, age_ms in variants:
             for angle in range(0, 181, 15):
@@ -413,7 +396,7 @@ def _bounded_action(action: Vector3, maximum_normalized_speed: float) -> Vector3
 def certified_speed_by_geometry(results: list[dict[str, Any]]) -> dict[str, int]:
     """Highest speed each geometry family clears with every rung below it clean.
 
-    One number for the whole matrix hides the shape of a failure. Sparrow at
+    One number for the whole matrix hides the shape of a failure. The high-speed profile at
     20 m/s reads FAIL, but the four cases that fail are all vertical head-on,
     and horizontal -- which is what a drawn mission actually flies, since
     missions are polylines at one altitude -- is clean to the top. Reporting a
@@ -466,19 +449,8 @@ def evaluate_case(
             maximum_steps=evaluation_maximum_steps,
             cbf=cbf,
             response_time_constant_s=case.response_time_constant_s,
-            maximum_acceleration_m_s2=(
-                4.0 if case.vehicle_profile == "sparrow" else 3.0
-            ),
-            state_max_age_ms=(100.0 if case.vehicle_profile == "sparrow" else 150.0),
-            # Sparrow is judged against the stack it actually flies, which has
-            # run this between the policy and the barrier since the mission
-            # milestone. x500 keeps the older gate so its certified rungs still
-            # mean what they meant when they were signed off.
-            conflict_coordination=(
-                sparrow_20m_conflict_config(policy.maximum_velocity_m_s)
-                if case.vehicle_profile == "sparrow"
-                else None
-            ),
+            maximum_acceleration_m_s2=3.0,
+            state_max_age_ms=150.0,
             # The policy is bounded to the case speed below, so the mission
             # the coordinator rebuilds its output from is bounded with it.
             mission_speed_m_s=case.speed_m_s,
@@ -495,7 +467,7 @@ def evaluate_case(
     # How hard the barrier had to work, not just whether it held. A CBF is a
     # hard constraint: it holds the line whether the coordinator resolved the
     # encounter or left the whole job to it, so distance and margin cannot
-    # tell those apart. Measured on the Sparrow 10 m/s cases, the yield
+    # tell those apart. Measured on the high-speed cases, the yield
     # geometry that saturated at 5 m in flight moved the worst per-case margin
     # from 2.632 m to 1.701 m and the peak intervention from 2.401 to 2.603
     # m/s -- while minimum_distance_m stayed identical to seven digits,
@@ -565,7 +537,7 @@ def run(
     expected_vehicle_profile: str | None = None,
 ) -> dict[str, Any]:
     policy = ProximityCbfRlPolicy.load(model)
-    if policy.vehicle_profile not in {"x500", "sparrow"}:
+    if policy.vehicle_profile != "x500":
         raise ValueError("the safety matrix requires a high-speed policy")
     if expected_vehicle_profile and policy.vehicle_profile != expected_vehicle_profile:
         raise ValueError("the safety matrix vehicle profile does not match")
@@ -626,7 +598,7 @@ def run(
         # is make MANY cases worse at once, which only a robust central
         # statistic can see.
         #
-        # Measured across the Sparrow 10 m/s matrix against the yield geometry
+        # Measured across the high-speed matrix against the yield geometry
         # that saturated at 5 m in flight: 72 of 280 cases degraded, one from
         # 10.083 m of margin to 5.944, and every number the matrix reported
         # stayed bit-identical -- minimum_distance_m to seven digits. The

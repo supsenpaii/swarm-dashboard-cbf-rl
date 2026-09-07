@@ -12,7 +12,7 @@ TRAJECTORY_DRIVER_VERSION = "swarm_sim_time_trajectory_v1"
 _CONTRACT = {
     "clock": "gazebo_sim_time",
     "function": "linear_range_and_yaw_clamped_then_hold",
-    "target_entity": "sparrow_gimbal_1",
+    "target_entity": "x500_custom_1",
     "target_reference": "model_origin",
     "version": TRAJECTORY_DRIVER_VERSION,
 }

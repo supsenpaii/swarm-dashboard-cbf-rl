@@ -105,7 +105,7 @@ NAV_STATE_POSCTL = PX4_FACTS["nav_state_posctl"]["value"]
 # the vehicle flies toward a path it is further than trajectory_entry_radius_m
 # from -- after a yield detour, or simply overshooting at cruise. It is a
 # trajectory state, not the formation/altitude-hold fallback these checks
-# exist to catch, and sparrow_corridor_replay.py:277 already reads it that
+# exist to catch, and the flight replay already reads it that
 # way. Leaving it out cost the 15 m/s rung a flight: both vehicles crossed the
 # entry radius back and forth every ~2.7 s, out of phase with each other, so
 # the gate's demand that BOTH be tracking in the same 0.25 s poll almost never

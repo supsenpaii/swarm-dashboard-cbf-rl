@@ -175,7 +175,7 @@ if __name__ == "__main__":
 class ReachableVelocityTests(unittest.TestCase):
     """Opt-in reachability: the solve may only pick a velocity the vehicle can take.
 
-    Measured on the 280-case Sparrow matrix with it enabled at 4 m/s^2 / 20 Hz:
+    Measured on the high-speed matrix with it enabled at 4 m/s^2 / 20 Hz:
     safety never degraded -- physical_safe and dynamic_safe stayed true in all
     280 -- but 178 cases stopped passing on liveness, with hold frames and 87
     failures to reach the goal. The 0.2 m/s of authority a frame buys is less

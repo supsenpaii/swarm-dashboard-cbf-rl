@@ -139,7 +139,7 @@ def fit_to_spawns(
     """Rotate and scale the whole picture onto where the vehicles actually are.
 
     The scenarios below are drawn against SPAWN_ENU_M, two points 5.39 m apart
-    -- a geometry from the 4 m separation envelope. Sparrow's certified
+    -- a geometry from the 4 m separation envelope. The high-speed profile's certified
     envelope asks for 20 m of separation and its coordinator does not engage
     until 120 m, so at that scale the vehicles start inside the barrier and
     every scenario aborts before it flies.

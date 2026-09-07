@@ -64,7 +64,7 @@ class CrossingCliffTests(unittest.TestCase):
 
     # Re-measured 2026-08-18, when this scenario stopped modelling a vehicle
     # that changes velocity in a single 20 ms step and started carrying the
-    # measured Sparrow response (0.860 s) and the airframe's MPC_ACC_HOR_MAX.
+    # measured response and the airframe's MPC_ACC_HOR_MAX.
     #
     # The edge barely moved -- 1.5/1.75 became 1.6/1.7 -- but THE FAILURE MODE
     # CHANGED, and that is the result worth keeping. Against the instant

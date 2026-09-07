@@ -102,7 +102,7 @@ class CbfRlEnvironmentTests(unittest.TestCase):
         """The coordinator's `mission` argument, and the matrix's blind spot.
 
         Every role in ConflictCoordinator rebuilds its output from `mission`
-        for the Sparrow config, so this vector -- not the policy -- is what
+        for the high-speed config, so this vector -- not the policy -- is what
         the matrix certifies. It used to be a hand-written goal-direction
         vector, which is why 1260 cases passed a yield geometry that
         saturated at 5 m in flight: a bare direction has no position-feedback

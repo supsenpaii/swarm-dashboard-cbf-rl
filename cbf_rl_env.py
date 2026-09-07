@@ -8,7 +8,6 @@ network access, simulator process, or flight authority.
 
 from __future__ import annotations
 
-import dataclasses
 import math
 import random
 from dataclasses import dataclass, field
@@ -75,49 +74,6 @@ def x500_20m_cbf_config(maximum_velocity_m_s: float = 10.0) -> CbfConfig:
     )
 
 
-def sparrow_10m_floor_cbf_config(maximum_velocity_m_s: float = 10.0) -> CbfConfig:
-    """Sparrow contract with the 10 m emergency floor the operator asked for.
-
-    "10 to 20 m" is one contract, not two. The floor is the distance the pair
-    may never close inside; the 20 m end of that range appears on its own,
-    because `required_margin` grows with closing speed and already exceeds
-    20 m once the pair is closing at 6.81 m/s. So a static 10 m floor gives
-    exactly the asked-for behaviour with no ramp and no extra gain in the
-    feedback loop `design_margin_buffer_m` warns about: drones on parallel
-    tracks may sit 12 m apart and hold their paths, while anything genuinely
-    converging is held off at 20 m or more.
-
-    At the speeds this project cares about the floor is a minor term anyway --
-    at 25 m/s head-on it is 20 m of a 206 m requirement.
-    """
-    return dataclasses.replace(
-        sparrow_20m_cbf_config(maximum_velocity_m_s), minimum_separation_m=10.0
-    )
-
-
-def sparrow_20m_cbf_config(maximum_velocity_m_s: float = 10.0) -> CbfConfig:
-    """Sparrow 20 m contract using the airframe's 4 m/s^2 XY limit."""
-    return CbfConfig(
-        minimum_separation_m=20.0,
-        barrier_gain_s_inv=2.0,
-        maximum_velocity_m_s=maximum_velocity_m_s,
-        covariance_sigma=0.10,
-        # 0.86 s, measured, not the inherited 0.65. The 2026-08-15 Sparrow
-        # flight fits the horizontal response at tau = 0.860 s, and a head-on
-        # pair at 1 m/s breached the requirement by 0.13 m with the gate
-        # commanding a reversal the vehicle had not yet made. The shortfall
-        # scales with closing speed -- 0.42 m at 2 m/s closing, 8.4 m at 40 --
-        # so the old value was least accurate exactly where it mattered most.
-        command_latency_s=0.86,
-        relative_braking_acceleration_m_s2=8.0,
-        tracking_reserve_m=2.0,
-        design_margin_buffer_m=0.0,
-        require_position_covariance=True,
-        geofence_min_enu_m=(-500.0, -500.0, 0.0),
-        geofence_max_enu_m=(500.0, 500.0, 200.0),
-    )
-
-
 @dataclass(frozen=True)
 class CbfRlEnvConfig:
     dt_s: float = 0.05
@@ -164,10 +120,7 @@ class CbfRlEnvConfig:
     # that caps the policy below that ceiling must cap the mission with it, or
     # the mission outruns the case it is meant to fly.
     mission_speed_m_s: float | None = None
-    # The tracker gain the coordinator's `mission` is produced with. 0.6 is
-    # SWARM_FORMATION_POSITION_GAIN_S_INV's default, which is what every
-    # Sparrow profile flies; the excursion the yield can hold is
-    # yield_lateral_speed_m_s / this, so the matrix has to use the same one.
+    # The tracker gain the coordinator's `mission` is produced with.
     position_gain_s_inv: float = 0.6
 
     def __post_init__(self) -> None:
