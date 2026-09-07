@@ -1,0 +1,550 @@
+#!/usr/bin/env bash
+# shellcheck disable=SC2016,SC2317
+
+# Start the complete Swarm Dashboard stack from one terminal.
+# Usage:
+#   ./run_all.sh          Start everything and keep supervising it.
+#   ./run_all.sh --check  Validate the local installation without starting it.
+#   ./run_all.sh --reap   Stop a previous stack, then exit.  Deliberately not
+#                         automatic: a stale process and a running flight look
+#                         identical from here, and only one of them is safe to
+#                         kill.  A refusal to start is the safe default.
+
+set -Eeuo pipefail
+
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+mode="${1:-start}"
+
+if [[ "${mode}" != "start" && "${mode}" != "--check" && "${mode}" != "--reap" ]]; then
+  echo "Usage: $0 [--check|--reap]" >&2
+  exit 2
+fi
+
+# A real .env takes precedence.  When it does not exist, load the project's
+# runtime defaults, then use the paths of the current development machine.
+set -a
+if [[ -f "${script_dir}/.env" ]]; then
+  # shellcheck disable=SC1091
+  source "${script_dir}/.env"
+else
+  # shellcheck disable=SC1091
+  source "${script_dir}/.env.example"
+  SWARM_TRACKING_PACKAGE_ROOT="/home/sup/ws_px4/src/lfc_gimbal_gazebo"
+  SWARM_ROS_SETUP="/home/sup/ws_px4/install/setup.bash"
+  PX4_AUTOPILOT_ROOT="/mnt/px4ssd/PX4-Autopilot"
+fi
+if [[ -n "${SWARM_ENV_OVERRIDE_FILE:-}" ]]; then
+  env_override_file="${SWARM_ENV_OVERRIDE_FILE}"
+  if [[ "${env_override_file}" != /* ]]; then
+    env_override_file="${script_dir}/${env_override_file}"
+  fi
+  if [[ ! -f "${env_override_file}" ]]; then
+    echo "Missing SWARM_ENV_OVERRIDE_FILE: ${env_override_file}" >&2
+    exit 2
+  fi
+  # shellcheck disable=SC1090
+  source "${env_override_file}"
+fi
+set +a
+
+PX4_AUTOPILOT_ROOT="${PX4_AUTOPILOT_ROOT:-/mnt/px4ssd/PX4-Autopilot}"
+SWARM_ROS_SETUP="${SWARM_ROS_SETUP:-/home/sup/ws_px4/install/setup.bash}"
+SWARM_TRACKING_PACKAGE_ROOT="${SWARM_TRACKING_PACKAGE_ROOT:-/home/sup/ws_px4/src/lfc_gimbal_gazebo}"
+python_bin="${SWARM_PYTHON_BIN:-${script_dir}/.venv/bin/python}"
+runtime_log_max_bytes="${SWARM_RUNTIME_LOG_MAX_BYTES:-8388608}"
+runtime_logging_enabled="${SWARM_RUNTIME_LOGGING_ENABLED:-true}"
+runtime_log_fsync_on_rotate="${SWARM_RUNTIME_LOG_FSYNC_ON_ROTATE:-true}"
+runtime_log_fsync_trace="${SWARM_RUNTIME_LOG_FSYNC_TRACE:-false}"
+runtime_discard_process_logs="${SWARM_RUNTIME_DISCARD_PROCESS_LOGS:-}"
+start_mavlink_bridge="${SWARM_START_MAVLINK_BRIDGE:-true}"
+start_gazebo_gui="${SWARM_START_GAZEBO_GUI:-true}"
+start_xrce="${SWARM_START_XRCE:-true}"
+start_ros_telemetry="${SWARM_START_ROS_TELEMETRY:-true}"
+start_web_backend="${SWARM_START_WEB_BACKEND:-true}"
+px4_bin="${PX4_AUTOPILOT_ROOT}/build/px4_sitl_default/bin/px4"
+px4_param_bin="${PX4_AUTOPILOT_ROOT}/build/px4_sitl_default/bin/px4-param"
+gz_env="${PX4_AUTOPILOT_ROOT}/build/px4_sitl_default/rootfs/gz_env.sh"
+gz_world="${SWARM_GZ_WORLD_SDF:-${PX4_AUTOPILOT_ROOT}/Tools/simulation/gz/worlds/default.sdf}"
+# Stock Gazebo GUI by default: the full entity tree, component inspector and
+# plugin menu are what you actually want when inspecting a model or a spawn,
+# and the stripped-down config hid all of it. Point SWARM_GZ_GUI_CONFIG at
+# gazebo_gui_light.config (or any other .config) to get a lighter one back;
+# start_gazebo_optimized.sh still uses that file directly.
+gz_gui_config="${SWARM_GZ_GUI_CONFIG-}"
+gz_model_root="${SWARM_GZ_MODEL_ROOT:-${PX4_AUTOPILOT_ROOT}/Tools/simulation/gz/models}"
+px4_sys_autostart="${SWARM_PX4_SYS_AUTOSTART:-4020}"
+px4_sim_model="${SWARM_PX4_SIM_MODEL:-gz_sparrow_gimbal}"
+gz_model_name="${px4_sim_model#gz_}"
+px4_airframe="${PX4_AUTOPILOT_ROOT}/build/px4_sitl_default/etc/init.d-posix/airframes/${px4_sys_autostart}_${px4_sim_model}"
+uav_01_model_pose="${SWARM_UAV_01_MODEL_POSE:-0,0,0,0,0,0}"
+# 60 m west, on the follower's own approach axis to its slot. The old
+# default was 6 m north of the leader with a slot 10 m west -- a
+# perpendicular swing past the leader that test_formation_spawn_geometry
+# was written about, and that a 20 m separation envelope makes outright
+# infeasible. Along-axis, the closest approach is the slot itself.
+uav_02_model_pose="${SWARM_UAV_02_MODEL_POSE:--60,0,0,0,0,0}"
+
+export PX4_AUTOPILOT_ROOT SWARM_ROS_SETUP SWARM_TRACKING_PACKAGE_ROOT
+export GZ_SIM_RESOURCE_PATH="${gz_model_root}:${GZ_SIM_RESOURCE_PATH:-}"
+
+errors=0
+
+require_command() {
+  local command_name="$1"
+  if command -v "${command_name}" >/dev/null 2>&1; then
+    printf '  [OK] command: %s\n' "${command_name}"
+  else
+    printf '  [MISSING] command: %s\n' "${command_name}" >&2
+    errors=$((errors + 1))
+  fi
+}
+
+require_file() {
+  local path="$1"
+  if [[ -f "${path}" ]]; then
+    printf '  [OK] file: %s\n' "${path}"
+  else
+    printf '  [MISSING] file: %s\n' "${path}" >&2
+    errors=$((errors + 1))
+  fi
+}
+
+require_executable() {
+  local path="$1"
+  if [[ -x "${path}" ]]; then
+    printf '  [OK] executable: %s\n' "${path}"
+  else
+    printf '  [MISSING] executable: %s\n' "${path}" >&2
+    errors=$((errors + 1))
+  fi
+}
+
+# Refuse to create duplicate flight-control/backend processes.  A system MQTT
+# broker is safe to reuse, but the rest of this stack must have one owner.
+declare -a duplicate_patterns=(
+  'MicroXRCEAgent.*udp4.*8888'
+  '^gz sim'
+  'px4 -i [01]'
+  'mavlink_manual_bridge.py'
+  'uvicorn main:app'
+  'ros2 launch.*(two_uav_nodes|isolated_swarm)'
+)
+
+if [[ "${mode}" == "--reap" ]]; then
+  # SIGTERM, then SIGKILL for what ignores it -- Gazebo routinely does, and a
+  # surviving gz sim is enough to make the next start refuse.  Verify every
+  # pattern afterwards rather than probing one port: an orphaned uvicorn keeps
+  # :8000 answering with the previous stack's last payload, and a readiness
+  # check against that corpse reads healthy.
+  for pattern in "${duplicate_patterns[@]}"; do
+    pkill -f "${pattern}" 2>/dev/null || true
+  done
+  sleep 3
+  for pattern in "${duplicate_patterns[@]}"; do
+    pkill -9 -f "${pattern}" 2>/dev/null || true
+  done
+  sleep 2
+  reap_failed=0
+  for pattern in "${duplicate_patterns[@]}"; do
+    if pgrep -af "${pattern}" >/dev/null 2>&1; then
+      echo "Still running after SIGKILL (pattern: ${pattern}):" >&2
+      pgrep -af "${pattern}" >&2 || true
+      reap_failed=1
+    fi
+  done
+  if curl -sf -m 2 "http://127.0.0.1:8000/api/telemetry" >/dev/null 2>&1; then
+    echo "Port 8000 is still serving; something outside these patterns owns it." >&2
+    reap_failed=1
+  fi
+  [[ "${reap_failed}" -eq 0 ]] && echo "Stack reaped; port 8000 is dead."
+  exit "${reap_failed}"
+fi
+
+# The refusal below stays where the runtime check can precede it: a stack
+# that is already running is not a reason to skip validating the install.
+echo "Checking Swarm Dashboard runtime..."
+require_command pgrep
+require_command setsid
+require_command mosquitto
+require_command MicroXRCEAgent
+require_command gz
+require_command ros2
+require_command curl
+require_file "${script_dir}/main.py"
+require_file "${script_dir}/mavlink_manual_bridge.py"
+require_file "${script_dir}/static/index.html"
+require_file "${script_dir}/isolated_swarm.launch.py"
+require_file "${script_dir}/bounded_log_writer.py"
+require_file "${gz_env}"
+require_file "${gz_world}"
+[[ -n "${gz_gui_config}" ]] && require_file "${gz_gui_config}"
+require_file "${gz_model_root}/${gz_model_name}/model.sdf"
+require_file "${px4_airframe}"
+require_file "${SWARM_ROS_SETUP}"
+require_executable "${python_bin}"
+require_executable "${px4_bin}"
+require_executable "${px4_param_bin}"
+
+if [[ ${errors} -ne 0 ]]; then
+  echo "Runtime check failed with ${errors} missing item(s)." >&2
+  exit 1
+fi
+
+if [[ "${mode}" == "--check" ]]; then
+  echo "Runtime check passed."
+  exit 0
+fi
+
+for pattern in "${duplicate_patterns[@]}"; do
+  if pgrep -af "${pattern}" >/dev/null 2>&1; then
+    echo "A stack process is already running (pattern: ${pattern}):" >&2
+    pgrep -af "${pattern}" >&2 || true
+    echo "Stop the old stack before running $0, or run '$0 --reap'." >&2
+    exit 1
+  fi
+done
+
+run_stamp="$(date +%Y%m%d_%H%M%S)"
+log_dir="${SWARM_LOG_DIR:-${script_dir}/artifacts/run_${run_stamp}}"
+mkdir -p "${log_dir}"
+
+declare -a child_pids=()
+declare -A child_names=()
+declare -A px4_xy_velocity_original=()
+cleaning_up=0
+
+start_process() {
+  local name="$1"
+  shift
+  local log_file="${log_dir}/${name}.log"
+
+  if [[ "${runtime_logging_enabled,,}" =~ ^(0|false|no|off)$ ]] || \
+     [[ ",${runtime_discard_process_logs}," == *",${name},"* ]]; then
+    setsid bash -c '
+      exec "$@" >/dev/null 2>&1
+    ' _ "$@" &
+  else
+    setsid bash -c '
+    set -o pipefail
+    python_bin="$1"
+    writer="$2"
+    log_file="$3"
+    max_bytes="$4"
+    fsync_on_rotate="$5"
+    fsync_trace="$6"
+    shift 6
+    writer_args=(--path "$log_file" --max-bytes "$max_bytes" \
+      --fsync-on-rotate "$fsync_on_rotate")
+    if [[ "${fsync_trace,,}" =~ ^(1|true|yes|on)$ ]]; then
+      writer_args+=(--fsync-trace "${log_file}.fsync.csv")
+    fi
+    "$@" 2>&1 | "$python_bin" "$writer" "${writer_args[@]}"
+    ' _ "${python_bin}" "${script_dir}/bounded_log_writer.py" \
+      "${log_file}" "${runtime_log_max_bytes}" \
+      "${runtime_log_fsync_on_rotate}" "${runtime_log_fsync_trace}" "$@" &
+  fi
+  local pid=$!
+  child_pids+=("${pid}")
+  child_names["${pid}"]="${name}"
+  printf '  %-18s PID %-8s log: %s\n' "${name}" "${pid}" "${log_file}"
+}
+
+process_alive() {
+  kill -0 "$1" 2>/dev/null
+}
+
+process_group_alive() {
+  kill -0 -- "-$1" 2>/dev/null
+}
+
+show_log_tail() {
+  local name="$1"
+  local log_file="${log_dir}/${name}.log"
+  if [[ -s "${log_file}" ]]; then
+    echo "----- last lines from ${log_file} -----" >&2
+    tail -n 30 "${log_file}" >&2 || true
+  fi
+}
+
+assert_alive() {
+  local pid="$1"
+  local name="${child_names[${pid}]}"
+  if ! process_alive "${pid}"; then
+    echo "${name} stopped during startup." >&2
+    show_log_tail "${name}"
+    exit 1
+  fi
+}
+
+wait_for_tcp() {
+  local host="$1"
+  local port="$2"
+  local timeout_seconds="$3"
+  local label="$4"
+  local deadline=$((SECONDS + timeout_seconds))
+
+  while ((SECONDS < deadline)); do
+    if (exec 3<>"/dev/tcp/${host}/${port}") 2>/dev/null; then
+      exec 3>&- 3<&-
+      return 0
+    fi
+    sleep 0.25
+  done
+
+  echo "Timed out waiting for ${label} on ${host}:${port}." >&2
+  return 1
+}
+
+wait_for_http() {
+  local url="$1"
+  local timeout_seconds="$2"
+  local deadline=$((SECONDS + timeout_seconds))
+
+  while ((SECONDS < deadline)); do
+    if curl --fail --silent --max-time 1 "${url}" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 0.5
+  done
+
+  echo "Timed out waiting for ${url}." >&2
+  return 1
+}
+
+cleanup() {
+  local exit_code=$?
+  if [[ ${cleaning_up} -eq 1 ]]; then
+    return
+  fi
+  cleaning_up=1
+  trap - EXIT INT TERM
+
+  for instance in "${!px4_xy_velocity_original[@]}"; do
+    if "${px4_param_bin}" --instance "${instance}" set MPC_XY_VEL_MAX \
+      "${px4_xy_velocity_original[${instance}]}" >/dev/null 2>&1; then
+      "${px4_param_bin}" --instance "${instance}" save >/dev/null 2>&1 || true
+    fi
+  done
+
+  if ((${#child_pids[@]} > 0)); then
+    echo
+    echo "Stopping processes started by run_all.sh..."
+  fi
+
+  local index pid name
+  for ((index = ${#child_pids[@]} - 1; index >= 0; index--)); do
+    pid="${child_pids[${index}]}"
+    name="${child_names[${pid}]}"
+    if process_alive "${pid}"; then
+      printf '  stopping %-18s PID %s\n' "${name}" "${pid}"
+      kill -INT -- "-${pid}" 2>/dev/null || kill -INT "${pid}" 2>/dev/null || true
+    fi
+  done
+
+  local deadline=$((SECONDS + 8))
+  while ((SECONDS < deadline)); do
+    local any_alive=0
+    for pid in "${child_pids[@]}"; do
+      if process_alive "${pid}"; then
+        any_alive=1
+        break
+      fi
+    done
+    [[ ${any_alive} -eq 0 ]] && break
+    sleep 0.25
+  done
+
+  for pid in "${child_pids[@]}"; do
+    if process_group_alive "${pid}"; then
+      name="${child_names[${pid}]}"
+      printf '  terminating %-15s PGID %s\n' "${name}" "${pid}"
+      kill -TERM -- "-${pid}" 2>/dev/null || true
+    fi
+  done
+
+  deadline=$((SECONDS + 3))
+  while ((SECONDS < deadline)); do
+    local any_group_alive=0
+    for pid in "${child_pids[@]}"; do
+      if process_group_alive "${pid}"; then
+        any_group_alive=1
+        break
+      fi
+    done
+    [[ ${any_group_alive} -eq 0 ]] && break
+    sleep 0.25
+  done
+
+  for pid in "${child_pids[@]}"; do
+    if process_group_alive "${pid}"; then
+      name="${child_names[${pid}]}"
+      printf '  killing %-19s PGID %s\n' "${name}" "${pid}"
+      kill -KILL -- "-${pid}" 2>/dev/null || true
+    fi
+  done
+
+  wait 2>/dev/null || true
+  echo "Logs: ${log_dir}"
+  exit "${exit_code}"
+}
+
+trap cleanup EXIT INT TERM
+
+echo "Starting Swarm Dashboard stack..."
+echo "Logs: ${log_dir}"
+
+if pgrep -x mosquitto >/dev/null 2>&1; then
+  echo "  mqtt               reusing the running Mosquitto broker"
+else
+  start_process mqtt mosquitto -v
+  mqtt_pid="${child_pids[-1]}"
+  sleep 0.5
+  assert_alive "${mqtt_pid}"
+fi
+wait_for_tcp 127.0.0.1 1883 10 "MQTT broker"
+
+if [[ ! "${start_xrce,,}" =~ ^(0|false|no|off)$ ]]; then
+  start_process xrce MicroXRCEAgent udp4 -p 8888
+  xrce_pid="${child_pids[-1]}"
+  sleep 0.5
+  assert_alive "${xrce_pid}"
+else
+  echo "  xrce               disabled by SWARM_START_XRCE"
+fi
+
+start_process gazebo_server bash -c '
+  set -euo pipefail
+  source "$1"
+  exec gz sim --verbose=1 -r -s "$2"
+' _ "${gz_env}" "${gz_world}"
+gazebo_server_pid="${child_pids[-1]}"
+sleep 2
+assert_alive "${gazebo_server_pid}"
+
+if [[ ! "${start_gazebo_gui,,}" =~ ^(0|false|no|off)$ ]]; then
+  start_process gazebo_gui bash -c '
+    set -euo pipefail
+    source "$1"
+    # No config means Gazebo picks its own default GUI.
+    if [[ -n "$2" ]]; then exec gz sim -g --gui-config "$2"; else exec gz sim -g; fi
+  ' _ "${gz_env}" "${gz_gui_config}"
+  gazebo_gui_pid="${child_pids[-1]}"
+  sleep 1
+  assert_alive "${gazebo_gui_pid}"
+else
+  echo "  gazebo_gui         disabled by SWARM_START_GAZEBO_GUI"
+fi
+
+start_process px4_uav_01 bash -c '
+  set -euo pipefail
+  if [[ -f /opt/ros/jazzy/setup.bash ]]; then
+    set +u
+    source /opt/ros/jazzy/setup.bash
+    set -u
+  fi
+  source "$1"
+  cd "$2"
+  export PX4_SYS_AUTOSTART="$5"
+  export PX4_SIM_MODEL="$6"
+  export PX4_GZ_STANDALONE=1
+  export PX4_GZ_MODEL_POSE="$4"
+  exec "$3" -i 0
+' _ "${gz_env}" "${PX4_AUTOPILOT_ROOT}" "${px4_bin}" \
+  "${uav_01_model_pose}" "${px4_sys_autostart}" "${px4_sim_model}"
+px4_uav_01_pid="${child_pids[-1]}"
+
+start_process px4_uav_02 bash -c '
+  set -euo pipefail
+  if [[ -f /opt/ros/jazzy/setup.bash ]]; then
+    set +u
+    source /opt/ros/jazzy/setup.bash
+    set -u
+  fi
+  source "$1"
+  cd "$2"
+  export PX4_SYS_AUTOSTART="$5"
+  export PX4_SIM_MODEL="$6"
+  export PX4_GZ_STANDALONE=1
+  export PX4_GZ_MODEL_POSE="$4"
+  exec "$3" -i 1
+' _ "${gz_env}" "${PX4_AUTOPILOT_ROOT}" "${px4_bin}" \
+  "${uav_02_model_pose}" "${px4_sys_autostart}" "${px4_sim_model}"
+px4_uav_02_pid="${child_pids[-1]}"
+sleep 2
+assert_alive "${px4_uav_01_pid}"
+assert_alive "${px4_uav_02_pid}"
+
+if [[ -n "${SWARM_PX4_MPC_XY_VEL_MAX:-}" ]]; then
+  for instance in 0 1; do
+    px4_param_deadline=$((SECONDS + 30))
+    until "${px4_param_bin}" --instance "${instance}" show -q \
+      MPC_XY_VEL_MAX >/dev/null 2>&1; do
+      if ((SECONDS >= px4_param_deadline)); then
+        echo "Timed out waiting for PX4 instance ${instance} parameter server." >&2
+        exit 1
+      fi
+      sleep 0.25
+    done
+    px4_xy_velocity_original["${instance}"]="$(
+      "${px4_param_bin}" --instance "${instance}" show -q MPC_XY_VEL_MAX
+    )"
+    "${px4_param_bin}" --instance "${instance}" set MPC_XY_VEL_MAX \
+      "${SWARM_PX4_MPC_XY_VEL_MAX}" fail
+    "${px4_param_bin}" --instance "${instance}" compare MPC_XY_VEL_MAX \
+      "${SWARM_PX4_MPC_XY_VEL_MAX}"
+  done
+fi
+
+if [[ ! "${start_ros_telemetry,,}" =~ ^(0|false|no|off)$ ]]; then
+  start_process ros_telemetry bash -c '
+  set -euo pipefail
+  set +u
+  source "$1"
+  set -u
+  export ROS_LOCALHOST_ONLY=1
+  exec ros2 launch swarm_telemetry two_uav_nodes.launch.py
+' _ "${SWARM_ROS_SETUP}"
+  ros_telemetry_pid="${child_pids[-1]}"
+  sleep 2
+  assert_alive "${ros_telemetry_pid}"
+else
+  echo "  ros_telemetry      disabled by SWARM_START_ROS_TELEMETRY"
+fi
+
+if [[ ! "${start_mavlink_bridge,,}" =~ ^(0|false|no|off)$ ]]; then
+  start_process mavlink_bridge "${python_bin}" "${script_dir}/mavlink_manual_bridge.py"
+  mavlink_bridge_pid="${child_pids[-1]}"
+  sleep 1
+  assert_alive "${mavlink_bridge_pid}"
+else
+  echo "  mavlink_bridge     disabled by SWARM_START_MAVLINK_BRIDGE"
+fi
+
+if [[ ! "${start_web_backend,,}" =~ ^(0|false|no|off)$ ]]; then
+  start_process web_backend "${python_bin}" -m uvicorn main:app \
+    --app-dir "${script_dir}" --host 0.0.0.0 --port 8000
+  web_backend_pid="${child_pids[-1]}"
+  sleep 0.5
+  assert_alive "${web_backend_pid}"
+
+  if ! wait_for_http "http://127.0.0.1:8000/health" 30; then
+    show_log_tail web_backend
+    exit 1
+  fi
+else
+  echo "  web_backend        disabled by SWARM_START_WEB_BACKEND"
+fi
+
+echo
+echo "Swarm Dashboard is ready: http://127.0.0.1:8000"
+echo "Press Ctrl+C to stop the complete stack."
+
+# End the stack if any owned component exits.  This avoids leaving a partial
+# flight-control stack running after a failure.
+failed_pid=""
+wait -n -p failed_pid "${child_pids[@]}" || component_status=$?
+component_status="${component_status:-0}"
+failed_name="${child_names[${failed_pid}]:-unknown}"
+echo "Component ${failed_name} (PID ${failed_pid:-unknown}) exited with status ${component_status}." >&2
+show_log_tail "${failed_name}"
+exit "${component_status}"
