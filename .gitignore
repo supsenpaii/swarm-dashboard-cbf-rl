@@ -1,0 +1,68 @@
+# Local environment — contains machine-specific paths and the resolved ENU
+# origin. Use .env.example as the tracked template.
+.env
+
+# Virtualenv and caches
+.venv/
+.venv
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+install/
+log/
+
+# Run outputs: capture corpora, model training runs, SITL/CBF gate JSON.
+# Large (tens of GB) and regenerable from the harnesses.
+artifacts/
+build/
+logs/
+*.log
+
+# Trained model binaries and third-party weights stay local. The native
+# Sparrow plant is source input, so keep only those model directories tracked.
+models/*
+!models/models/
+models/models/*
+!models/models/SPARROW_TUNING_TUNG_BUOC.md
+!models/models/sparrow_base/
+!models/models/sparrow/
+!models/models/sparrow_gimbal_core/
+!models/models/sparrow_gimbal/
+
+# Distribution snapshots taken by hand
+handoff/
+swarm_dashboard_handoff_*/
+*.tar.gz
+*.zip
+*.backup*
+*.before_*
+*_TMP.*
+
+# Editor / tooling state
+.codegraph/
+.claude/
+.idea/
+.vscode/
+*.code-workspace
+*.swp
+
+# Design canvas: nguồn .dc.html được giữ, bản đóng gói 2 MB thì không.
+design/*.html
+!design/*.dc.html
+
+# Private M52/MiDaS research notes; keep local, never publish.
+CODEX_AUDIT_IMPLEMENTATION_PLAN_M52_MIDAS_XGBOOST.md
+CODEX_IMPLEMENTATION_PROMPT_M52_MIDAS_XGBOOST_SAFE_FOLLOW.md
+CODEX_IMPLEMENTATION_PROMPT_M52_MIDAS_XGBOOST_SAFE_FOLLOW_V2.md
+M52_MIDAS_RANGE_APPLICABILITY_V2_IMPLEMENTATION_20260803.md
+M52_MIDAS_SAFE_FOLLOW_P1A_HANDOFF_20260802.md
+M52_MIDAS_SAFE_FOLLOW_PHASE0B_CLEAN_RERUN_ADDENDUM_20260803.md
+M52_MIDAS_SAFE_FOLLOW_PHASE0B_GATE_REPORT_20260803.md
+M52_MIDAS_SAFE_FOLLOW_PHASE0B_GIMBAL_AUTHORITY_ADDENDUM_20260803.md
+M52_MIDAS_SAFE_FOLLOW_REMAINING_IMPLEMENTATION_ROADMAP_20260803.md
+NEXT_ACCOUNT_PROMPT_M52_MIDAS_XGBOOST_FOLLOW_20260803.md
+XGBOOST_M52_MIDAS_FUSION_FLOW.md
+RANGE_RESIDUAL_CORRECTION.md
+docs/M52_MIDAS_XGB_COMPATIBILITY_REPORT.md

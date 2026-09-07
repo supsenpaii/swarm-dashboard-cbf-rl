@@ -1,0 +1,345 @@
+{
+  "action": "normalized_enu_velocity",
+  "format": "cbf_rl_x500_20m_policy_v1",
+  "maximum_velocity_m_s": 15.0,
+  "minimum_separation_m": 20.0,
+  "observation_fields": [
+    "goal_relative_e_m",
+    "goal_relative_n_m",
+    "goal_relative_u_m",
+    "self_velocity_e_m_s",
+    "self_velocity_n_m_s",
+    "self_velocity_u_m_s",
+    "peer_relative_e_m",
+    "peer_relative_n_m",
+    "peer_relative_u_m",
+    "peer_relative_velocity_e_m_s",
+    "peer_relative_velocity_n_m_s",
+    "peer_relative_velocity_u_m_s",
+    "self_sqrt_trace_cov_m",
+    "peer_sqrt_trace_cov_m",
+    "self_age_s",
+    "peer_age_s",
+    "self_state_valid",
+    "peer_state_valid",
+    "self_covariance_valid",
+    "peer_covariance_valid"
+  ],
+  "parameters": {
+    "avoidance_gain": 0.5634816445955368,
+    "avoidance_goal_taper_m": 108.03939557405586,
+    "avoidance_radius_m": 90.73065635024992,
+    "closing_speed_scale_m_s": 6.847521004917247,
+    "goal_gain": 3.062694121832464,
+    "risk_slowdown_gain": 1.395908593610246
+  },
+  "parameters_sha256": "f74b98c8a57eb8e2b6e7d0d7f4c67112aaa52ede4fc3d02f1a16b87fba32d812",
+  "training": {
+    "algorithm": "parallel_seeded_cross_entropy_x500_20m_15ms_v1",
+    "all_training_scenarios_successful": true,
+    "best_score": 126999.84631186537,
+    "elite_count": 6,
+    "generations": 12,
+    "history": [
+      {
+        "best_score": 126679.735666,
+        "elite_mean_score": 121563.703532,
+        "generation": 0
+      },
+      {
+        "best_score": 124109.761087,
+        "elite_mean_score": 122174.213961,
+        "generation": 1
+      },
+      {
+        "best_score": 125529.940183,
+        "elite_mean_score": 123545.218529,
+        "generation": 2
+      },
+      {
+        "best_score": 126324.735731,
+        "elite_mean_score": 125661.279344,
+        "generation": 3
+      },
+      {
+        "best_score": 126784.690005,
+        "elite_mean_score": 126348.78683,
+        "generation": 4
+      },
+      {
+        "best_score": 126504.609024,
+        "elite_mean_score": 126380.615617,
+        "generation": 5
+      },
+      {
+        "best_score": 126566.197548,
+        "elite_mean_score": 126506.186443,
+        "generation": 6
+      },
+      {
+        "best_score": 126698.972446,
+        "elite_mean_score": 126598.782257,
+        "generation": 7
+      },
+      {
+        "best_score": 126780.464601,
+        "elite_mean_score": 126665.325515,
+        "generation": 8
+      },
+      {
+        "best_score": 126815.319776,
+        "elite_mean_score": 126770.065853,
+        "generation": 9
+      },
+      {
+        "best_score": 126865.853402,
+        "elite_mean_score": 126835.281819,
+        "generation": 10
+      },
+      {
+        "best_score": 126999.846312,
+        "elite_mean_score": 126877.237031,
+        "generation": 11
+      }
+    ],
+    "maximum_steps": 3200,
+    "maximum_velocity_m_s": 15.0,
+    "milestone": "CBF_RL_X500_20M_15MS_OFFLINE_TRAINING",
+    "population": 24,
+    "scenario_results": [
+      {
+        "final_goal_distance_m": {
+          "UAV-01": 0.04234914471661,
+          "UAV-02": 0.04234914471661
+        },
+        "hold_frames": 0,
+        "intervention_frames": 0,
+        "minimum_cbf_margin_m": 7.945,
+        "minimum_distance_m": 30.0,
+        "scenario": "parallel",
+        "score": 1614.2765085528338,
+        "steps": 265,
+        "success": true
+      },
+      {
+        "final_goal_distance_m": {
+          "UAV-01": 0.04187808283418167,
+          "UAV-02": 0.11471009841983917
+        },
+        "hold_frames": 0,
+        "intervention_frames": 642,
+        "minimum_cbf_margin_m": 8.083,
+        "minimum_distance_m": 30.9951694087371,
+        "scenario": "perpendicular_crossing",
+        "score": 1221.3503315759444,
+        "steps": 779,
+        "success": true
+      },
+      {
+        "final_goal_distance_m": {
+          "UAV-01": 0.215612198596266,
+          "UAV-02": 0.18781747755412861
+        },
+        "hold_frames": 0,
+        "intervention_frames": 829,
+        "minimum_cbf_margin_m": 6.173,
+        "minimum_distance_m": 28.756932302574693,
+        "scenario": "diagonal_crossing",
+        "score": 1238.2553601010095,
+        "steps": 744,
+        "success": true
+      },
+      {
+        "final_goal_distance_m": {
+          "UAV-01": 0.1498468398859816,
+          "UAV-02": 0.1498468398859816
+        },
+        "hold_frames": 0,
+        "intervention_frames": 636,
+        "minimum_cbf_margin_m": 9.101,
+        "minimum_distance_m": 37.564402453480795,
+        "scenario": "head_on_swap",
+        "score": 1171.463437673793,
+        "steps": 760,
+        "success": true
+      },
+      {
+        "final_goal_distance_m": {
+          "UAV-01": 0.12498096545922105,
+          "UAV-02": 8.081800885572088e-12
+        },
+        "hold_frames": 0,
+        "intervention_frames": 480,
+        "minimum_cbf_margin_m": 7.851,
+        "minimum_distance_m": 31.666641189220183,
+        "scenario": "stationary_intruder",
+        "score": 793.3188973948129,
+        "steps": 827,
+        "success": true
+      },
+      {
+        "final_goal_distance_m": {
+          "UAV-01": 0.1924795308753669,
+          "UAV-02": 0.24209670017023047
+        },
+        "hold_frames": 0,
+        "intervention_frames": 280,
+        "minimum_cbf_margin_m": 8.53,
+        "minimum_distance_m": 34.45467998097015,
+        "scenario": "vertical_swap",
+        "score": 549.9580507348816,
+        "steps": 1679,
+        "success": true
+      },
+      {
+        "final_goal_distance_m": {
+          "UAV-01": 0.023655312662981487,
+          "UAV-02": 0.19630743059340813
+        },
+        "hold_frames": 0,
+        "intervention_frames": 718,
+        "minimum_cbf_margin_m": 9.341,
+        "minimum_distance_m": 32.55279106106566,
+        "scenario": "shallow_15deg_full_speed_worst_lag",
+        "score": 5187.534489033017,
+        "steps": 1273,
+        "success": true
+      },
+      {
+        "final_goal_distance_m": {
+          "UAV-01": 0.045597823345784425,
+          "UAV-02": 0.22626508941069867
+        },
+        "hold_frames": 0,
+        "intervention_frames": 981,
+        "minimum_cbf_margin_m": 5.527,
+        "minimum_distance_m": 28.011328920517222,
+        "scenario": "stress_30deg_14ms_tau0.75_age100",
+        "score": 3603.9111478110917,
+        "steps": 1139,
+        "success": true
+      },
+      {
+        "final_goal_distance_m": {
+          "UAV-01": 0.1702521518084937,
+          "UAV-02": 0.21764761387363746
+        },
+        "hold_frames": 0,
+        "intervention_frames": 1091,
+        "minimum_cbf_margin_m": 5.394,
+        "minimum_distance_m": 27.93934297632925,
+        "scenario": "stress_45deg_14ms_tau0.75_age100",
+        "score": 3140.5750657932367,
+        "steps": 1062,
+        "success": true
+      },
+      {
+        "final_goal_distance_m": {
+          "UAV-01": 0.12640769960012221,
+          "UAV-02": 0.23922391887024683
+        },
+        "hold_frames": 0,
+        "intervention_frames": 904,
+        "minimum_cbf_margin_m": 5.332,
+        "minimum_distance_m": 27.71854521514084,
+        "scenario": "stress_30deg_15ms_tau0.45_age0",
+        "score": 3754.545426694977,
+        "steps": 1054,
+        "success": true
+      },
+      {
+        "final_goal_distance_m": {
+          "UAV-01": 0.04565657934784903,
+          "UAV-02": 0.17331540302134352
+        },
+        "hold_frames": 0,
+        "intervention_frames": 1007,
+        "minimum_cbf_margin_m": 5.423,
+        "minimum_distance_m": 27.970878313125073,
+        "scenario": "stress_30deg_15ms_tau0.75_age100",
+        "score": 3777.3866026022333,
+        "steps": 1165,
+        "success": true
+      },
+      {
+        "final_goal_distance_m": {
+          "UAV-01": 0.2324634453442008,
+          "UAV-02": 0.17671375972128678
+        },
+        "hold_frames": 0,
+        "intervention_frames": 1043,
+        "minimum_cbf_margin_m": 5.253,
+        "minimum_distance_m": 27.690065540787995,
+        "scenario": "stress_45deg_15ms_tau0.45_age0",
+        "score": 3301.3353496619666,
+        "steps": 1037,
+        "success": true
+      },
+      {
+        "final_goal_distance_m": {
+          "UAV-01": 0.1683311859372323,
+          "UAV-02": 0.18274696972769028
+        },
+        "hold_frames": 0,
+        "intervention_frames": 1129,
+        "minimum_cbf_margin_m": 5.354,
+        "minimum_distance_m": 27.92659618613986,
+        "scenario": "stress_45deg_15ms_tau0.75_age100",
+        "score": 3322.174577604068,
+        "steps": 1088,
+        "success": true
+      },
+      {
+        "final_goal_distance_m": {
+          "UAV-01": 0.03789347107951209,
+          "UAV-02": 0.20799475161290026
+        },
+        "hold_frames": 0,
+        "intervention_frames": 839,
+        "minimum_cbf_margin_m": 8.404,
+        "minimum_distance_m": 32.72502876034587,
+        "scenario": "stress_90deg_15ms_tau0.75_age100",
+        "score": 3302.8844779201745,
+        "steps": 1081,
+        "success": true
+      },
+      {
+        "hold_frames": 0,
+        "intervention_frames": 19,
+        "maximum_cross_track_error_m": 0.8083896783875384,
+        "mean_cross_track_error_m": 0.3033735648730304,
+        "minimum_cbf_margin_m": 1.238,
+        "minimum_distance_m": 23.30804786886281,
+        "progress_m": {
+          "UAV-01": 1109.207950399985,
+          "UAV-02": 1155.706571326978
+        },
+        "scenario": "same_orbit_close_phase",
+        "score": 45291.84296324181,
+        "steps": 2400,
+        "success": true,
+        "target_progress_m": 1185.1329039394695
+      },
+      {
+        "hold_frames": 0,
+        "intervention_frames": 0,
+        "maximum_cross_track_error_m": 0.8085992599752305,
+        "mean_cross_track_error_m": 0.30826179485882393,
+        "minimum_cbf_margin_m": 22.945,
+        "minimum_distance_m": 45.000916592749945,
+        "progress_m": {
+          "UAV-01": 1131.3793742688986,
+          "UAV-02": 1155.3805687994363
+        },
+        "scenario": "same_orbit_safe_phase",
+        "score": 45729.03362546952,
+        "steps": 2400,
+        "success": true,
+        "target_progress_m": 1185.1329039394695
+      }
+    ],
+    "seed": 7,
+    "vehicle_profile": "x500",
+    "workers": 8
+  }
+}

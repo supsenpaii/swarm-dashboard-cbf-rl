@@ -1,0 +1,147 @@
+{
+  "action": "normalized_enu_velocity",
+  "format": "cbf_rl_proximity_policy_v1",
+  "minimum_separation_m": 4.0,
+  "observation_fields": [
+    "goal_relative_e_m",
+    "goal_relative_n_m",
+    "goal_relative_u_m",
+    "self_velocity_e_m_s",
+    "self_velocity_n_m_s",
+    "self_velocity_u_m_s",
+    "peer_relative_e_m",
+    "peer_relative_n_m",
+    "peer_relative_u_m",
+    "peer_relative_velocity_e_m_s",
+    "peer_relative_velocity_n_m_s",
+    "peer_relative_velocity_u_m_s",
+    "self_sqrt_trace_cov_m",
+    "peer_sqrt_trace_cov_m",
+    "self_age_s",
+    "peer_age_s",
+    "self_state_valid",
+    "peer_state_valid",
+    "self_covariance_valid",
+    "peer_covariance_valid"
+  ],
+  "parameters": {
+    "avoidance_gain": 0.6596880358133166,
+    "avoidance_radius_m": 5.732142807580679,
+    "goal_gain": 1.2081043875282764
+  },
+  "parameters_sha256": "42bcbcbfc7a0a75d9885eb56a1af788458ea3c1a6c7855702debd6bb06c83053",
+  "training": {
+    "algorithm": "seeded_cross_entropy_proximity_policy",
+    "all_training_scenarios_successful": true,
+    "best_score": 317.8376237254975,
+    "elite_count": 6,
+    "generations": 12,
+    "history": [
+      {
+        "best_score": 241.18381,
+        "elite_mean_score": -146.697271,
+        "generation": 0
+      },
+      {
+        "best_score": 218.291659,
+        "elite_mean_score": -232.285169,
+        "generation": 1
+      },
+      {
+        "best_score": 299.690797,
+        "elite_mean_score": -190.628553,
+        "generation": 2
+      },
+      {
+        "best_score": 317.837624,
+        "elite_mean_score": 31.146948,
+        "generation": 3
+      },
+      {
+        "best_score": 313.749787,
+        "elite_mean_score": 308.308059,
+        "generation": 4
+      },
+      {
+        "best_score": 314.256092,
+        "elite_mean_score": 312.186745,
+        "generation": 5
+      },
+      {
+        "best_score": 315.944523,
+        "elite_mean_score": 314.766811,
+        "generation": 6
+      },
+      {
+        "best_score": 316.994659,
+        "elite_mean_score": 315.908333,
+        "generation": 7
+      },
+      {
+        "best_score": 316.910229,
+        "elite_mean_score": 316.160094,
+        "generation": 8
+      },
+      {
+        "best_score": 317.461772,
+        "elite_mean_score": 316.699143,
+        "generation": 9
+      },
+      {
+        "best_score": 317.092047,
+        "elite_mean_score": 316.802665,
+        "generation": 10
+      },
+      {
+        "best_score": 317.533822,
+        "elite_mean_score": 317.121983,
+        "generation": 11
+      }
+    ],
+    "maximum_steps": 800,
+    "milestone": "CBF_RL_OFFLINE_TRAINING_BASELINE",
+    "population": 24,
+    "scenario_results": [
+      {
+        "final_goal_distance_m": {
+          "UAV-01": 0.24975849162389352,
+          "UAV-02": 0.24975849162389352
+        },
+        "hold_frames": 0,
+        "intervention_frames": 0,
+        "minimum_distance_m": 8.0,
+        "scenario": "parallel",
+        "score": 105.12241508376059,
+        "steps": 619,
+        "success": true
+      },
+      {
+        "final_goal_distance_m": {
+          "UAV-01": 0.04220766859094675,
+          "UAV-02": 0.24943949983404298
+        },
+        "hold_frames": 0,
+        "intervention_frames": 198,
+        "minimum_distance_m": 5.040122258948025,
+        "scenario": "diagonal_crossing",
+        "score": 116.00963896752563,
+        "steps": 777,
+        "success": true
+      },
+      {
+        "final_goal_distance_m": {
+          "UAV-01": 0.24868617737617874,
+          "UAV-02": 0.24868617737617874
+        },
+        "hold_frames": 0,
+        "intervention_frames": 196,
+        "minimum_distance_m": 5.3011533617605044,
+        "scenario": "head_on_swap",
+        "score": 96.70556967421129,
+        "steps": 741,
+        "success": true
+      }
+    ],
+    "seed": 7
+  }
+}

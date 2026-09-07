@@ -1,0 +1,130 @@
+{
+  "certification_scope": "offline_only_no_flight_authority",
+  "certified_speed_by_geometry_m_s": {
+    "horizontal": 20,
+    "vertical_180deg": 19
+  },
+  "command_latency_s": {
+    "cost": "10 m/s improved, 15 m/s margin 1.477 -> 1.093, 20 m/s vertical 18 -> 17 m/s. Horizontal stayed at 20 m/s.",
+    "found_by": "a head-on pair at 1 m/s in shadow breached the requirement by 0.13 m while the gate was commanding a reversal the vehicle had not yet made. The shortfall scales with closing speed: 0.42 m at 2 m/s closing, 8.4 m at 40.",
+    "source": "measured on the 2026-08-15 Sparrow flight: horizontal response tau = 0.860 s against a vertical 0.275 s",
+    "value": 0.86,
+    "was": 0.65
+  },
+  "coordinator_engagement_floor_2026_08_15": {
+    "also": "sparrow_20m_conflict_config still sized its boundary with the x500's 0.65 s latency; it now uses Sparrow's measured 0.86 s, so the coordinator and the gate agree on the same reserve.",
+    "change": "ConflictCoordinator gained an engagement distance floor",
+    "effect": "minimum distance 22.055 -> 22.695 m, dynamic margin 0.000 -> 0.336 m",
+    "found_by": "probing the coordinator directly with the 1 m/s head-on geometry that had just aborted in shadow, rather than assuming the shadow abort was purely a mode artefact",
+    "why": "A fixed 8 s prediction horizon is a distance that shrinks with closing speed. At the certified ceilings it was slack -- trigger_distance was always the tighter gate -- but at 2 m/s closing it put first engagement at 14 m, inside the margin the CBF gate demands of the same pair. The coordinator could therefore only ever latch AFTER the shield it exists to precede. Below minimum_engagement_distance_m an encounter is now latched on range alone."
+  },
+  "headline": "Horizontal encounters certified to 20 m/s, vertical head-on to 19 m/s. A drawn mission is a polyline at one altitude, so horizontal is the geometry the product actually flies.",
+  "matrix": {
+    "case_count": 560,
+    "cases_below_two_metres_of_margin": 128,
+    "certified_speed_by_geometry_m_s": {
+      "horizontal": 20,
+      "vertical_180deg": 20
+    },
+    "coordinated_case_count": 520,
+    "failure_count": 0,
+    "failures": [],
+    "horizontal_angles_deg": [
+      0,
+      15,
+      30,
+      45,
+      60,
+      75,
+      90,
+      105,
+      120,
+      135,
+      150,
+      165,
+      180
+    ],
+    "maximum_cbf_intervention_rate": 0.5456,
+    "maximum_speed_m_s": 20,
+    "median_dynamic_margin_m": 5.0255,
+    "milestone": "CBF_RL_SPARROW_20M_1_TO_20MS_SAFETY_MATRIX",
+    "minimum_distance_m": 22.055318,
+    "minimum_dynamic_margin_m": 0.0,
+    "model": "cbf_rl_policy_sparrow_20m_20ms_v2.json",
+    "peak_intervention_norm_m_s": 16.968,
+    "peer_ages_ms": [
+      0.0,
+      100.0
+    ],
+    "response_time_constants_s": [
+      0.45,
+      0.9
+    ],
+    "speed_values_m_s": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20
+    ],
+    "vehicle_profile": "sparrow",
+    "verdict": "PASS",
+    "workers": 8
+  },
+  "policy": {
+    "path": "cbf_rl_policy_sparrow_20m_20ms_v2.json",
+    "sha256": "ee958f8f7b4aecf7b2d36d1391e179c73da24fb8b7c6885b398c8fc585f31f2a"
+  },
+  "recertified_2026_08_16_mission_wiring": {
+    "change": "CbfRlEnvironment now hands ConflictCoordinator a deterministic goal-seeking mission velocity instead of the policy action.",
+    "flight_geometry_still_has_slack": "Zero margin here is a property of the matrix spawn, which places the pair at exactly the required distance plus a 15 m constant. On the corridor geometry a mission actually produces, shortening the corridor to 60 percent of design still returns REPLAY_PASS with a completed swap at all four rungs; the 10, 15 and 20 m/s corridors do not move at all (margins 1.70, 6.24, 9.22).",
+    "mission_speed_bound": "CbfRlEnvConfig.mission_speed_m_s carries the case speed, so an evaluation that bounds the policy below the CBF ceiling bounds the mission with it. The mission also sheds speed into its goal through braking_speed_limit_m_s; without that a lagged plant orbits the arrival radius and fails on liveness alone.",
+    "result": "verdict FAIL -> FAIL, failures 6 -> 2, minimum distance 22.694521 -> 22.055317 m, dynamic margin 0.336 -> 0.0 m",
+    "safety_was_never_violated": "physical_safe and dynamic_safe hold on every case at every rung. Zero margin means riding the constraint, not crossing it.",
+    "the_matrix_is_now_policy_independent": "Two different 20 m/s policies -- cbf_rl_policy_sparrow_20m_20ms_v2 and models/sparrow_20ms_v3_seed41 -- produce identical matrices field for field. Under the wiring that flies, the RL policy influences nothing. It remains load-bearing only as the carrier of the coordinator config and the active-mode switch.",
+    "why": "The runtime passes the policy as candidate and the trajectory tracker's command as mission (cbf_rl_shadow.py:181). The offline environment passed the policy for BOTH, and for the Sparrow config every coordinator role rebuilds its output from mission -- clear_uses_mission_velocity is True and the yield lane change reconstructs the vector from mission plus the tangent. So every number signed before this measured a wiring no vehicle flies.",
+    "why_the_margin_fell_to_zero": "A minimally-invasive CBF converges exactly onto its constraint by construction, which is documented at length on CbfConfig.design_margin_buffer_m. Minimum distance is now 22.055 m at every rung, the requirement to six figures. The old 4.741 and 2.661 m were the POLICY's avoidance bias steering the pair wide -- a bias that has never reached an aircraft, because the coordinator discards the candidate at every role."
+  },
+  "recertified_2026_08_17_matrix_blind_spot": "Re-signed after closing the matrix's blind spot and the runtime defect it hid. (1) The coordinator's `mission` is now the real TrajectoryTrackingController command on the real leg, not a hand-written goal-direction vector -- a bare direction has no position-feedback term for a lane change to be cancelled by, which is what the flight failure was. (2) The matrix reports barrier EFFORT, because a CBF holds its constraint whether the coordinator did its job or left the whole encounter to it: measured against the yield geometry that saturated at 5 m in flight, 72 of 280 cases degraded and one lost 41% of its margin while minimum_distance_m stayed identical to seven digits. The median margin moved 2.760 -> 1.957 and the count under 2 m moved 125 -> 143, so those are reported now. (3) A LinearTrajectory brakes into its endpoint. Once the environment obeyed its acceleration limit the 20 m/s cases overshot by 32-58 m and settled outside the geofence -- safe the whole way and simply never arriving. The closed polyline already braked into every corner; the end of an open leg is the same problem.",
+  "recertified_2026_08_17_released_until_clear": "Re-signed after relaxing released_until_clear. The suppression that stops a released encounter re-latching immediately could only be cleared by reaching encounter_reset_distance_m WHILE separating -- a condition two vehicles orbiting a shared waypoint never meet. Measured on the diagonal_cross drawn mission: latched at 90.1 m, yielded 9.7 s, released at 25.6 m, then held role 'clear' for the rest of the flight, through a convergence with a 3.4 m predicted miss distance against a 20 m threshold, to a CBF margin of -0.840 m. It now also clears after release_frames consecutive non-threatening frames, so a genuinely new encounter can latch while an immediate re-latch on unchanged geometry still cannot.",
+  "recertified_2026_08_17_vertical_yield_and_posable_vertical_case": "Re-signed after two changes to the safety layer. (1) A purely vertical encounter had no avoidance maneuver at all: the yield's lane change needs a horizontal normal and a horizontal mission and had neither, so only the maximum_toward_peer clamp acted. The yield now steps sideways, latched for the encounter so its own displacement cannot switch it back to the horizontal branch. Measured on the 20 m/s vertical cases: minimum distance 22.31 -> 35.98 m, dynamic margin 0.156 -> 6.389 m. (2) _vertical_case scaled its geometry with speed and at 20 m/s placed both goals 0.728 m outside the 0-200 m geofence it is judged against, so the vehicles passed cleanly, reached the fence and hovered short of a goal they were forbidden to reach. That, not the missing maneuver, was the cause of the two long-standing 20 m/s failures; the case is now posed inside its own fence and raises rather than emitting an unpassable case.",
+  "training": {
+    "all_scenarios_successful": true,
+    "best_score": 148145.60460250545,
+    "elite_count": 12,
+    "environment_matched_the_matrix": true,
+    "generations": 26,
+    "level": "final",
+    "population": 48,
+    "seed": 17
+  },
+  "vertical_limit": {
+    "certified_to_m_s": 19,
+    "fails_at_m_s": [
+      18,
+      19,
+      20
+    ],
+    "failure_mode": "deadlock, not collision -- both vehicles stop safely and neither completes the swap",
+    "history": "18 m/s under the 0.65 s latency, 17 m/s once the measured 0.86 s replaced it, 19 m/s once the coordinator was given a real mission velocity instead of the policy. The failing set shrank from six cases to two, both vertical_180deg at 20 m/s. The root cause below is unchanged: the deadlock is set by how much runway the scenario grants before first contact.",
+    "not_fixable_by_training": "Three independent runs agree, the last at final level with an environment matching the matrix and 16 of 16 training scenarios passed. Once the pair is inside the required margin the barrier is unsatisfiable and the gate holds, at which point it is not asking the policy anything.",
+    "root_cause": "the matrix spawns the pair with a constant 15 m head start, which is 15/v_close seconds of reaction -- 0.375 s at 20 m/s against a measured 0.860 s response. The scenario gets harder as speed rises for a reason that has nothing to do with the aircraft.",
+    "safety": "never violated at the failing speeds either: physical_safe and dynamic_safe true, 29.7-31.1 m apart against a 20 m floor",
+    "why_this_is_the_right_scope_rather_than_a_looser_gate": "The alternative was making the spawn head start time-based, which makes high-speed cases easier and would have converted this into a PASS by changing the question. Scoping the certification states what is true instead, and costs the product nothing it uses."
+  }
+}

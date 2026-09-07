@@ -1,0 +1,305 @@
+{
+  "action": "normalized_enu_velocity",
+  "format": "cbf_rl_sparrow_20m_policy_v1",
+  "maximum_velocity_m_s": 10.0,
+  "minimum_separation_m": 20.0,
+  "observation_fields": [
+    "goal_relative_e_m",
+    "goal_relative_n_m",
+    "goal_relative_u_m",
+    "self_velocity_e_m_s",
+    "self_velocity_n_m_s",
+    "self_velocity_u_m_s",
+    "peer_relative_e_m",
+    "peer_relative_n_m",
+    "peer_relative_u_m",
+    "peer_relative_velocity_e_m_s",
+    "peer_relative_velocity_n_m_s",
+    "peer_relative_velocity_u_m_s",
+    "self_sqrt_trace_cov_m",
+    "peer_sqrt_trace_cov_m",
+    "self_age_s",
+    "peer_age_s",
+    "self_state_valid",
+    "peer_state_valid",
+    "self_covariance_valid",
+    "peer_covariance_valid"
+  ],
+  "parameters": {
+    "avoidance_gain": 1.9839266957048343,
+    "avoidance_goal_taper_m": 155.18731385444983,
+    "avoidance_radius_m": 120.0,
+    "closing_speed_scale_m_s": 4.554658132305846,
+    "goal_gain": 3.403882826541808,
+    "risk_slowdown_gain": 1.3317573496145554
+  },
+  "parameters_sha256": "fe4da520849d1eeff44a9ab90984503cb12c8d46986c6303d362ef139715a198",
+  "training": {
+    "algorithm": "parallel_seeded_cross_entropy_sparrow_20m_10ms_v1",
+    "all_training_scenarios_successful": true,
+    "best_score": 101321.3365946921,
+    "elite_count": 3,
+    "generations": 4,
+    "history": [
+      {
+        "best_score": 98892.307757,
+        "elite_mean_score": 98735.138117,
+        "generation": 0
+      },
+      {
+        "best_score": 99619.648504,
+        "elite_mean_score": 98802.386047,
+        "generation": 1
+      },
+      {
+        "best_score": 101321.336595,
+        "elite_mean_score": 100323.620578,
+        "generation": 2
+      },
+      {
+        "best_score": 100927.865392,
+        "elite_mean_score": 100736.157861,
+        "generation": 3
+      }
+    ],
+    "maximum_steps": 3200,
+    "maximum_velocity_m_s": 10.0,
+    "milestone": "CBF_RL_SPARROW_20M_10MS_OFFLINE_TRAINING",
+    "population": 12,
+    "scenario_results": [
+      {
+        "final_goal_distance_m": {
+          "UAV-01": 0.0467345895472846,
+          "UAV-02": 0.0467345895472846
+        },
+        "hold_frames": 0,
+        "intervention_frames": 0,
+        "minimum_cbf_margin_m": 7.945,
+        "minimum_distance_m": 30.0,
+        "scenario": "parallel",
+        "score": 1612.5326541045279,
+        "steps": 350,
+        "success": true
+      },
+      {
+        "final_goal_distance_m": {
+          "UAV-01": 0.01796676667470871,
+          "UAV-02": 0.21032670524854685
+        },
+        "hold_frames": 0,
+        "intervention_frames": 498,
+        "minimum_cbf_margin_m": 11.129,
+        "minimum_distance_m": 39.395965228028096,
+        "scenario": "perpendicular_crossing",
+        "score": 1332.4595128511019,
+        "steps": 486,
+        "success": true
+      },
+      {
+        "final_goal_distance_m": {
+          "UAV-01": 0.10105427992092944,
+          "UAV-02": 0.09727970017315356
+        },
+        "hold_frames": 0,
+        "intervention_frames": 598,
+        "minimum_cbf_margin_m": 8.42,
+        "minimum_distance_m": 32.911305144028404,
+        "scenario": "diagonal_crossing",
+        "score": 1444.506326070766,
+        "steps": 482,
+        "success": true
+      },
+      {
+        "final_goal_distance_m": {
+          "UAV-01": 0.2190668573757482,
+          "UAV-02": 0.2190668573757482
+        },
+        "hold_frames": 0,
+        "intervention_frames": 376,
+        "minimum_cbf_margin_m": 8.174,
+        "minimum_distance_m": 42.77290802394497,
+        "scenario": "head_on_swap",
+        "score": 1357.202057583176,
+        "steps": 363,
+        "success": true
+      },
+      {
+        "final_goal_distance_m": {
+          "UAV-01": 0.21470408386271575,
+          "UAV-02": 0.0
+        },
+        "hold_frames": 0,
+        "intervention_frames": 304,
+        "minimum_cbf_margin_m": 21.923,
+        "minimum_distance_m": 44.94778088239846,
+        "scenario": "stationary_intruder",
+        "score": 847.8797064367811,
+        "steps": 468,
+        "success": true
+      },
+      {
+        "final_goal_distance_m": {
+          "UAV-01": 0.23801695926910962,
+          "UAV-02": 0.23801695926910515
+        },
+        "hold_frames": 0,
+        "intervention_frames": 238,
+        "minimum_cbf_margin_m": 5.908,
+        "minimum_distance_m": 34.74568349799425,
+        "scenario": "vertical_swap",
+        "score": 629.8171289377048,
+        "steps": 989,
+        "success": true
+      },
+      {
+        "final_goal_distance_m": {
+          "UAV-01": 0.005806374279672923,
+          "UAV-02": 0.1929011519723855
+        },
+        "hold_frames": 0,
+        "intervention_frames": 674,
+        "minimum_cbf_margin_m": 13.887,
+        "minimum_distance_m": 36.31554446518711,
+        "scenario": "shallow_15deg_full_speed_worst_lag",
+        "score": 4394.839147857723,
+        "steps": 1100,
+        "success": true
+      },
+      {
+        "final_goal_distance_m": {
+          "UAV-01": 0.040845242222072364,
+          "UAV-02": 0.24222026179694198
+        },
+        "hold_frames": 0,
+        "intervention_frames": 706,
+        "minimum_cbf_margin_m": 15.0,
+        "minimum_distance_m": 38.92333364245675,
+        "scenario": "stress_30deg_9ms_tau0.75_age100",
+        "score": 2814.8685431067615,
+        "steps": 786,
+        "success": true
+      },
+      {
+        "final_goal_distance_m": {
+          "UAV-01": 0.14402626090914533,
+          "UAV-02": 0.1242070851951531
+        },
+        "hold_frames": 0,
+        "intervention_frames": 758,
+        "minimum_cbf_margin_m": 15.0,
+        "minimum_distance_m": 39.814340837440525,
+        "scenario": "stress_45deg_9ms_tau0.75_age100",
+        "score": 2343.796207636516,
+        "steps": 670,
+        "success": true
+      },
+      {
+        "final_goal_distance_m": {
+          "UAV-01": 0.0010432485225920008,
+          "UAV-02": 0.08031082751522056
+        },
+        "hold_frames": 0,
+        "intervention_frames": 605,
+        "minimum_cbf_margin_m": 15.0,
+        "minimum_distance_m": 38.07326247119682,
+        "scenario": "stress_30deg_10ms_tau0.45_age0",
+        "score": 2968.3892803735835,
+        "steps": 814,
+        "success": true
+      },
+      {
+        "final_goal_distance_m": {
+          "UAV-01": 0.04320150615995999,
+          "UAV-02": 0.01961271338100049
+        },
+        "hold_frames": 0,
+        "intervention_frames": 728,
+        "minimum_cbf_margin_m": 15.0,
+        "minimum_distance_m": 38.87982058302234,
+        "scenario": "stress_30deg_10ms_tau0.75_age100",
+        "score": 2984.031288364172,
+        "steps": 823,
+        "success": true
+      },
+      {
+        "final_goal_distance_m": {
+          "UAV-01": 0.001907632143598903,
+          "UAV-02": 0.026292492456678557
+        },
+        "hold_frames": 0,
+        "intervention_frames": 722,
+        "minimum_cbf_margin_m": 14.998,
+        "minimum_distance_m": 39.341590917708565,
+        "scenario": "stress_45deg_10ms_tau0.45_age0",
+        "score": 2500.8922612609986,
+        "steps": 697,
+        "success": true
+      },
+      {
+        "final_goal_distance_m": {
+          "UAV-01": 0.14889860471001337,
+          "UAV-02": 0.20682665564159142
+        },
+        "hold_frames": 0,
+        "intervention_frames": 799,
+        "minimum_cbf_margin_m": 14.975,
+        "minimum_distance_m": 39.68462588540173,
+        "scenario": "stress_45deg_10ms_tau0.75_age100",
+        "score": 2513.1512878375956,
+        "steps": 705,
+        "success": true
+      },
+      {
+        "final_goal_distance_m": {
+          "UAV-01": 0.20379556184494696,
+          "UAV-02": 0.1901032096376442
+        },
+        "hold_frames": 0,
+        "intervention_frames": 656,
+        "minimum_cbf_margin_m": 6.987,
+        "minimum_distance_m": 32.91264659899275,
+        "scenario": "stress_90deg_10ms_tau0.75_age100",
+        "score": 2256.298638567567,
+        "steps": 636,
+        "success": true
+      },
+      {
+        "hold_frames": 0,
+        "intervention_frames": 0,
+        "maximum_cross_track_error_m": 0.7402034468195852,
+        "mean_cross_track_error_m": 0.2702725223946548,
+        "minimum_cbf_margin_m": 1.238,
+        "minimum_distance_m": 23.302818929124545,
+        "progress_m": {
+          "UAV-01": 860.8766559584291,
+          "UAV-02": 919.7372208504987
+        },
+        "scenario": "same_orbit_close_phase",
+        "score": 35606.87208573066,
+        "steps": 2400,
+        "success": true,
+        "target_progress_m": 960.0
+      },
+      {
+        "hold_frames": 0,
+        "intervention_frames": 0,
+        "maximum_cross_track_error_m": 0.7223263045875115,
+        "mean_cross_track_error_m": 0.2648178494587753,
+        "minimum_cbf_margin_m": 22.945,
+        "minimum_distance_m": 45.00830501649743,
+        "progress_m": {
+          "UAV-01": 870.999243875695,
+          "UAV-02": 914.9555973723868
+        },
+        "scenario": "same_orbit_safe_phase",
+        "score": 35713.80046797246,
+        "steps": 2400,
+        "success": true,
+        "target_progress_m": 960.0
+      }
+    ],
+    "seed": 20260814,
+    "vehicle_profile": "sparrow",
+    "workers": 1
+  }
+}

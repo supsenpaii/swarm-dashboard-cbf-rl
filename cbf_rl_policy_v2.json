@@ -1,0 +1,165 @@
+{
+  "action": "normalized_enu_velocity",
+  "format": "cbf_rl_proximity_policy_v2",
+  "minimum_separation_m": 4.0,
+  "observation_fields": [
+    "goal_relative_e_m",
+    "goal_relative_n_m",
+    "goal_relative_u_m",
+    "self_velocity_e_m_s",
+    "self_velocity_n_m_s",
+    "self_velocity_u_m_s",
+    "peer_relative_e_m",
+    "peer_relative_n_m",
+    "peer_relative_u_m",
+    "peer_relative_velocity_e_m_s",
+    "peer_relative_velocity_n_m_s",
+    "peer_relative_velocity_u_m_s",
+    "self_sqrt_trace_cov_m",
+    "peer_sqrt_trace_cov_m",
+    "self_age_s",
+    "peer_age_s",
+    "self_state_valid",
+    "peer_state_valid",
+    "self_covariance_valid",
+    "peer_covariance_valid"
+  ],
+  "parameters": {
+    "avoidance_gain": 0.6596880358133166,
+    "avoidance_goal_taper_m": 13.07293502653358,
+    "avoidance_radius_m": 5.732142807580679,
+    "goal_gain": 1.4559635489313423
+  },
+  "parameters_sha256": "cbd85e28e3c18ce9d4cd5a45d3751b48f9bd6a6337513a44849377c4a8d533cb",
+  "training": {
+    "algorithm": "seeded_cross_entropy_proximity_policy_v2",
+    "all_training_scenarios_successful": true,
+    "best_score": 499.72784899851257,
+    "elite_count": 6,
+    "generations": 12,
+    "history": [
+      {
+        "best_score": 490.652579,
+        "elite_mean_score": 486.874525,
+        "generation": 0
+      },
+      {
+        "best_score": 496.304997,
+        "elite_mean_score": 491.782744,
+        "generation": 1
+      },
+      {
+        "best_score": 498.166638,
+        "elite_mean_score": 496.886015,
+        "generation": 2
+      },
+      {
+        "best_score": 499.506672,
+        "elite_mean_score": 498.947488,
+        "generation": 3
+      },
+      {
+        "best_score": 499.077523,
+        "elite_mean_score": 498.377363,
+        "generation": 4
+      },
+      {
+        "best_score": 499.516852,
+        "elite_mean_score": 498.950391,
+        "generation": 5
+      },
+      {
+        "best_score": 499.546832,
+        "elite_mean_score": 498.643767,
+        "generation": 6
+      },
+      {
+        "best_score": 499.67429,
+        "elite_mean_score": 498.688011,
+        "generation": 7
+      },
+      {
+        "best_score": 498.992289,
+        "elite_mean_score": 498.221378,
+        "generation": 8
+      },
+      {
+        "best_score": 498.778758,
+        "elite_mean_score": 498.542657,
+        "generation": 9
+      },
+      {
+        "best_score": 498.971721,
+        "elite_mean_score": 498.375182,
+        "generation": 10
+      },
+      {
+        "best_score": 499.727849,
+        "elite_mean_score": 499.182541,
+        "generation": 11
+      }
+    ],
+    "maximum_steps": 800,
+    "milestone": "CBF_RL_OFFLINE_TRAINING_BASELINE",
+    "population": 24,
+    "scenario_results": [
+      {
+        "final_goal_distance_m": {
+          "UAV-01": 0.24977629441291782,
+          "UAV-02": 0.24977629441291782
+        },
+        "hold_frames": 0,
+        "intervention_frames": 0,
+        "minimum_cbf_margin_m": 3.945,
+        "minimum_distance_m": 8.0,
+        "scenario": "parallel",
+        "score": 107.16223705587026,
+        "steps": 517,
+        "success": true
+      },
+      {
+        "final_goal_distance_m": {
+          "UAV-01": 0.2490453501808249,
+          "UAV-02": 0.1493419439524027
+        },
+        "hold_frames": 0,
+        "intervention_frames": 0,
+        "minimum_cbf_margin_m": 1.019,
+        "minimum_distance_m": 5.343385903286849,
+        "scenario": "active_parallel_20m",
+        "score": 204.00806352933367,
+        "steps": 700,
+        "success": true
+      },
+      {
+        "final_goal_distance_m": {
+          "UAV-01": 0.24994534331173585,
+          "UAV-02": 0.1564089334089119
+        },
+        "hold_frames": 0,
+        "intervention_frames": 248,
+        "minimum_cbf_margin_m": -0.005,
+        "minimum_distance_m": 4.712833663683443,
+        "scenario": "diagonal_crossing",
+        "score": 115.37335710917294,
+        "steps": 585,
+        "success": true
+      },
+      {
+        "final_goal_distance_m": {
+          "UAV-01": 0.2485549804361286,
+          "UAV-02": 0.2485549804361286
+        },
+        "hold_frames": 0,
+        "intervention_frames": 284,
+        "minimum_cbf_margin_m": 0.0,
+        "minimum_distance_m": 5.28629250433823,
+        "scenario": "head_on_swap",
+        "score": 73.18419130413568,
+        "steps": 741,
+        "success": true
+      }
+    ],
+    "seed": 7
+  }
+}
