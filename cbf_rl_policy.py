@@ -16,7 +16,6 @@ MODEL_FORMAT = "cbf_rl_proximity_policy_v1"
 MODEL_FORMAT_V2 = "cbf_rl_proximity_policy_v2"
 MODEL_FORMAT_MISSION_V1 = "cbf_rl_mission_policy_v1"
 MODEL_FORMAT_X500_20M_V1 = "cbf_rl_x500_20m_policy_v1"
-MODEL_FORMAT_SPARROW_20M_V1 = "cbf_rl_sparrow_20m_policy_v1"
 OBSERVATION_SIZE = len(OBSERVATION_FIELDS)
 MINIMUM_SEPARATION_M = 4.0
 
@@ -47,7 +46,7 @@ class ProximityCbfRlPolicy:
         until someone wants a 10 m floor that still avoids in 3D, at which
         point the coupling silently changes the behaviour instead of the limit.
         """
-        return self.vehicle_profile in {"x500", "sparrow"}
+        return self.vehicle_profile == "x500"
 
     def __post_init__(self) -> None:
         values = (self.goal_gain, self.avoidance_gain, self.avoidance_radius_m)
@@ -60,7 +59,7 @@ class ProximityCbfRlPolicy:
             or self.minimum_separation_m <= 0.0
             or not math.isfinite(self.maximum_velocity_m_s)
             or self.maximum_velocity_m_s <= 0.0
-            or self.vehicle_profile not in {"legacy", "x500", "sparrow"}
+            or self.vehicle_profile not in {"legacy", "x500"}
             or (
                 self.vehicle_profile == "legacy"
                 and (
@@ -74,7 +73,7 @@ class ProximityCbfRlPolicy:
                 # grows with closing speed and already exceeds 20 m by the time
                 # the pair is closing at 6.81 m/s. Below 10 m nothing in the
                 # latency and braking reserves is survivable, so it stays hard.
-                self.vehicle_profile in {"x500", "sparrow"}
+                self.vehicle_profile == "x500"
                 and self.minimum_separation_m < 10.0
             )
             or self.avoidance_radius_m <= self.minimum_separation_m
@@ -199,8 +198,6 @@ class ProximityCbfRlPolicy:
             model_format = MODEL_FORMAT_MISSION_V1
         if self.vehicle_profile == "x500":
             model_format = MODEL_FORMAT_X500_20M_V1
-        elif self.vehicle_profile == "sparrow":
-            model_format = MODEL_FORMAT_SPARROW_20M_V1
         encoded = json.dumps(parameters, sort_keys=True, separators=(",", ":")).encode()
         return {
             "format": model_format,
@@ -220,7 +217,6 @@ class ProximityCbfRlPolicy:
             MODEL_FORMAT_V2,
             MODEL_FORMAT_MISSION_V1,
             MODEL_FORMAT_X500_20M_V1,
-            MODEL_FORMAT_SPARROW_20M_V1,
         }:
             raise ValueError("policy format is invalid")
         if tuple(value.get("observation_fields", ())) != OBSERVATION_FIELDS:
@@ -228,7 +224,6 @@ class ProximityCbfRlPolicy:
         model_format = value.get("format")
         high_speed_formats = {
             MODEL_FORMAT_X500_20M_V1,
-            MODEL_FORMAT_SPARROW_20M_V1,
         }
         if model_format in high_speed_formats:
             try:
@@ -271,7 +266,6 @@ class ProximityCbfRlPolicy:
                 maximum_velocity_m_s,
                 {
                     MODEL_FORMAT_X500_20M_V1: "x500",
-                    MODEL_FORMAT_SPARROW_20M_V1: "sparrow",
                 }.get(model_format, "legacy"),
             )
         except (KeyError, TypeError, ValueError) as error:

@@ -41,7 +41,7 @@ def _scenario(buffer_m: float | None = None) -> Scenario:
         ),
         peer_age_ms=100.0,
         # This test is named for the PLANT stress, so the plant has to be one:
-        # the measured Sparrow horizontal response and the airframe's own
+        # the measured horizontal response and the airframe's own
         # MPC_ACC_HOR_MAX. Left at the zero default the vehicle changes
         # velocity in a single 20 ms step, which is not a stress, it is a
         # cheat -- and it is the reason this file used to report a feasibility

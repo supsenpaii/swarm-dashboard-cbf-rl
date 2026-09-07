@@ -203,7 +203,7 @@ def scenarios() -> tuple[Scenario, ...]:
             design_margin_buffer_m=float(
                 CROSSING_CBF_ENV["SWARM_CBF_DESIGN_MARGIN_BUFFER_M"]
             ),
-            # Measured on the 2026-08-15 Sparrow flight (0.860 s horizontal)
+            # Measured horizontal response for the high-speed profile.
             # and the airframe's own MPC_ACC_HOR_MAX. Without them this
             # scenario's vehicle stops dead in one 20 ms step, which flatters
             # every result that depends on how fast it can slow down.
@@ -356,7 +356,7 @@ def simulate(
     # The coordinator keys its encounter ledger by drone pair in a module
     # global, so run N+1 would otherwise inherit N's priority alternation and
     # its release latch and answer a different question than the one asked --
-    # the same reason sparrow_corridor_replay resets it. Without this, a sweep
+    # the same reason the corridor replay resets it. Without this, a sweep
     # gives one answer under pytest and another standalone, which was how the
     # 2026-08-17 acceleration-limit change surfaced as a mysterious failure in
     # a test that passed on its own.

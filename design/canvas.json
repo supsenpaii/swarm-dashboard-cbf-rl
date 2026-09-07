@@ -25,7 +25,7 @@
       "x": 0,
       "y": 1960,
       "w": 500,
-      "text": "Chưa quyết, cần bạn chọn:\n\n· Minimap 324 px vuông — đủ quan sát chưa, hay muốn 380?\n· Bốn màu accent trong chip phía trên mỗi khung: xanh lam, xanh lục, tím, cam.\n· Thẻ hai chiếc đang nằm cạnh nhau. Nếu bạn thường chỉ nhìn một chiếc, có thể gộp thành một thẻ lớn kèm tab.\n· Tên sản phẩm đang để \"Sparrow · Swarm Console\" — đổi được."
+      "text": "Chưa quyết, cần bạn chọn:\n\n· Minimap 324 px vuông — đủ quan sát chưa, hay muốn 380?\n· Bốn màu accent trong chip phía trên mỗi khung: xanh lam, xanh lục, tím, cam.\n· Thẻ hai chiếc đang nằm cạnh nhau. Nếu bạn thường chỉ nhìn một chiếc, có thể gộp thành một thẻ lớn kèm tab.\n· Tên sản phẩm đang để \"Swarm UAV Console\" — đổi được."
     }
   ],
   "launch": { "view": "canvas" }

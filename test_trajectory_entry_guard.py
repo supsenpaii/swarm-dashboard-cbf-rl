@@ -13,7 +13,7 @@ import math
 import pytest
 
 from companion_safety import CompanionSafetyMonitor
-from conflict_coordinator import ConflictCoordinator, sparrow_20m_conflict_config
+from conflict_coordinator import ConflictCoordinator, x500_20m_conflict_config
 from formation_controller import FormationConfig, FormationSlot
 from trajectory_controller import ClosedPolylineTrajectory, LinearTrajectory
 
@@ -215,7 +215,7 @@ def test_the_two_radii_cannot_chatter():
 def latched_coordinator() -> ConflictCoordinator:
     """A coordinator holding a confirmed head-on encounter."""
     coordinators = ConflictCoordinator.pair(
-        ("UAV-01", "UAV-02"), sparrow_20m_conflict_config()
+        ("UAV-01", "UAV-02"), x500_20m_conflict_config()
     )
     closing = {
         "UAV-01": {

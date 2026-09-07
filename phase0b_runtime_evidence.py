@@ -28,8 +28,8 @@ from typing import Any, Callable, Iterable
 
 
 DRONE_MODELS = {
-    "UAV-01": os.environ.get("SWARM_GAZEBO_MODEL_UAV_01", "sparrow_gimbal_0"),
-    "UAV-02": os.environ.get("SWARM_GAZEBO_MODEL_UAV_02", "sparrow_gimbal_1"),
+    "UAV-01": os.environ.get("SWARM_GAZEBO_MODEL_UAV_01", "x500_custom_0"),
+    "UAV-02": os.environ.get("SWARM_GAZEBO_MODEL_UAV_02", "x500_custom_1"),
 }
 EXPECTED_CAMERA_WIDTH = int(os.environ.get("SWARM_CAMERA_WIDTH", "640"))
 EXPECTED_CAMERA_HEIGHT = int(os.environ.get("SWARM_CAMERA_HEIGHT", "360"))

@@ -14,13 +14,10 @@ from typing import Any, Sequence
 
 import numpy as np
 
-from conflict_coordinator import sparrow_20m_conflict_config
 from cbf_rl_env import (
     CbfRlEnvConfig,
     CbfRlEnvironment,
     DRONE_IDS,
-    sparrow_10m_floor_cbf_config,
-    sparrow_20m_cbf_config,
     x500_20m_cbf_config,
 )
 from cbf_rl_policy import ProximityCbfRlPolicy
@@ -222,15 +219,6 @@ def x500_training_scenarios(
     )
 
 
-def sparrow_training_scenarios(
-    maximum_velocity_m_s: float = 10.0,
-) -> tuple[Scenario, ...]:
-    return x500_training_scenarios(
-        maximum_velocity_m_s,
-        relative_braking_acceleration_m_s2=8.0,
-    )
-
-
 def training_scenarios() -> tuple[Scenario, ...]:
     """Frozen legacy 4 m suite used to replay authenticated old policies."""
     return (
@@ -312,36 +300,17 @@ def _environment_config(
     response_time_constant_s: float | None = None,
 ) -> CbfRlEnvConfig:
     if policy.avoids_vertically:
-        is_sparrow = policy.vehicle_profile == "sparrow"
         return CbfRlEnvConfig(
             maximum_steps=maximum_steps,
-            cbf=(
-                (
-                    sparrow_10m_floor_cbf_config(policy.maximum_velocity_m_s)
-                    if policy.minimum_separation_m < 20.0
-                    else sparrow_20m_cbf_config(policy.maximum_velocity_m_s)
-                )
-                if is_sparrow
-                else x500_20m_cbf_config(policy.maximum_velocity_m_s)
-            ),
+            cbf=x500_20m_cbf_config(policy.maximum_velocity_m_s),
             response_time_constant_s=response_time_constant_s or 0.0,
             response_time_constant_range_s=(
                 None
                 if response_time_constant_s is not None
-                # Sparrow's measured horizontal tau is 0.860 s (2026-08-15
-                # flight). Training against an upper bound of 0.75 taught the
-                # policy a plant quicker than the one it is judged on.
-                else ((0.45, 0.90) if is_sparrow else (0.45, 0.75))
+                else (0.45, 0.75)
             ),
             response_seed=response_seed,
-            maximum_acceleration_m_s2=4.0 if is_sparrow else 3.0,
-            # Train inside the stack that scores it. Without this the policy
-            # never sees a yield role it will meet in every evaluation.
-            conflict_coordination=(
-                sparrow_20m_conflict_config(policy.maximum_velocity_m_s)
-                if is_sparrow
-                else None
-            ),
+            maximum_acceleration_m_s2=3.0,
         )
     return CbfRlEnvConfig(maximum_steps=maximum_steps)
 
@@ -382,9 +351,7 @@ def _orbit_rollout(
                 else FormationConfig()
             ),
             maximum_acceleration_m_s2=(
-                4.0
-                if policy.vehicle_profile == "sparrow"
-                else 3.0 if high_speed_contract else 0.5
+                3.0 if high_speed_contract else 0.5
             ),
             # Without this the corner branch never runs at all -- it needs both
             # an acceleration and a tolerance -- so the orbit was flown with no
@@ -629,15 +596,13 @@ def train(
         or workers <= 0
         or not math.isfinite(maximum_velocity_m_s)
         or maximum_velocity_m_s <= 0.0
-        or vehicle_profile not in {"x500", "sparrow"}
+        or vehicle_profile != "x500"
     ):
         raise ValueError("training population configuration is invalid")
     selected_scenarios = tuple(
         scenarios
         or (
-            sparrow_training_scenarios(maximum_velocity_m_s)
-            if vehicle_profile == "sparrow"
-            else x500_training_scenarios(maximum_velocity_m_s)
+            x500_training_scenarios(maximum_velocity_m_s)
         )
     )
     if not selected_scenarios:
@@ -758,13 +723,13 @@ def main() -> int:
     parser.add_argument("--maximum-steps", type=int, default=3200)
     parser.add_argument("--maximum-velocity-m-s", type=float, default=10.0)
     parser.add_argument(
-        "--vehicle-profile", choices=("x500", "sparrow"), default="x500"
+        "--vehicle-profile", choices=("x500",), default="x500"
     )
     parser.add_argument(
         "--minimum-separation-m",
         type=float,
         default=20.0,
-        help="physical floor; 10 m is the operator's emergency floor for Sparrow",
+        help="physical separation floor for the x500 high-speed contract",
     )
     parser.add_argument(
         "--workers", type=int, default=max(1, min(8, (os.cpu_count() or 2) - 2))

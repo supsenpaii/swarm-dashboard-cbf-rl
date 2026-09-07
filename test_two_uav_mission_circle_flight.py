@@ -1,7 +1,7 @@
 """The scenario geometry, which has to survive a change of envelope.
 
 The five scenarios are drawn against two spawns 5.39 m apart -- a picture
-from the 4 m separation envelope. Sparrow asks for 20 m and its coordinator
+from the 4 m separation envelope. The high-speed profile asks for 20 m and its coordinator
 does not engage until 120 m, so the picture has to be fitted onto the real
 spawns before it means anything. These tests pin that the fit preserves the
 shape and refuses when it cannot.

@@ -373,7 +373,7 @@ def corner_profile(
 
     The fillet is pure geometry: it says where an arc of radius r sits relative
     to the vertex, and it is exact for a vehicle that adopts a commanded
-    velocity instantly. A real one does not. Sparrow's velocity lags its
+    velocity instantly. A real one does not. The vehicle's velocity lags its
     command with a measured 0.860 s time constant, so it carries its approach
     heading roughly `v * tau` past the point the turn was commanded, and that
     displacement adds to the geometric miss the fillet already budgets for.
