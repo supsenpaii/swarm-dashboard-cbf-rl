@@ -1,0 +1,6 @@
+# Offline-only dependencies for range residual training/evaluation.
+# Runtime remains safe with these packages absent when correction is off.
+joblib>=1.4
+scikit-learn>=1.5
+xgboost>=2.1
+pyarrow>=17.0
