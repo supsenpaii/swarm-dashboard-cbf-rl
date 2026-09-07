@@ -48,7 +48,6 @@ from cbf_command_gate import (
 from cbf_rl_shadow import CbfRlShadow
 from conflict_coordinator import (
     ConflictCoordinator,
-    sparrow_20m_conflict_config,
     x500_20m_conflict_config,
 )
 from emergency_supervisor import EmergencyConfig, EmergencyDecision, EmergencySupervisor
@@ -84,10 +83,6 @@ def _coordinated_cbf_rl(
     if runtime.policy is not None:
         if runtime.policy.vehicle_profile == "x500":
             config = x500_20m_conflict_config(runtime.policy.maximum_velocity_m_s)
-        elif runtime.policy.vehicle_profile == "sparrow":
-            config = sparrow_20m_conflict_config(
-                runtime.policy.maximum_velocity_m_s
-            )
     runtime.coordinator = ConflictCoordinator.shared(drone_id, peer_id, config)
     return runtime
 
