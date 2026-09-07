@@ -1,0 +1,8 @@
+{
+  "name": "rgb_tracking_640x360_50hz",
+  "sensor_name": "camera",
+  "width": 640,
+  "height": 360,
+  "horizontal_fov_rad": 1.35,
+  "update_rate_hz": 50.0
+}

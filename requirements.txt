@@ -1,0 +1,9 @@
+# Python 3.12 dependencies for the dashboard and MAVLink bridge.
+# Gazebo/ROS 2 bindings and lfc_gimbal_gazebo are external.
+fastapi==0.139.0
+numpy==2.4.4
+opencv-contrib-python==5.0.0.93
+paho-mqtt==2.1.0
+pydantic==2.13.4
+pymavlink==2.4.49
+uvicorn==0.51.0
