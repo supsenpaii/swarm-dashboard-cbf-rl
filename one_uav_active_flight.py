@@ -29,7 +29,7 @@ whatever was last saved to its parameter file. Every driver here waits for a
 and the driver times out with `timeout_waiting_for:hover_reached` -- which
 looks exactly like a broken vertical channel and was read as one for three
 days, including the 2026-08-12 "vertical channel blocker". The vertical axis
-was fine the whole time; on Sparrow it measures gain 1.060, tau 0.275 s.
+was fine the whole time; on the x500 profile it measures gain 1.060, tau 0.275 s.
 
 Check it before blaming the aircraft:
 

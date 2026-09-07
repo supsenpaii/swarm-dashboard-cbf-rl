@@ -1,7 +1,5 @@
 from dataclasses import replace
 import math
-import os
-from unittest import mock
 
 import pytest
 
@@ -9,7 +7,6 @@ from conflict_coordinator import (
     ConflictCoordinator,
     ConflictCoordinatorConfig,
     reset_shared_conflict_state,
-    sparrow_20m_conflict_config,
     x500_20m_conflict_config,
 )
 
@@ -260,7 +257,7 @@ def test_slow_head_on_engages_before_the_cbf_reserve() -> None:
     would only ever latch after the shield had already started braking. The
     engagement floor makes range, not time, the binding gate down there.
     """
-    config = sparrow_20m_conflict_config(10.0)
+    config = x500_20m_conflict_config(10.0)
     assert config.minimum_engagement_distance_m > config.reserve_separation_m
 
     pair = ConflictCoordinator.pair(("UAV-01", "UAV-02"), config)
@@ -296,14 +293,10 @@ def test_engagement_floor_does_not_move_the_certified_rungs() -> None:
     below it changes nothing those matrices measured.
     """
     for ceiling_m_s in (10.0, 15.0, 20.0):
-        for factory in (sparrow_20m_conflict_config, x500_20m_conflict_config):
-            config = factory(ceiling_m_s)
-            closing_m_s = 2.0 * ceiling_m_s
-            assert config.minimum_engagement_distance_m < config.trigger_distance_m
-            assert (
-                config.trigger_distance_m
-                < config.prediction_horizon_s * closing_m_s
-            )
+        config = x500_20m_conflict_config(ceiling_m_s)
+        closing_m_s = 2.0 * ceiling_m_s
+        assert config.minimum_engagement_distance_m < config.trigger_distance_m
+        assert config.trigger_distance_m < config.prediction_horizon_s * closing_m_s
 
 
 def test_yield_lane_change_does_not_saturate_against_tracker_feedback() -> None:
@@ -332,35 +325,6 @@ def test_yield_lane_change_does_not_saturate_against_tracker_feedback() -> None:
     assert abs(offset_m) > 25.0, offset_m
 
 
-def test_sparrow_lateral_authority_is_continuous_where_x500_steps() -> None:
-    """The 10 m/s rung was the fragile one because of this step.
-
-    x500 holds 3.0 m/s at and below 10 m/s to preserve an authenticated rung;
-    Sparrow copied the step without the reason and landed on it. Measured on
-    the 2026-08-17 ladder: minimum CBF margin 0.013 m at 10 m/s against 2.28
-    at 15 and 3.12 at 20.
-    """
-    assert x500_20m_conflict_config(10.0).yield_lateral_speed_m_s == 3.0
-    assert sparrow_20m_conflict_config(10.0).yield_lateral_speed_m_s == 7.0
-
-    # Same line either side of 10, so nothing jumps at the boundary.
-    below = sparrow_20m_conflict_config(9.99).yield_lateral_speed_m_s
-    above = sparrow_20m_conflict_config(10.01).yield_lateral_speed_m_s
-    assert math.isclose(above - below, 0.01, abs_tol=1e-9)
-
-    # The faster rungs are untouched, so only the 10 m/s matrix re-runs.
-    assert sparrow_20m_conflict_config(15.0).yield_lateral_speed_m_s == 9.5
-    assert sparrow_20m_conflict_config(20.0).yield_lateral_speed_m_s == 12.0
-
-
-def test_the_lane_change_still_fits_inside_cruise_at_every_rung() -> None:
-    """forward_speed = sqrt(v^2 - lateral^2) must stay real and useful."""
-    for speed in (10.0, 15.0, 20.0):
-        lateral = sparrow_20m_conflict_config(speed).yield_lateral_speed_m_s
-        assert lateral < speed, (speed, lateral)
-        assert math.sqrt(speed * speed - lateral * lateral) > 0.5 * lateral
-
-
 def _vertical_pair(gap_m: float = 80.0, speed: float = 20.0):
     return {
         "UAV-01": {
@@ -387,7 +351,7 @@ def test_a_vertical_head_on_gets_a_sideways_yield() -> None:
     """
     reset_shared_conflict_state(("UAV-01", "UAV-02"))
     coordinator = ConflictCoordinator(
-        "UAV-02", "UAV-01", sparrow_20m_conflict_config(20.0)
+        "UAV-02", "UAV-01", x500_20m_conflict_config(20.0)
     )
 
     output, status = coordinator.filter(
@@ -413,7 +377,7 @@ def test_a_vertical_yield_does_not_flip_to_the_horizontal_branch() -> None:
     """
     reset_shared_conflict_state(("UAV-01", "UAV-02"))
     coordinator = ConflictCoordinator(
-        "UAV-02", "UAV-01", sparrow_20m_conflict_config(20.0)
+        "UAV-02", "UAV-01", x500_20m_conflict_config(20.0)
     )
     coordinator.filter((0.0, 0.0, -20.0), (0.0, 0.0, -20.0), _vertical_pair())
 
@@ -461,7 +425,7 @@ def test_a_released_encounter_can_latch_again_once_the_pair_is_clear() -> None:
     role "clear" through a convergence with a 3.4 m predicted miss distance,
     to a CBF margin of -0.840 m.
     """
-    config = replace(sparrow_20m_conflict_config(10.0), release_frames=3)
+    config = replace(x500_20m_conflict_config(10.0), release_frames=3)
     coordinator = ConflictCoordinator("UAV-02", "UAV-01", config)
     closing = states(100.0)
     closing["UAV-01"]["velocity_enu_m_s"] = (10.0, 0.0, 0.0)
@@ -485,7 +449,7 @@ def test_a_released_encounter_can_latch_again_once_the_pair_is_clear() -> None:
 
 def test_a_release_is_still_not_undone_on_unchanged_geometry() -> None:
     """The suppression the previous test relaxes must still do its job."""
-    config = replace(sparrow_20m_conflict_config(10.0), release_frames=3)
+    config = replace(x500_20m_conflict_config(10.0), release_frames=3)
     coordinator = ConflictCoordinator("UAV-02", "UAV-01", config)
     closing = states(100.0)
     closing["UAV-01"]["velocity_enu_m_s"] = (10.0, 0.0, 0.0)
@@ -510,60 +474,6 @@ def test_a_release_is_still_not_undone_on_unchanged_geometry() -> None:
     )
     assert immediate["encounter"] == 1, immediate
     assert not immediate["active"], immediate
-
-
-# -- engagement lead ---------------------------------------------------------
-#
-# The coordinator has to finish a lane change before the barrier runs out of
-# room, so what it needs from its trigger is TIME. Measured 2026-08-18 against
-# the 20 Hz flight logs: the fixed 25 m that used to be added on top of the CBF
-# boundary bought 2.69 s of lead at 10 m/s, 0.83 s at 15 and 0.62 s at 20 --
-# because the boundary it sits on top of grows with the square of speed. The
-# true minimum margins followed exactly: +4.965, +0.502, -0.596.
-
-
-def sparrow_cbf_boundary_m(maximum_velocity_m_s: float) -> float:
-    relative = 2.0 * maximum_velocity_m_s
-    return 20.0 + 2.0 + relative * 0.96 + relative * relative / 16.0
-
-
-@pytest.mark.parametrize("speed_m_s", (10.0, 15.0, 20.0))
-def test_every_sparrow_rung_gets_the_same_engagement_lead(speed_m_s) -> None:
-    config = sparrow_20m_conflict_config(speed_m_s)
-    relative = 2.0 * speed_m_s
-    lead_s = (config.trigger_distance_m - sparrow_cbf_boundary_m(speed_m_s)) / relative
-
-    assert lead_s == pytest.approx(3.5, abs=0.05)
-
-
-@pytest.mark.parametrize("speed_m_s", (10.0, 15.0, 20.0))
-def test_the_coordinator_still_engages_before_the_barrier(speed_m_s) -> None:
-    assert sparrow_20m_conflict_config(speed_m_s).trigger_distance_m > (
-        sparrow_cbf_boundary_m(speed_m_s)
-    )
-
-
-def test_the_low_speed_floor_no_longer_sets_the_lead() -> None:
-    """10 m/s used to get its 2.69 s by accident, off the 120 m floor.
-
-    The floor is still there for speeds low enough that lead time is cheap and
-    geometry is not, but at 10 m/s the lead now sets the trigger, so every
-    rung is on the same rule rather than one of them being lucky.
-    """
-    assert sparrow_20m_conflict_config(10.0).trigger_distance_m == pytest.approx(
-        136.2, abs=0.5
-    )
-
-
-def test_a_lead_the_horizon_cannot_see_is_refused() -> None:
-    """Both conditions gate the threat test.
-
-    A trigger further out than `prediction_horizon_s` reaches makes the horizon
-    the real trigger and the configured lead a fiction, silently. Fail loudly.
-    """
-    with mock.patch.dict(os.environ, {"SWARM_CONFLICT_ENGAGEMENT_LEAD_S": "4.5"}):
-        with pytest.raises(ValueError, match="prediction horizon"):
-            sparrow_20m_conflict_config(20.0)
 
 
 def test_x500_keeps_the_fixed_distance_it_was_certified_with() -> None:

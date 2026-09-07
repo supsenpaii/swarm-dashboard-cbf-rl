@@ -1,23 +1,19 @@
-# Swarm Sparrow Dashboard
+# Swarm UAV Dashboard
 
-This copy keeps the original dashboard runtime and uses the native
-`sparrow_gimbal` Gazebo plant for both PX4 instances. The project-local model
-root contains the Sparrow body, motors, three-axis camera gimbal and the front
-lidar retained for dashboard range features.
+This copy keeps the original dashboard runtime and uses the native x500 Gazebo
+plant for both PX4 instances. The dashboard reads telemetry, camera and gimbal
+state from the two simulated vehicles and retains the front lidar integration.
 
-Install `patches/px4-airframes/4020_gz_sparrow_gimbal` into the matching PX4
-airframe directory, list it in PX4's airframe `CMakeLists.txt`, rebuild
-`px4_sitl_default`, then check the stack without starting it:
+Build the matching PX4 x500 airframe, then check the stack without starting it:
 
 ```bash
-cd /home/sup/swarm_sparrow_dashboard
+cd /home/sup/swarm_dashboard
 ./run_all.sh --check
 ```
 
 The default `.env` keeps OFFBOARD authority, missions and CBF-RL inactive.
-Use `sparrow_20m_10ms_shadow.env` after its generated policy and SHA are
-present. ACTIVE flight still requires the existing explicit acknowledgement
-and flight-readiness gates.
+ACTIVE flight still requires the existing explicit acknowledgement and
+flight-readiness gates.
 
 > **Kiến trúc hiện tại (2026-07-29):** runtime đã loại bỏ hoàn toàn UniDepth
 > và các module `metric_depth_*`. Follow Target hiện dùng bearing-only
@@ -471,7 +467,7 @@ python -m unittest discover -p 'test_*.py'
 | MQTT command | `swarm/{drone_id}/control/command` |
 | MQTT result | `swarm/+/control/result` |
 
-Model Gazebo mặc định là `sparrow_gimbal_0` và `sparrow_gimbal_1`. Có thể đổi
+Model Gazebo mặc định là `x500_custom_0` và `x500_custom_1`. Có thể đổi
 qua `SWARM_GAZEBO_MODEL_UAV_01/02`; camera, IMU, gimbal, lidar và ground-truth
 đều dùng cùng mapping này.
 

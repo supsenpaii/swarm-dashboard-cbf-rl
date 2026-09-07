@@ -254,10 +254,10 @@ except ValueError:
 
 DRONE_MODELS = {
     "UAV-01": os.environ.get(
-        "SWARM_GAZEBO_MODEL_UAV_01", "sparrow_gimbal_0"
+        "SWARM_GAZEBO_MODEL_UAV_01", "x500_custom_0"
     ).strip(),
     "UAV-02": os.environ.get(
-        "SWARM_GAZEBO_MODEL_UAV_02", "sparrow_gimbal_1"
+        "SWARM_GAZEBO_MODEL_UAV_02", "x500_custom_1"
     ).strip(),
 }
 
@@ -665,7 +665,7 @@ tracking_companion_safety: dict[str, dict[str, Any]] = {
 # How often the barrier had to correct the command it was handed. A flight
 # can hold a positive margin and still be one configuration change away from
 # not holding it, and the intervention rate is what says so first: the
-# Sparrow 10 m/s rung passed on 2026-08-17 with 13 mm of margin while the
+# The 10 m/s high-speed rung passed with 13 mm of margin while the
 # barrier was acting on 3.5% of frames, and widening the coordinator's lane
 # change took that to 5.4 m and 0.4%. Margin alone showed a pass either way.
 # 200 frames is about 10 s at the 20 Hz peer-state rate.
@@ -972,7 +972,7 @@ class GazeboDashboardBridge:
         self.gimbal_feedback_deg: dict[str, dict[str, float]] = {}
         self.gimbal_feedback_monotonic: dict[str, float] = {}
         self.lidar_topic = os.environ.get(
-            "SWARM_GAZEBO_LIDAR_TOPIC", "/sparrow_gimbal/front_lidar"
+            "SWARM_GAZEBO_LIDAR_TOPIC", "/x500_custom/front_lidar"
         ).strip()
         self.lidar_lock = threading.Lock()
         self.lidar_scans: dict[str, dict[str, Any]] = {}

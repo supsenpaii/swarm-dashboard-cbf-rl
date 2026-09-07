@@ -101,7 +101,7 @@ alter CBF constants, or bypass missing/stale-state holds.
    `off`; the next gate is an offline v3 robustness update using the measured
    response before any new shadow or active flight.
 
-   Closed 2026-08-19 on the Sparrow airframe rather than the v3 rebuild the
+   Closed 2026-08-19 on the x500 high-speed profile rather than the v3 rebuild the
    paragraph above anticipated: the arrival failure was never policy
    robustness, it was two runtime defects. The barrier was missing its
    `-2*R*R_dot` term, and the coordinator engaged on a fixed trigger DISTANCE,
@@ -111,7 +111,7 @@ alter CBF constants, or bypass missing/stale-state holds.
    vehicles, `trajectory_completed=true`, and minimum actual CBF margins of
    14.341 / 14.331 m -- against -0.596 m on the same case before the fixes.
    The 15 m/s rung passes the same way at 10.045 m. Evidence:
-   `artifacts/gate7_sparrow_20ms.json`, `artifacts/leadfix_corridor_20ms_flight.json`.
+   `artifacts/gate7_20ms.json`, `artifacts/leadfix_corridor_20ms_flight.json`.
 
    Two operational notes this gate depends on. The evaluator has no run
    splitting and reads a whole appended trace, so it must be pointed at one

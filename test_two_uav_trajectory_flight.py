@@ -346,9 +346,9 @@ def hold(speed, reached):
 class HollowHoldTests(unittest.TestCase):
     """Numbers here are the recorded ones, not invented.
 
-    The corridor run is artifacts/sparrow_corridor_15ms_flight.json, which
+    The corridor run is artifacts/corridor_15ms_flight.json, which
     returned FLIGHT_PASS; the polygon run is
-    artifacts/sparrow_polygon_15ms_flight_v3.json, which was real.
+    artifacts/polygon_15ms_flight_v3.json, which was real.
     """
 
     def test_the_corridor_run_that_passed_hollow_is_now_refused(self) -> None:

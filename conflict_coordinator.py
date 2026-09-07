@@ -71,7 +71,7 @@ class ConflictCoordinatorConfig:
     # Require the predicted encounter to have cleared before releasing, not
     # merely the instantaneous radial rate to have reached zero. Off by default
     # because the x500 rungs are signed off against the older semantics; see
-    # the release block in `filter` for what it fixes and why Sparrow needs it.
+    # the release block in `filter` for the release behavior.
     release_needs_threat_cleared: bool = False
     clear_uses_mission_velocity: bool = False
     yield_lateral_speed_m_s: float = 0.0
@@ -139,106 +139,6 @@ def x500_20m_conflict_config(
             if maximum_velocity_m_s <= 10.0
             else 0.5 * maximum_velocity_m_s + 2.0
         ),
-        minimum_engagement_distance_m=dynamic_boundary_m,
-    )
-
-
-def sparrow_20m_conflict_config(
-    maximum_velocity_m_s: float = 10.0,
-) -> ConflictCoordinatorConfig:
-    """Early one-sided yielding for the Sparrow 20 m envelope."""
-    if not math.isfinite(maximum_velocity_m_s) or maximum_velocity_m_s <= 0.0:
-        raise ValueError("maximum velocity must be positive and finite")
-    relative_speed_m_s = 2.0 * maximum_velocity_m_s
-    dynamic_boundary_m = (
-        20.0
-        + 2.0
-        # 0.86 s is Sparrow's measured command response, not the 0.65 s the
-        # x500 rungs were signed off against; the CBF gate uses the same
-        # number, and this boundary is now the coordinator's own engagement
-        # floor, so the two must agree or the shield acts first.
-        + relative_speed_m_s * (0.86 + 0.10)
-        + relative_speed_m_s * relative_speed_m_s / (2.0 * 8.0)
-    )
-    # The coordinator has to finish a lane change before the barrier runs out
-    # of room, so what it needs is LEAD TIME, and a fixed 25 m of extra
-    # distance is not that: `dynamic_boundary_m` grows with the square of
-    # speed, so the same 25 m buys less and less time as the rung rises.
-    # Measured 2026-08-18 against the 20 Hz flight logs:
-    #
-    #   rung   trigger   boundary   slack    lead     TRUE margin
-    #   10     120.0 m     66.2 m   53.8 m   2.69 s     +4.965
-    #   15     132.1 m    107.0 m   25.0 m   0.83 s     +0.502
-    #   20     185.4 m    160.4 m   25.0 m   0.62 s     -0.596
-    #
-    # Trigger now 136 / 212 / 300 m at 3.5 s of lead.
-    #
-    # The margin tracks the lead time, not the distance. Rung 10 is the only
-    # one with real lead, and it has that by accident -- the 120 m floor
-    # happened to be generous there. Nothing chose 2.69 s.
-    #
-    # So choose it. 2.7 s was the first choice, because it is what rung 10
-    # already flew on; swept 2026-08-18 it turned out to be the low end of a
-    # monotone gain with no liveness cost at any rung (corridor replay):
-    #
-    #   lead    10 m/s          15 m/s          20 m/s
-    #   2.7 s   5.238 / 2.62%   8.938 / 2.75%  12.483 / 2.80%
-    #   3.0 s   5.622 / 2.52%   9.435 / 2.70%  12.935 / 2.77%
-    #   3.5 s   6.192 / 2.39%  10.135 / 2.61%  13.796 / 2.68%
-    #   3.9 s   8.798 / 2.55%  10.823 / 2.52%  14.020 / 2.64%
-    #
-    # 3.5 s, not 3.9: at 3.9 the trigger sits 7.91 s out at 20 m/s against an
-    # 8 s horizon, and a design pressed against its own limit has nowhere to
-    # go when the next thing moves. 3.5 keeps half a second of it.
-    #
-    # Raising `yield_lateral_speed_m_s` was swept alongside and changes NOTHING
-    # -- 9.5, 12 and 15 m/s give the same margin to three decimals. The yield
-    # stopped saturating on lateral authority when it got the time to use it,
-    # so that knob is spent and this one is not.
-    #
-    # x500 keeps the fixed 25 m: its rungs are signed off against that number.
-    engagement_lead_s = _float_env("SWARM_CONFLICT_ENGAGEMENT_LEAD_S", 3.5)
-    trigger_distance_m = max(
-        120.0, dynamic_boundary_m + relative_speed_m_s * engagement_lead_s
-    )
-    prediction_horizon_s = 8.0
-    # The threat test needs BOTH `distance < trigger_distance_m` AND
-    # `time_to_closest < prediction_horizon_s`. Push the trigger past what the
-    # horizon can see and the second condition quietly becomes the real
-    # trigger: the coordinator engages later than configured and reports
-    # nothing. At 2.7 s of lead the trigger sits 6.0 to 6.7 s out, so the
-    # horizon still covers it -- but only just, and this refusal is here so
-    # that raising the lead fails loudly instead of silently doing nothing.
-    if trigger_distance_m > relative_speed_m_s * prediction_horizon_s:
-        raise ValueError(
-            "engagement lead exceeds the prediction horizon: trigger "
-            f"{trigger_distance_m:.1f} m is "
-            f"{trigger_distance_m / relative_speed_m_s:.2f} s out against a "
-            f"{prediction_horizon_s:.1f} s horizon"
-        )
-    return ConflictCoordinatorConfig(
-        trigger_distance_m=trigger_distance_m,
-        release_distance_m=80.0,
-        encounter_reset_distance_m=100.0,
-        predicted_miss_distance_m=20.0,
-        prediction_horizon_s=prediction_horizon_s,
-        reserve_separation_m=20.0,
-        yield_gain_s_inv=0.6,
-        release_frames=10,
-        release_at_reserve_when_nonclosing=True,
-        release_needs_threat_cleared=True,
-        clear_uses_mission_velocity=True,
-        # Continuous, unlike the x500 line this was copied from, which holds
-        # 3.0 at and below 10 m/s to preserve an authenticated x500 rung.
-        # Sparrow inherited that step without inheriting the reason, and it
-        # landed exactly on the 10 m/s rung: 3.0 m/s of lateral authority
-        # against 9.5 at the next rung up. The 2026-08-17 ladder shows what
-        # that cost -- minimum CBF margin 0.013 m at 10 m/s, 2.28 at 15 and
-        # 3.12 at 20, so the SLOWEST rung was the fragile one. Thirteen
-        # millimetres is the barrier doing the coordinator's job at its own
-        # boundary, which is precisely the situation the coordinator exists
-        # to prevent. Extending the same line down gives 7.0 m/s here.
-        yield_lateral_speed_m_s=0.5 * maximum_velocity_m_s + 2.0,
         minimum_engagement_distance_m=dynamic_boundary_m,
     )
 
